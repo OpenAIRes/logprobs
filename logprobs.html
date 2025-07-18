@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Logprobs Viewer</title>
+<style>
+  body { font-family: Arial, sans-serif; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; }
+  tr:hover { background: #f2f2f2; }
+  .alternatives { display: none; margin: 0; padding-left: 20px; }
+  tr.show .alternatives { display: block; }
+  td.token { cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>Token Log Probabilities</h1>
+<p>Click a token row to toggle its top alternatives.</p>
+<table id="logprobs-table">
+  <thead>
+    <tr><th>Token</th><th>Logprob</th><th>Top Alternatives</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<script>
+fetch('logprobs.json')
+  .then(r => r.json())
+  .then(data => {
+    const rows = data.choices[0].logprobs.content;
+    const tbody = document.querySelector('#logprobs-table tbody');
+    rows.forEach(row => {
+      const tr = document.createElement('tr');
+      const tokenTd = document.createElement('td');
+      tokenTd.className = 'token';
+      tokenTd.textContent = row.token;
+      const logprobTd = document.createElement('td');
+      logprobTd.textContent = row.logprob.toFixed(4);
+      const altTd = document.createElement('td');
+      const ul = document.createElement('ul');
+      ul.className = 'alternatives';
+      row.top_logprobs.forEach(alt => {
+        const li = document.createElement('li');
+        li.textContent = `${alt.token} (${alt.logprob.toFixed(4)})`;
+        ul.appendChild(li);
+      });
+      altTd.appendChild(ul);
+      tr.appendChild(tokenTd);
+      tr.appendChild(logprobTd);
+      tr.appendChild(altTd);
+      tr.addEventListener('click', () => tr.classList.toggle('show'));
+      tbody.appendChild(tr);
+    });
+  })
+  .catch(err => {
+    document.body.textContent = 'Failed to load logprobs.json: ' + err;
+  });
+</script>
+</body>
+</html>
