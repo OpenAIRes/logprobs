@@ -4,22 +4,71 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>logprobs</title>
+        <style>
+        .token   { cursor:pointer; white-space:pre; }
+        #tooltip { position:absolute; background:#fff; border:1px solid #ccc;
+                    padding:.5rem; font:14px/1.3 monospace; box-shadow:0 2px 6px #0003;
+                    z-index:1000; }
+        #tooltip.hidden { display:none; }
+        #tooltip table  { border-collapse:collapse; margin-top:.25rem; }
+        #tooltip th,
+        #tooltip td     { padding:.15rem .5rem; border:1px solid #ddd; }
+        </style>
+
+        <div id="tokens"></div>
+        <div id="tooltip" class="hidden"></div>
+
         <script>
-            async function logprobs() {
-                const response = await fetch("logprobs.json");
-                const data = await response.json();
-                const content = data.choices[0].logprobs.content;
-                content.forEach(token => {
-                    const span = document.createElement("span");
-                    span.textContent = token.token;
-                    document.body.appendChild(span);
-                    span.addEventListener("click", top_logprobs);
-                });
-            }
-            function top_logprobs() {
-                "<>tokens<>logprobs<>probs"
-            }
-            window.onload = logprobs;
+        let tokens = [];              // we keep the array in a module-level var
+
+        async function loadTokens () {
+            const res  = await fetch('logprobs.json');
+            const data = await res.json();
+            tokens     = data.choices[0].logprobs.content;   // <-- structure in the file
+
+            const container = document.getElementById('tokens');
+            tokens.forEach((t, i) => {
+            const span     = document.createElement('span');
+            span.textContent  = t.token;
+            span.dataset.idx  = i;
+            span.className    = 'token';
+            span.addEventListener('click', showTopLogprobs);
+            container.appendChild(span);
+            });
+        }
+
+        function showTopLogprobs (e) {
+            e.stopPropagation();                 // keep the body click-handler from firing
+            const i      = +e.currentTarget.dataset.idx;
+            const entry  = tokens[i];
+            const topK   = entry.top_logprobs.slice(0, 10);  // first 10 alternatives
+
+            // build HTML table
+            let html = `<strong>‘${entry.token}’</strong><br><table>
+                        <tr><th>token</th><th>log p</th><th>p</th></tr>`;
+            topK.forEach(r => {
+            const p = Math.exp(r.logprob);                 // convert to linear prob
+            html += `<tr><td>${r.token}</td>
+                        <td>${r.logprob.toFixed(2)}</td>
+                        <td>${p.toFixed(4)}</td></tr>`;
+            });
+            html += '</table>';
+
+            // position tooltip just below the clicked span
+            const tip  = document.getElementById('tooltip');
+            tip.innerHTML = html;
+            tip.classList.remove('hidden');
+            const rect = e.target.getBoundingClientRect();
+            tip.style.left = `${rect.left + window.scrollX}px`;
+            tip.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+        }
+
+        // clicking anywhere else hides the tooltip again
+        document.addEventListener('click', () =>
+            document.getElementById('tooltip').classList.add('hidden')
+        );
+
+        window.onload = loadTokens;
         </script>
     </head>
     <body></body>
