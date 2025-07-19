@@ -1,1 +1,26 @@
-for token in tokens document.append(top_logprobs)
+<!doctype html>
+<html lang="en-US">
+    <head>       
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>logprobs</title>
+        <script>
+            async function logprobs() {
+                const response = await fetch("logprobs.json");
+                const data = await response.json();
+                const content = data.choices[0].logprobs.content;
+                content.forEach(token => {
+                    const span = document.createElement('span');
+                    span.textContent = token.token;
+                    document.body.appendChild(span);
+                    span.addEventListener("click", top_logprobs);
+                });
+            }
+            function top_logprobs() {
+
+            }
+            window.onload=logprobs;
+        </script>
+    </head>
+    <body></body>
+</html>
