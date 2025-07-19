@@ -10,16 +10,16 @@
                 const data = await response.json();
                 const content = data.choices[0].logprobs.content;
                 content.forEach(token => {
-                    const span = document.createElement('span');
+                    const span = document.createElement("span");
                     span.textContent = token.token;
                     document.body.appendChild(span);
                     span.addEventListener("click", top_logprobs);
                 });
             }
             function top_logprobs() {
-                tokens logprobs probs
+                "<>tokens<>logprobs<>probs"
             }
-            window.onload=logprobs;
+            window.onload = logprobs;
         </script>
     </head>
     <body></body>
