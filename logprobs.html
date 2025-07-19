@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>logprobs viewer</title>
+  <title>Logprobs Viewer (enhanced)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
-    body      { font: 16px/1.4 system-ui, sans-serif; margin: 0; padding: 1rem; }
-    #tokens   { max-width: 60ch; line-height: 1.9; }
-    .token    { cursor: pointer; white-space: pre; }
-    .token:hover { background: #ffeaa7; }
+    /* Basic typography & layout */
+    body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
+    #tokens     { max-width: 60ch; line-height: 1.9; }
+    .token      { cursor: pointer; white-space: pre; }
+    .token:hover{ background: #ffeaa7; }
 
-    #tooltip  {
+    #tooltip {
       position: absolute;
       background: #fff;
       border: 1px solid #ccc;
@@ -21,73 +22,128 @@
       z-index: 1000;
     }
     #tooltip.hidden { display:none; }
-    #tooltip table { border-collapse: collapse; margin-top: .25rem; }
+    #tooltip table  { border-collapse: collapse; margin-top: .25rem; }
     #tooltip th,
-    #tooltip td { padding: .15rem .5rem; border: 1px solid #ddd; }
+    #tooltip td     { padding: .15rem .5rem; border: 1px solid #ddd; }
     #loading  { color: #888; }
   </style>
 </head>
-
 <body>
   <div id="loading">Loading tokens…</div>
   <div id="tokens" hidden></div>
   <div id="tooltip" class="hidden"></div>
 
 <script>
-let tokens = [];
+/* ————————————————————————————————————————————————————————————
+   1.  Service‑worker registration  (offline-first)
+———————————————————————————————————————————————————————————— */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register(URL.createObjectURL(new Blob([`
+    const CACHE = 'logprobs-viewer-v1';
+    const ASSETS = ['.', 'index.html', 'logprobs.json'];
+
+    self.addEventListener('install', evt => {
+      evt.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+      self.skipWaiting();
+    });
+
+    self.addEventListener('activate', evt => {
+      evt.waitUntil(
+        caches.keys().then(keys => Promise.all(
+          keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+        ))
+      );
+    });
+
+    self.addEventListener('fetch', evt => {
+      evt.respondWith(
+        caches.match(evt.request).then(r => r || fetch(evt.request))
+      );
+    });
+  `], {type:'text/javascript'}))).catch(console.error);
+}
+</script>
+
+<script>
+/* ————————————————————————————————————————————————————————————
+   2.  Main viewer logic (incremental rendering, safe tooltip)
+———————————————————————————————————————————————————————————— */
+const tokensEl  = document.getElementById('tokens');
+const loadingEl = document.getElementById('loading');
+const tooltipEl = document.getElementById('tooltip');
 
 async function loadTokens () {
   try {
     const res  = await fetch('logprobs.json');
+    // NOTE: For multi‑hundred‑MB files you may adopt a streaming parser.
     const data = await res.json();
-    tokens     = data.choices[0].logprobs.content;
-
-    const container = document.getElementById('tokens');
-    tokens.forEach((t, i) => {
-      const span = document.createElement('span');
-      span.textContent  = t.token;
-      span.dataset.idx  = i;
-      span.className    = 'token';
-      span.addEventListener('click', showTopLogprobs);
-      container.appendChild(span);
-    });
-
-    // swap loading indicator for tokens
-    document.getElementById('loading').remove();
-    container.hidden = false;
-
+    renderTokens(data.choices[0].logprobs.content);
   } catch (err) {
-    document.getElementById('loading').textContent =
-      'Error loading logprobs.json: ' + err.message;
+    loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
   }
 }
 
-function showTopLogprobs (e) {
-  e.stopPropagation();
-  const i      = +e.currentTarget.dataset.idx;
-  const { token, top_logprobs } = tokens[i];
+function renderTokens (tokens) {
+  let i = 0;
+  const BATCH = 1200;                // spans per frame — tune for perf
 
-  const rows = top_logprobs
-               .slice(0, 10)
-               .map(r => `<tr><td>${r.token}</td>
-                             <td>${r.logprob.toFixed(2)}</td>
-                             <td>${Math.exp(r.logprob).toFixed(4)}</td></tr>`)
-               .join('');
+  function chunk () {
+    const frag = document.createDocumentFragment();
+    for (let j = 0; j < BATCH && i < tokens.length; j++, i++) {
+      const t   = tokens[i];
+      const span = document.createElement('span');
+      span.textContent = t.token;
+      span.dataset.idx = i;
+      span.className   = 'token';
+      span.addEventListener('click', e => showTopLogprobs(e, tokens));
+      frag.appendChild(span);
+    }
+    tokensEl.appendChild(frag);
 
-  const tip = document.getElementById('tooltip');
-  tip.innerHTML = `<strong>‘${token}’</strong><br>
-                   <table><tr><th>token</th><th>log p</th><th>p</th></tr>${rows}</table>`;
-  tip.classList.remove('hidden');
-
-  const rect = e.target.getBoundingClientRect();
-  tip.style.left = `${rect.left + window.scrollX}px`;
-  tip.style.top  = `${rect.bottom + window.scrollY + 4}px`;
+    if (i < tokens.length) {
+      requestAnimationFrame(chunk);  // keep UI responsive
+    } else {
+      loadingEl.remove();
+      tokensEl.hidden = false;
+    }
+  }
+  chunk();
 }
 
-document.addEventListener('click', () =>
-  document.getElementById('tooltip').classList.add('hidden')
-);
+function showTopLogprobs (e, tokens) {
+  e.stopPropagation();
+  const i = +e.currentTarget.dataset.idx;
+  const { token, top_logprobs } = tokens[i];
 
+  tooltipEl.innerHTML =
+    `<strong>‘${token}’</strong><br>` +
+    '<table><tr><th>token</th><th>log p</th><th>p</th></tr>' +
+    top_logprobs.slice(0, 10).map(r =>
+      `<tr><td>${r.token}</td><td>${r.logprob.toFixed(2)}</td><td>${Math.exp(r.logprob).toFixed(4)}</td></tr>`
+    ).join('') +
+    '</table>';
+  tooltipEl.classList.remove('hidden');
+
+  // ——— Smart positioning so tooltip never overflows viewport ———
+  const rect = e.target.getBoundingClientRect();
+  const vw   = window.innerWidth,  vh = window.innerHeight;
+  const sx   = window.scrollX,     sy = window.scrollY;
+  let left   = rect.left + sx;
+  let top    = rect.bottom + sy + 6;
+
+  tooltipEl.style.left = '0px';
+  tooltipEl.style.top  = '0px';
+  const tipRect = tooltipEl.getBoundingClientRect();
+
+  if (left + tipRect.width  > vw) left = vw - tipRect.width  - 6;
+  if (top  + tipRect.height > vh) top  = rect.top + sy - tipRect.height - 6;
+
+  tooltipEl.style.left = left + 'px';
+  tooltipEl.style.top  = top  + 'px';
+}
+
+// ——— Hide tooltip when clicking elsewhere ———
+document.addEventListener('click', () => tooltipEl.classList.add('hidden'), { passive: true });
 window.addEventListener('DOMContentLoaded', loadTokens);
 </script>
 </body>
