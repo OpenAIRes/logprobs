@@ -71,13 +71,15 @@ if ('serviceWorker' in navigator) {
 const tokensEl  = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
+let   allTokens = [];
 
 async function loadTokens () {
   try {
     const res  = await fetch('logprobs.json');
     // NOTE: For multi‑hundred‑MB files you may adopt a streaming parser.
     const data = await res.json();
-    renderTokens(data.choices[0].logprobs.content);
+    allTokens = data.choices[0].logprobs.content;
+    renderTokens(allTokens);
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
   }
@@ -117,10 +119,10 @@ function showTopLogprobs (e, tokens) {
 
   // 1. Build tooltip HTML *without* any inline event handlers
   tooltipEl.innerHTML =
-    `<strong>‘${token}’</strong><br>` +
+    `<strong data-idx="${i}">‘${token}’</strong><br>` +
     '<table><tr><th>token</th><th>log p</th><th>p</th></tr>' +
     top_logprobs.slice(0, 10).map(r =>
-      `<tr class="prob-row"><td class="tok">${r.token}</td>` +
+      `<tr class="prob-row"><td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>` +
       `<td>${r.logprob.toFixed(2)}</td>` +
       `<td>${Math.exp(r.logprob).toFixed(4)}</td></tr>`
     ).join('') +
@@ -135,14 +137,58 @@ function showTopLogprobs (e, tokens) {
   positionTooltip(e);   // ← extracted for clarity
 }
 
-async function completion() {
-  const completion = await openai.completions.create({
-    model: "gpt-3.5-turbo-instruct",
-    prompt: prompt,
-    logprobs: 20,
-    max_tokens: 7,
-    temperature: 0,
-  });
+function positionTooltip (e) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const tRect = tooltipEl.getBoundingClientRect();
+  let top  = rect.bottom + window.scrollY + 4;
+  let left = rect.left + window.scrollX;
+
+  if (left + tRect.width > window.innerWidth) {
+    left = window.innerWidth - tRect.width - 4;
+  }
+  if (top + tRect.height > window.innerHeight + window.scrollY) {
+    top = rect.top + window.scrollY - tRect.height - 4;
+  }
+
+  tooltipEl.style.top  = `${top}px`;
+  tooltipEl.style.left = `${left}px`;
+}
+
+async function completion (e) {
+  e.stopPropagation();
+  const idx   = +e.currentTarget.dataset.idx;
+  const token = e.currentTarget.dataset.alt || e.currentTarget.textContent;
+  const prompt = allTokens.slice(0, idx).map(t => t.token).join('') + token;
+
+  let key = localStorage.getItem('openai_key');
+  if (!key) {
+    key = window.prompt('OpenAI API key:');
+    if (!key) return;
+    localStorage.setItem('openai_key', key);
+  }
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo-instruct',
+        prompt,
+        logprobs: 20,
+        max_tokens: 7,
+        temperature: 0
+      })
+    });
+    const data = await res.json();
+    const text = data.choices && data.choices[0] ? data.choices[0].text.trim() : '';
+    tooltipEl.innerHTML = `<pre>${text}</pre>`;
+    positionTooltip(e);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 // ——— Hide tooltip when clicking elsewhere ———
