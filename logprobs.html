@@ -115,31 +115,34 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
+  // 1. Build tooltip HTML *without* any inline event handlers
   tooltipEl.innerHTML =
     `<strong>‘${token}’</strong><br>` +
     '<table><tr><th>token</th><th>log p</th><th>p</th></tr>' +
     top_logprobs.slice(0, 10).map(r =>
-      `<tr><td>${r.token}</td><td>${r.logprob.toFixed(2)}</td><td>${Math.exp(r.logprob).toFixed(4)}</td></tr>`
+      `<tr class="prob-row"><td class="tok">${r.token}</td>` +
+      `<td>${r.logprob.toFixed(2)}</td>` +
+      `<td>${Math.exp(r.logprob).toFixed(4)}</td></tr>`
     ).join('') +
     '</table>';
   tooltipEl.classList.remove('hidden');
 
-  // ——— Smart positioning so tooltip never overflows viewport ———
-  const rect = e.target.getBoundingClientRect();
-  const vw   = window.innerWidth,  vh = window.innerHeight;
-  const sx   = window.scrollX,     sy = window.scrollY;
-  let left   = rect.left + sx;
-  let top    = rect.bottom + sy + 6;
+  // 2. Now add click listeners to the freshly–inserted cells
+  tooltipEl.querySelectorAll('.prob-row .tok').forEach(td =>
+    td.addEventListener('click', completion)
+  );
 
-  tooltipEl.style.left = '0px';
-  tooltipEl.style.top  = '0px';
-  const tipRect = tooltipEl.getBoundingClientRect();
+  positionTooltip(e);   // ← extracted for clarity
+}
 
-  if (left + tipRect.width  > vw) left = vw - tipRect.width  - 6;
-  if (top  + tipRect.height > vh) top  = rect.top + sy - tipRect.height - 6;
-
-  tooltipEl.style.left = left + 'px';
-  tooltipEl.style.top  = top  + 'px';
+async function completion() {
+  const completion = await openai.completions.create({
+    model: "gpt-3.5-turbo-instruct",
+    prompt: prompt,
+    logprobs: 20,
+    max_tokens: 7,
+    temperature: 0,
+  });
 }
 
 // ——— Hide tooltip when clicking elsewhere ———
