@@ -39,3 +39,15 @@ with open("logprobs.json", "w") as f:
 ```
 
 Place the generated `logprobs.json` next to `logprobs.html` and reload the page to inspect your own data.
+
+## Handling large datasets
+
+For multi‑hundred‑MB `logprobs.json` files you can avoid loading the entire document into memory by processing tokens incrementally. The provided `stream_logprobs.py` script yields tokens one by one using Python's built‑in `json` decoder so only small chunks are kept in RAM.
+
+Example:
+
+```bash
+python3 stream_logprobs.py logprobs.json --limit 5
+```
+
+This prints the first few token objects but scales to arbitrarily large files.
