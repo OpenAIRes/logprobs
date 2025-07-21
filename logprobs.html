@@ -11,6 +11,7 @@
     #tokens     { max-width: 60ch; line-height: 1.9; }
     .token      { cursor: pointer; white-space: pre; }
     .token:hover{ background: #ffeaa7; }
+    .selected   { background: #74b9ff; }
 
     #tooltip {
       position: absolute;
@@ -72,6 +73,7 @@ const tokensEl  = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
 let   allTokens = [];
+let   selectionStart = null;
 
 async function loadTokens () {
   try {
@@ -97,7 +99,7 @@ function renderTokens (tokens) {
       span.textContent = t.token;
       span.dataset.idx = i;
       span.className   = 'token';
-      span.addEventListener('click', e => showTopLogprobs(e, tokens));
+      span.addEventListener('click', e => handleTokenClick(e, tokens));
       frag.appendChild(span);
     }
     tokensEl.appendChild(frag);
@@ -110,6 +112,44 @@ function renderTokens (tokens) {
     }
   }
   chunk();
+}
+
+function clearSelection () {
+  tokensEl.querySelectorAll('.selected').forEach(el =>
+    el.classList.remove('selected')
+  );
+}
+
+function handleTokenClick (e, tokens) {
+  e.stopPropagation();
+  const idx = +e.currentTarget.dataset.idx;
+  if (e.shiftKey) {
+    if (selectionStart === null) {
+      selectionStart = idx;
+      clearSelection();
+      e.currentTarget.classList.add('selected');
+    } else {
+      const start = Math.min(selectionStart, idx);
+      const end   = Math.max(selectionStart, idx);
+      clearSelection();
+      for (let j = start; j <= end; j++) {
+        tokensEl.children[j].classList.add('selected');
+      }
+      const logSum = tokens.slice(start, end + 1)
+        .reduce((s, t) => s + t.logprob, 0);
+      tooltipEl.innerHTML =
+        `<strong>Sequence</strong><br>` +
+        `log p = ${logSum.toFixed(2)}<br>` +
+        `p = ${Math.exp(logSum).toFixed(4)}`;
+      tooltipEl.classList.remove('hidden');
+      positionTooltip(e);
+      selectionStart = null;
+    }
+  } else {
+    clearSelection();
+    selectionStart = null;
+    showTopLogprobs(e, tokens);
+  }
 }
 
 function showTopLogprobs (e, tokens) {
