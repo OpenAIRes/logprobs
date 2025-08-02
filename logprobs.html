@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (Universal + Sorted)</title>
+  <title>Logprobs Viewer (with History + Status)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
     body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
+    #header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
     #tokens     { max-width: 60ch; line-height: 1.9; }
     .token      { cursor: pointer; white-space: pre; }
     .token:hover{ background: #ffeaa7; }
@@ -27,47 +28,35 @@
     #tooltip td     { padding: .15rem .5rem; border: 1px solid #ddd; }
     #tooltip tr.best td { background: #dfe6e9; font-weight: bold; }
     #loading  { color: #888; }
+    button    { padding: 0.4rem 0.8rem; font-size: 14px; cursor: pointer; }
+    #status   { font-size: 14px; color: #2d3436; margin-left: 1rem; }
+    #status.error { color: #d63031; }
+    #savedCount { margin-left: 0.5rem; font-weight: bold; }
   </style>
 </head>
 <body>
-  <div id="loading">Loading tokens…</div>
+  <div id="header">
+    <div>
+      <span id="loading">Loading tokens…</span>
+      <span id="status"></span>
+    </div>
+    <div>
+      <button id="exportBtn" hidden>Export completions (<span id="savedCount">0</span>)</button>
+    </div>
+  </div>
   <div id="tokens" hidden></div>
   <div id="tooltip" class="hidden"></div>
-
-<script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register(URL.createObjectURL(new Blob([`
-    const CACHE = 'logprobs-viewer-v1';
-    const ASSETS = ['.', 'index.html', 'logprobs.json'];
-
-    self.addEventListener('install', evt => {
-      evt.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-      self.skipWaiting();
-    });
-
-    self.addEventListener('activate', evt => {
-      evt.waitUntil(
-        caches.keys().then(keys => Promise.all(
-          keys.filter(k => k !== CACHE).map(k => caches.delete(k))
-        ))
-      );
-    });
-
-    self.addEventListener('fetch', evt => {
-      evt.respondWith(
-        caches.match(evt.request).then(r => r || fetch(evt.request))
-      );
-    });
-  `], {type:'text/javascript'}))).catch(console.error);
-}
-</script>
 
 <script>
 const tokensEl  = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
-let   allTokens = [];
-let   selectionStart = null;
+const exportBtn = document.getElementById('exportBtn');
+const statusEl  = document.getElementById('status');
+const savedCountEl = document.getElementById('savedCount');
+
+let allTokens = [];
+let selectionStart = null;
 
 async function loadTokens () {
   try {
@@ -93,8 +82,11 @@ async function loadTokens () {
     }
 
     renderTokens(allTokens);
+    exportBtn.hidden = false;
+    updateSavedCount();
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
+    statusEl.textContent = '';
   }
 }
 
@@ -190,6 +182,7 @@ function showTopLogprobs (e, tokens) {
 }
 
 function positionTooltip (e) {
+  if (!e || !e.currentTarget || !tooltipEl) return; // ✅ Ochrana proti null
   const rect = e.currentTarget.getBoundingClientRect();
   const tRect = tooltipEl.getBoundingClientRect();
   let top  = rect.bottom + window.scrollY + 4;
@@ -230,17 +223,59 @@ async function completion (e) {
         model: 'gpt-3.5-turbo-instruct',
         prompt,
         logprobs: 20,
+        max_tokens: 16,
         temperature: 0
       })
     });
     const data = await res.json();
+
+    if (data.error) {
+      statusEl.textContent = `Error: ${data.error.message}`;
+      statusEl.classList.add('error');
+      return;
+    }
+
     const text = data.choices && data.choices[0] ? data.choices[0].text.trim() : '';
     tooltipEl.innerHTML = `<pre>${text}</pre>`;
     positionTooltip(e);
+
+    const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+    history.push({ timestamp: new Date().toISOString(), prompt, completion: text });
+    localStorage.setItem('completion_history', JSON.stringify(history));
+
+    updateSavedCount();
+    showStatus('Uloženo!');
   } catch (err) {
-    console.error(err);
+    statusEl.textContent = 'Fetch failed: ' + err.message;
+    statusEl.classList.add('error');
   }
 }
+
+function updateSavedCount() {
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  savedCountEl.textContent = history.length;
+}
+
+function showStatus(msg) {
+  statusEl.textContent = msg;
+  statusEl.classList.remove('error');
+  setTimeout(() => { statusEl.textContent = ''; }, 2000);
+}
+
+exportBtn.addEventListener('click', () => {
+  const history = localStorage.getItem('completion_history');
+  if (!history || history === '[]') {
+    alert('No completions saved yet.');
+    return;
+  }
+  const blob = new Blob([history], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'completion_history.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
 document.addEventListener('click', () => tooltipEl.classList.add('hidden'), { passive: true });
 window.addEventListener('DOMContentLoaded', loadTokens);
