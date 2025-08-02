@@ -2,11 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (enhanced)</title>
+  <title>Logprobs Viewer (Universal)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
-    /* Basic typography & layout */
     body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
     #tokens     { max-width: 60ch; line-height: 1.9; }
     .token      { cursor: pointer; white-space: pre; }
@@ -35,9 +34,6 @@
   <div id="tooltip" class="hidden"></div>
 
 <script>
-/* ————————————————————————————————————————————————————————————
-   1.  Service‑worker registration  (offline-first)
-———————————————————————————————————————————————————————————— */
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(URL.createObjectURL(new Blob([`
     const CACHE = 'logprobs-viewer-v1';
@@ -66,9 +62,6 @@ if ('serviceWorker' in navigator) {
 </script>
 
 <script>
-/* ————————————————————————————————————————————————————————————
-   2.  Main viewer logic (incremental rendering, safe tooltip)
-———————————————————————————————————————————————————————————— */
 const tokensEl  = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
@@ -78,9 +71,26 @@ let   selectionStart = null;
 async function loadTokens () {
   try {
     const res  = await fetch('logprobs.json');
-    // NOTE: For multi‑hundred‑MB files you may adopt a streaming parser.
     const data = await res.json();
-    allTokens = data.choices[0].logprobs.content;
+
+    if (data.object === 'chat.completion') {
+      // Newer format
+      allTokens = data.choices[0].logprobs.content;
+    } else if (data.object === 'text_completion' || data.object === 'text.completion') {
+      // Legacy format
+      const lp = data.choices[0].logprobs;
+      allTokens = lp.tokens.map((token, i) => ({
+        token,
+        logprob: lp.token_logprobs[i],
+        top_logprobs: Object.entries(lp.top_logprobs[i]).map(([tok, log]) => ({
+          token: tok,
+          logprob: log
+        }))
+      }));
+    } else {
+      throw new Error('Unsupported format: ' + data.object);
+    }
+
     renderTokens(allTokens);
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
@@ -89,7 +99,7 @@ async function loadTokens () {
 
 function renderTokens (tokens) {
   let i = 0;
-  const BATCH = 1200;                // spans per frame — tune for perf
+  const BATCH = 1200;
 
   function chunk () {
     const frag = document.createDocumentFragment();
@@ -105,7 +115,7 @@ function renderTokens (tokens) {
     tokensEl.appendChild(frag);
 
     if (i < tokens.length) {
-      requestAnimationFrame(chunk);  // keep UI responsive
+      requestAnimationFrame(chunk);
     } else {
       loadingEl.remove();
       tokensEl.hidden = false;
@@ -157,7 +167,6 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
-  // 1. Build tooltip HTML *without* any inline event handlers
   tooltipEl.innerHTML =
     `<strong data-idx="${i}">‘${token}’</strong><br>` +
     '<table><tr><th>token</th><th>log p</th><th>p</th></tr>' +
@@ -169,12 +178,11 @@ function showTopLogprobs (e, tokens) {
     '</table>';
   tooltipEl.classList.remove('hidden');
 
-  // 2. Now add click listeners to the freshly–inserted cells
   tooltipEl.querySelectorAll('.prob-row .tok').forEach(td =>
     td.addEventListener('click', completion)
   );
 
-  positionTooltip(e);   // ← extracted for clarity
+  positionTooltip(e);
 }
 
 function positionTooltip (e) {
@@ -231,7 +239,6 @@ async function completion (e) {
   }
 }
 
-// ——— Hide tooltip when clicking elsewhere ———
 document.addEventListener('click', () => tooltipEl.classList.add('hidden'), { passive: true });
 window.addEventListener('DOMContentLoaded', loadTokens);
 </script>
