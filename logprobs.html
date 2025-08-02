@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (with History + Status)</title>
+  <title>Logprobs Viewer (Dynamic Completion)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
     body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
     #header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-    #tokens     { max-width: 60ch; line-height: 1.9; }
+    #tokens     { max-width: 60ch; line-height: 1.9; word-wrap: break-word; }
     .token      { cursor: pointer; white-space: pre; }
     .token:hover{ background: #ffeaa7; }
     .selected   { background: #74b9ff; }
@@ -28,7 +28,7 @@
     #tooltip td     { padding: .15rem .5rem; border: 1px solid #ddd; }
     #tooltip tr.best td { background: #dfe6e9; font-weight: bold; }
     #loading  { color: #888; }
-    button    { padding: 0.4rem 0.8rem; font-size: 14px; cursor: pointer; }
+    button    { padding: 0.4rem 0.8rem; font-size: 14px; cursor: pointer; margin-left: 0.5rem; }
     #status   { font-size: 14px; color: #2d3436; margin-left: 1rem; }
     #status.error { color: #d63031; }
     #savedCount { margin-left: 0.5rem; font-weight: bold; }
@@ -42,6 +42,7 @@
     </div>
     <div>
       <button id="exportBtn" hidden>Export completions (<span id="savedCount">0</span>)</button>
+      <button id="clearBtn" hidden>Clear History</button>
     </div>
   </div>
   <div id="tokens" hidden></div>
@@ -52,6 +53,7 @@ const tokensEl  = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
+const clearBtn  = document.getElementById('clearBtn');
 const statusEl  = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
@@ -83,6 +85,7 @@ async function loadTokens () {
 
     renderTokens(allTokens);
     exportBtn.hidden = false;
+    clearBtn.hidden = false;
     updateSavedCount();
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
@@ -91,6 +94,7 @@ async function loadTokens () {
 }
 
 function renderTokens (tokens) {
+  tokensEl.innerHTML = '';
   let i = 0;
   const BATCH = 1200;
 
@@ -160,7 +164,7 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
-  const rows = top_logprobs.slice(0, 10).map((r, idx) =>
+  const rows = top_logprobs.slice(0, 20).map((r, idx) =>
     `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
        <td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>
        <td>${r.logprob.toFixed(2)}</td>
@@ -182,7 +186,7 @@ function showTopLogprobs (e, tokens) {
 }
 
 function positionTooltip (e) {
-  if (!e || !e.currentTarget || !tooltipEl) return; // ✅ Ochrana proti null
+  if (!e || !e.currentTarget || !tooltipEl) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const tRect = tooltipEl.getBoundingClientRect();
   let top  = rect.bottom + window.scrollY + 4;
@@ -235,12 +239,34 @@ async function completion (e) {
       return;
     }
 
-    const text = data.choices && data.choices[0] ? data.choices[0].text.trim() : '';
-    tooltipEl.innerHTML = `<pre>${text}</pre>`;
-    positionTooltip(e);
+    const choice = data.choices && data.choices[0];
+    const lp = choice.logprobs;
 
+    // Převést nové tokeny z API na stejný formát
+    const newTokens = lp.tokens.map((t, i) => {
+      const sortedTop = Object.entries(lp.top_logprobs[i])
+        .map(([tok, log]) => ({ token: tok, logprob: log }))
+        .sort((a, b) => b.logprob - a.logprob);
+      return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
+    });
+
+    // Aktualizovat allTokens (původní část + vybraný token + nové tokeny)
+    allTokens = allTokens.slice(0, idx).concat(
+      [{ token, logprob: 0, top_logprobs: [] }],
+      newTokens
+    );
+
+    // Přegenerovat UI
+    renderTokens(allTokens);
+    tooltipEl.classList.add('hidden');
+
+    // Uložit celý API log
     const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-    history.push({ timestamp: new Date().toISOString(), prompt, completion: text });
+    history.push({
+      timestamp: new Date().toISOString(),
+      prompt,
+      response: data
+    });
     localStorage.setItem('completion_history', JSON.stringify(history));
 
     updateSavedCount();
@@ -275,6 +301,12 @@ exportBtn.addEventListener('click', () => {
   a.download = 'completion_history.json';
   a.click();
   URL.revokeObjectURL(url);
+});
+
+clearBtn.addEventListener('click', () => {
+  localStorage.removeItem('completion_history');
+  updateSavedCount();
+  showStatus('Historie vymazána');
 });
 
 document.addEventListener('click', () => tooltipEl.classList.add('hidden'), { passive: true });
