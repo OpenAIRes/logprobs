@@ -164,7 +164,7 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
-  const rows = top_logprobs.slice(0, 10).map((r, idx) =>
+  const rows = top_logprobs.slice(0, 20).map((r, idx) =>
     `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
        <td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>
        <td>${r.logprob.toFixed(2)}</td>
@@ -272,10 +272,14 @@ function applyCompletion(response, idx, token) {
     return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
   });
 
-  allTokens = allTokens.slice(0, idx).concat(
-    [{ token, logprob: 0, top_logprobs: [] }],
-    newTokens
-  );
+  // ✅ zachovat původní top_logprobs
+  const selectedTokenObj = {
+    token,
+    logprob: 0,
+    top_logprobs: allTokens[idx].top_logprobs || []
+  };
+
+  allTokens = allTokens.slice(0, idx).concat(selectedTokenObj, newTokens);
   renderTokens(allTokens);
   tooltipEl.classList.add('hidden');
 }
