@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (Universal)</title>
+  <title>Logprobs Viewer (Universal + Sorted)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
@@ -22,9 +22,10 @@
       z-index: 1000;
     }
     #tooltip.hidden { display:none; }
-    #tooltip table  { border-collapse: collapse; margin-top: .25rem; }
+    #tooltip table  { border-collapse: collapse; margin-top: .25rem; width: 100%; }
     #tooltip th,
     #tooltip td     { padding: .15rem .5rem; border: 1px solid #ddd; }
+    #tooltip tr.best td { background: #dfe6e9; font-weight: bold; }
     #loading  { color: #888; }
   </style>
 </head>
@@ -74,19 +75,19 @@ async function loadTokens () {
     const data = await res.json();
 
     if (data.object === 'chat.completion') {
-      // Newer format
-      allTokens = data.choices[0].logprobs.content;
-    } else if (data.object === 'text_completion' || data.object === 'text.completion') {
-      // Legacy format
-      const lp = data.choices[0].logprobs;
-      allTokens = lp.tokens.map((token, i) => ({
-        token,
-        logprob: lp.token_logprobs[i],
-        top_logprobs: Object.entries(lp.top_logprobs[i]).map(([tok, log]) => ({
-          token: tok,
-          logprob: log
-        }))
+      allTokens = data.choices[0].logprobs.content.map(t => ({
+        token: t.token,
+        logprob: t.logprob,
+        top_logprobs: [...t.top_logprobs].sort((a, b) => b.logprob - a.logprob)
       }));
+    } else if (data.object === 'text_completion' || data.object === 'text.completion') {
+      const lp = data.choices[0].logprobs;
+      allTokens = lp.tokens.map((token, i) => {
+        const sortedTop = Object.entries(lp.top_logprobs[i])
+          .map(([tok, log]) => ({ token: tok, logprob: log }))
+          .sort((a, b) => b.logprob - a.logprob);
+        return { token, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
+      });
     } else {
       throw new Error('Unsupported format: ' + data.object);
     }
@@ -167,15 +168,18 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
+  const rows = top_logprobs.slice(0, 10).map((r, idx) =>
+    `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
+       <td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>
+       <td>${r.logprob.toFixed(2)}</td>
+       <td>${Math.exp(r.logprob).toFixed(4)}</td>
+     </tr>`
+  ).join('');
+
   tooltipEl.innerHTML =
     `<strong data-idx="${i}">‘${token}’</strong><br>` +
     '<table><tr><th>token</th><th>log p</th><th>p</th></tr>' +
-    top_logprobs.slice(0, 10).map(r =>
-      `<tr class="prob-row"><td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>` +
-      `<td>${r.logprob.toFixed(2)}</td>` +
-      `<td>${Math.exp(r.logprob).toFixed(4)}</td></tr>`
-    ).join('') +
-    '</table>';
+    rows + '</table>';
   tooltipEl.classList.remove('hidden');
 
   tooltipEl.querySelectorAll('.prob-row .tok').forEach(td =>
@@ -226,7 +230,6 @@ async function completion (e) {
         model: 'gpt-3.5-turbo-instruct',
         prompt,
         logprobs: 20,
-        max_tokens: 7,
         temperature: 0
       })
     });
