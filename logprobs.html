@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (Dynamic Completion)</title>
+  <title>Logprobs Viewer (with History & Optimized Completion)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
@@ -164,7 +164,7 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
-  const rows = top_logprobs.slice(0, 20).map((r, idx) =>
+  const rows = top_logprobs.slice(0, 10).map((r, idx) =>
     `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
        <td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>
        <td>${r.logprob.toFixed(2)}</td>
@@ -209,11 +209,21 @@ async function completion (e) {
   const token = e.currentTarget.dataset.alt || e.currentTarget.textContent;
   const prompt = allTokens.slice(0, idx).map(t => t.token).join('') + token;
 
+  // Kontrola API klíče
   let key = localStorage.getItem('openai_key');
   if (!key) {
     key = window.prompt('OpenAI API key:');
     if (!key) return;
     localStorage.setItem('openai_key', key);
+  }
+
+  // ✅ Zkontrolovat historii
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  const existing = history.find(entry => entry.prompt === prompt);
+  if (existing) {
+    applyCompletion(existing.response, idx, token);
+    showStatus('Načteno z historie');
+    return;
   }
 
   try {
@@ -239,34 +249,9 @@ async function completion (e) {
       return;
     }
 
-    const choice = data.choices && data.choices[0];
-    const lp = choice.logprobs;
+    applyCompletion(data, idx, token);
 
-    // Převést nové tokeny z API na stejný formát
-    const newTokens = lp.tokens.map((t, i) => {
-      const sortedTop = Object.entries(lp.top_logprobs[i])
-        .map(([tok, log]) => ({ token: tok, logprob: log }))
-        .sort((a, b) => b.logprob - a.logprob);
-      return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
-    });
-
-    // Aktualizovat allTokens (původní část + vybraný token + nové tokeny)
-    allTokens = allTokens.slice(0, idx).concat(
-      [{ token, logprob: 0, top_logprobs: [] }],
-      newTokens
-    );
-
-    // Přegenerovat UI
-    renderTokens(allTokens);
-    tooltipEl.classList.add('hidden');
-
-    // Uložit celý API log
-    const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-    history.push({
-      timestamp: new Date().toISOString(),
-      prompt,
-      response: data
-    });
+    history.push({ timestamp: new Date().toISOString(), prompt, response: data });
     localStorage.setItem('completion_history', JSON.stringify(history));
 
     updateSavedCount();
@@ -275,6 +260,24 @@ async function completion (e) {
     statusEl.textContent = 'Fetch failed: ' + err.message;
     statusEl.classList.add('error');
   }
+}
+
+function applyCompletion(response, idx, token) {
+  const choice = response.choices[0];
+  const lp = choice.logprobs;
+  const newTokens = lp.tokens.map((t, i) => {
+    const sortedTop = Object.entries(lp.top_logprobs[i])
+      .map(([tok, log]) => ({ token: tok, logprob: log }))
+      .sort((a,b) => b.logprob - a.logprob);
+    return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
+  });
+
+  allTokens = allTokens.slice(0, idx).concat(
+    [{ token, logprob: 0, top_logprobs: [] }],
+    newTokens
+  );
+  renderTokens(allTokens);
+  tooltipEl.classList.add('hidden');
 }
 
 function updateSavedCount() {
