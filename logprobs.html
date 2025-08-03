@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (with History & Optimized Completion)</title>
+  <title>Logprobs Viewer (Pokračování textu)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
     body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
-    #header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    #header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
     #tokens     { max-width: 60ch; line-height: 1.9; word-wrap: break-word; }
     .token      { cursor: pointer; white-space: pre; }
     .token:hover{ background: #ffeaa7; }
@@ -28,7 +28,7 @@
     #tooltip td     { padding: .15rem .5rem; border: 1px solid #ddd; }
     #tooltip tr.best td { background: #dfe6e9; font-weight: bold; }
     #loading  { color: #888; }
-    button    { padding: 0.4rem 0.8rem; font-size: 14px; cursor: pointer; margin-left: 0.5rem; }
+    button    { padding: 0.4rem 0.8rem; font-size: 14px; cursor: pointer; margin-left: 0.5rem; margin-top: 0.5rem; }
     #status   { font-size: 14px; color: #2d3436; margin-left: 1rem; }
     #status.error { color: #d63031; }
     #savedCount { margin-left: 0.5rem; font-weight: bold; }
@@ -41,8 +41,9 @@
       <span id="status"></span>
     </div>
     <div>
-      <button id="exportBtn" hidden>Export completions (<span id="savedCount">0</span>)</button>
-      <button id="clearBtn" hidden>Clear History</button>
+      <button id="continueBtn" hidden>Pokračovat text</button>
+      <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
+      <button id="clearBtn" hidden>Clear</button>
     </div>
   </div>
   <div id="tokens" hidden></div>
@@ -54,6 +55,7 @@ const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
 const clearBtn  = document.getElementById('clearBtn');
+const continueBtn = document.getElementById('continueBtn');
 const statusEl  = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
@@ -86,6 +88,7 @@ async function loadTokens () {
     renderTokens(allTokens);
     exportBtn.hidden = false;
     clearBtn.hidden = false;
+    continueBtn.hidden = false;
     updateSavedCount();
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
@@ -164,7 +167,7 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
-  const rows = top_logprobs.slice(0, 20).map((r, idx) =>
+  const rows = top_logprobs.slice(0, 10).map((r, idx) =>
     `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
        <td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>
        <td>${r.logprob.toFixed(2)}</td>
@@ -209,7 +212,7 @@ async function completion (e) {
   const token = e.currentTarget.dataset.alt || e.currentTarget.textContent;
   const prompt = allTokens.slice(0, idx).map(t => t.token).join('') + token;
 
-  // Kontrola API klíče
+  // API key
   let key = localStorage.getItem('openai_key');
   if (!key) {
     key = window.prompt('OpenAI API key:');
@@ -217,7 +220,6 @@ async function completion (e) {
     localStorage.setItem('openai_key', key);
   }
 
-  // ✅ Zkontrolovat historii
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
   const existing = history.find(entry => entry.prompt === prompt);
   if (existing) {
@@ -242,7 +244,6 @@ async function completion (e) {
       })
     });
     const data = await res.json();
-
     if (data.error) {
       statusEl.textContent = `Error: ${data.error.message}`;
       statusEl.classList.add('error');
@@ -253,7 +254,6 @@ async function completion (e) {
 
     history.push({ timestamp: new Date().toISOString(), prompt, response: data });
     localStorage.setItem('completion_history', JSON.stringify(history));
-
     updateSavedCount();
     showStatus('Uloženo!');
   } catch (err) {
@@ -272,7 +272,6 @@ function applyCompletion(response, idx, token) {
     return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
   });
 
-  // ✅ zachovat původní top_logprobs
   const selectedTokenObj = {
     token,
     logprob: 0,
@@ -280,6 +279,71 @@ function applyCompletion(response, idx, token) {
   };
 
   allTokens = allTokens.slice(0, idx).concat(selectedTokenObj, newTokens);
+  renderTokens(allTokens);
+  tooltipEl.classList.add('hidden');
+}
+
+async function continueText() {
+  const prompt = allTokens.map(t => t.token).join('');
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  const existing = history.find(entry => entry.prompt === prompt);
+  if (existing) {
+    appendCompletion(existing.response);
+    showStatus('Načteno z historie');
+    return;
+  }
+
+  let key = localStorage.getItem('openai_key');
+  if (!key) {
+    key = window.prompt('OpenAI API key:');
+    if (!key) return;
+    localStorage.setItem('openai_key', key);
+  }
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo-instruct',
+        prompt,
+        logprobs: 20,
+        max_tokens: 16,
+        temperature: 0
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      statusEl.textContent = `Error: ${data.error.message}`;
+      statusEl.classList.add('error');
+      return;
+    }
+
+    appendCompletion(data);
+    history.push({ timestamp: new Date().toISOString(), prompt, response: data });
+    localStorage.setItem('completion_history', JSON.stringify(history));
+    updateSavedCount();
+    showStatus('Uloženo!');
+  } catch (err) {
+    statusEl.textContent = 'Fetch failed: ' + err.message;
+    statusEl.classList.add('error');
+  }
+}
+
+function appendCompletion(response) {
+  const choice = response.choices[0];
+  const lp = choice.logprobs;
+  const newTokens = lp.tokens.map((t, i) => {
+    const sortedTop = Object.entries(lp.top_logprobs[i])
+      .map(([tok, log]) => ({ token: tok, logprob: log }))
+      .sort((a,b) => b.logprob - a.logprob);
+    return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
+  });
+
+  allTokens = allTokens.concat(newTokens);
   renderTokens(allTokens);
   tooltipEl.classList.add('hidden');
 }
@@ -315,6 +379,8 @@ clearBtn.addEventListener('click', () => {
   updateSavedCount();
   showStatus('Historie vymazána');
 });
+
+continueBtn.addEventListener('click', continueText);
 
 document.addEventListener('click', () => tooltipEl.classList.add('hidden'), { passive: true });
 window.addEventListener('DOMContentLoaded', loadTokens);
