@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (Pokračování textu)</title>
+  <title>Logprobs Viewer (Full Chain Restore)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
 
   <style>
     body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
     #header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
-    #tokens     { max-width: 60ch; line-height: 1.9; word-wrap: break-word; }
-    .token      { cursor: pointer; white-space: pre; }
+    #tokens     { max-width: 100%; line-height: 1.5; white-space: normal; }
+    .token      { display: inline; cursor: pointer; }
     .token:hover{ background: #ffeaa7; }
+    .newline    { display: block; width: 100%; }
+    .newline:hover { background: #ffeaa7; }
     .selected   { background: #74b9ff; }
 
     #tooltip {
@@ -21,6 +23,8 @@
       font: 14px/1.3 monospace;
       box-shadow: 0 2px 6px #0003;
       z-index: 1000;
+      max-width: 90vw;
+      overflow-x: auto;
     }
     #tooltip.hidden { display:none; }
     #tooltip table  { border-collapse: collapse; margin-top: .25rem; width: 100%; }
@@ -64,6 +68,13 @@ const savedCountEl = document.getElementById('savedCount');
 let allTokens = [];
 let selectionStart = null;
 
+function escapeToken(token) {
+  return token
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')
+    .replace(/ /g, '␣'); // vizuálně rozlišit mezery
+}
+
 async function loadTokens () {
   try {
     const res  = await fetch('logprobs.json');
@@ -93,27 +104,57 @@ async function loadTokens () {
     continueBtn16.hidden = false;
     continueBtn256.hidden = false;
     updateSavedCount();
+
+    restoreContinuations(); // ✅ nové: načti všechna navazující pokračování
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
     statusEl.textContent = '';
   }
 }
 
-function renderTokens (tokens) {
+function restoreContinuations() {
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  let currentPrompt = allTokens.map(t => t.token).join('');
+  let foundAny = false;
+
+  while (true) {
+    const next = history.find(entry => entry.prompt === currentPrompt);
+    if (!next) break;
+    appendCompletion(next.response);
+    currentPrompt = allTokens.map(t => t.token).join('');
+    foundAny = true;
+  }
+
+  if (foundAny) showStatus('Načtena uložená pokračování');
+}
+
+function renderTokens(tokens) {
   tokensEl.innerHTML = '';
   let i = 0;
   const BATCH = 1200;
 
-  function chunk () {
+  function chunk() {
     const frag = document.createDocumentFragment();
     for (let j = 0; j < BATCH && i < tokens.length; j++, i++) {
-      const t   = tokens[i];
-      const span = document.createElement('span');
-      span.textContent = t.token;
-      span.dataset.idx = i;
-      span.className   = 'token';
-      span.addEventListener('click', e => handleTokenClick(e, tokens));
-      frag.appendChild(span);
+      const t = tokens[i];
+      if (t.token.includes('\n')) {
+        const count = (t.token.match(/\n/g) || []).length;
+        const span = document.createElement('span');
+        span.className = 'token newline';
+        span.style.height = `${1.2 * count}em`;
+        span.dataset.idx = i;
+        span.title = escapeToken(t.token);
+        span.addEventListener('click', e => handleTokenClick(e, tokens));
+        frag.appendChild(span);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'token';
+        span.dataset.idx = i;
+        span.textContent = t.token;
+        span.title = escapeToken(t.token);
+        span.addEventListener('click', e => handleTokenClick(e, tokens));
+        frag.appendChild(span);
+      }
     }
     tokensEl.appendChild(frag);
 
@@ -170,16 +211,16 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
-  const rows = top_logprobs.slice(0, 20).map((r, idx) =>  // ✅ zobrazíme 20
+  const rows = top_logprobs.slice(0, 20).map((r, idx) =>
     `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
-       <td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>
+       <td class="tok" data-idx="${i}" data-alt="${r.token}">${escapeToken(r.token)}</td>
        <td>${r.logprob.toFixed(2)}</td>
        <td>${Math.exp(r.logprob).toFixed(6)}</td>
      </tr>`
   ).join('');
 
   tooltipEl.innerHTML =
-    `<strong data-idx="${i}">‘${token}’</strong><br>` +
+    `<strong data-idx="${i}">Token: "${escapeToken(token)}"</strong><br>` +
     '<table><tr><th>token</th><th>log p</th><th>p</th></tr>' +
     rows + '</table>';
   tooltipEl.classList.remove('hidden');
@@ -192,7 +233,6 @@ function showTopLogprobs (e, tokens) {
 }
 
 function positionTooltip (e) {
-  if (!e || !e.currentTarget || !tooltipEl) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const tRect = tooltipEl.getBoundingClientRect();
   let top  = rect.bottom + window.scrollY + 4;
@@ -231,7 +271,17 @@ async function completion (e) {
     if (!data) return;
 
     applyCompletion(data, idx, token);
-    history.push({ timestamp: new Date().toISOString(), prompt, response: data });
+
+    history.push({
+      timestamp: new Date().toISOString(),
+      prompt,
+      model: 'gpt-3.5-turbo-instruct',
+      seed: 0,
+      temperature: 0,
+      max_tokens: 16,
+      system_fingerprint: data.system_fingerprint || null,
+      response: data
+    });
     localStorage.setItem('completion_history', JSON.stringify(history));
     updateSavedCount();
     showStatus('Uloženo!');
@@ -253,7 +303,16 @@ async function continueText(maxTokens) {
     if (!data) return;
 
     appendCompletion(data);
-    history.push({ timestamp: new Date().toISOString(), prompt, response: data });
+    history.push({
+      timestamp: new Date().toISOString(),
+      prompt,
+      model: 'gpt-3.5-turbo-instruct',
+      seed: 0,
+      temperature: 0,
+      max_tokens: maxTokens,
+      system_fingerprint: data.system_fingerprint || null,
+      response: data
+    });
     localStorage.setItem('completion_history', JSON.stringify(history));
     updateSavedCount();
     showStatus(`Pokračování ${maxTokens} tokenů uloženo!`);
