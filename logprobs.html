@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (Full Chain Restore)</title>
+  <title>Logprobs Viewer (token‑safe version)</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-
   <style>
     body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
     #header     { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
@@ -55,385 +54,184 @@
   <div id="tooltip" class="hidden"></div>
 
 <script>
-const tokensEl  = document.getElementById('tokens');
-const loadingEl = document.getElementById('loading');
-const tooltipEl = document.getElementById('tooltip');
-const exportBtn = document.getElementById('exportBtn');
-const clearBtn  = document.getElementById('clearBtn');
-const continueBtn16 = document.getElementById('continueBtn16');
+/* =====================================================
+   GLOBAL STATE
+   ===================================================== */
+const tokensEl       = document.getElementById('tokens');
+const loadingEl      = document.getElementById('loading');
+const tooltipEl      = document.getElementById('tooltip');
+const exportBtn      = document.getElementById('exportBtn');
+const clearBtn       = document.getElementById('clearBtn');
+const continueBtn16  = document.getElementById('continueBtn16');
 const continueBtn256 = document.getElementById('continueBtn256');
-const statusEl  = document.getElementById('status');
-const savedCountEl = document.getElementById('savedCount');
+const statusEl       = document.getElementById('status');
+const savedCountEl   = document.getElementById('savedCount');
 
-let allTokens = [];
+let allTokens  = [];  // objekty {token, logprob, top_logprobs}
+let safeTokens = [];  // pole stringů – zdroj pravdy pro prompt
 let selectionStart = null;
 
-function escapeToken(token) {
-  return token
-    .replace(/\n/g, '\\n')
-    .replace(/\t/g, '\\t')
-    .replace(/ /g, '␣'); // vizuálně rozlišit mezery
-}
+/* =====================================================
+   HELPERS
+   ===================================================== */
+function escapeToken(tok){return tok.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣');}
+function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);}
+function updateSavedCount(){const h=JSON.parse(localStorage.getItem('completion_history')||'[]');savedCountEl.textContent=h.length;}
 
-async function loadTokens () {
-  try {
-    const res  = await fetch('logprobs.json');
-    const data = await res.json();
+/* =====================================================
+   LOAD TOKENS
+   ===================================================== */
+async function loadTokens(){
+  try{
+    const res = await fetch('logprobs.json');
+    const data= await res.json();
 
-    if (data.object === 'chat.completion') {
-      allTokens = data.choices[0].logprobs.content.map(t => ({
-        token: t.token,
-        logprob: t.logprob,
-        top_logprobs: [...t.top_logprobs].sort((a, b) => b.logprob - a.logprob)
-      }));
-    } else if (data.object === 'text_completion' || data.object === 'text.completion') {
-      const lp = data.choices[0].logprobs;
-      allTokens = lp.tokens.map((token, i) => {
-        const sortedTop = Object.entries(lp.top_logprobs[i])
-          .map(([tok, log]) => ({ token: tok, logprob: log }))
-          .sort((a, b) => b.logprob - a.logprob);
-        return { token, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
+    // --- parse depending on object type
+    if(data.object==='chat.completion'){
+      allTokens = data.choices[0].logprobs.content.map(t=>({token:t.token,logprob:t.logprob,top_logprobs:[...t.top_logprobs].sort((a,b)=>b.logprob-a.logprob)}));
+    }else if(data.object==='text_completion'||data.object==='text.completion'){
+      const lp=data.choices[0].logprobs;
+      allTokens=lp.tokens.map((tok,i)=>{
+        const top=Object.entries(lp.top_logprobs[i]).map(([t,l])=>({token:t,logprob:l})).sort((a,b)=>b.logprob-a.logprob);
+        return{token:tok,logprob:lp.token_logprobs[i],top_logprobs:top};
       });
-    } else {
-      throw new Error('Unsupported format: ' + data.object);
-    }
+    }else{throw new Error('Unsupported format: '+data.object);}
+
+    safeTokens = allTokens.map(t=>t.token); // první bezpečný snapshot
 
     renderTokens(allTokens);
-    exportBtn.hidden = false;
-    clearBtn.hidden = false;
-    continueBtn16.hidden = false;
-    continueBtn256.hidden = false;
-    updateSavedCount();
-
-    restoreContinuations(); // ✅ nové: načti všechna navazující pokračování
-  } catch (err) {
-    loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
-    statusEl.textContent = '';
-  }
+    exportBtn.hidden=false;clearBtn.hidden=false;continueBtn16.hidden=false;continueBtn256.hidden=false;updateSavedCount();
+  }catch(err){loadingEl.textContent='Error loading logprobs.json: '+err.message;statusEl.textContent='';}
 }
 
-function restoreContinuations() {
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  let currentPrompt = allTokens.map(t => t.token).join('');
-  let foundAny = false;
-
-  while (true) {
-    const next = history.find(entry => entry.prompt === currentPrompt);
-    if (!next) break;
-    appendCompletion(next.response);
-    currentPrompt = allTokens.map(t => t.token).join('');
-    foundAny = true;
-  }
-
-  if (foundAny) showStatus('Načtena uložená pokračování');
-}
-
-function renderTokens(tokens) {
-  tokensEl.innerHTML = '';
-  let i = 0;
-  const BATCH = 1200;
-
-  function chunk() {
-    const frag = document.createDocumentFragment();
-    for (let j = 0; j < BATCH && i < tokens.length; j++, i++) {
-      const t = tokens[i];
-      if (t.token.includes('\n')) {
-        const count = (t.token.match(/\n/g) || []).length;
-        const span = document.createElement('span');
-        span.className = 'token newline';
-        span.style.height = `${1.2 * count}em`;
-        span.dataset.idx = i;
-        span.title = escapeToken(t.token);
-        span.addEventListener('click', e => handleTokenClick(e, tokens));
-        frag.appendChild(span);
-      } else {
-        const span = document.createElement('span');
-        span.className = 'token';
-        span.dataset.idx = i;
-        span.textContent = t.token;
-        span.title = escapeToken(t.token);
-        span.addEventListener('click', e => handleTokenClick(e, tokens));
-        frag.appendChild(span);
-      }
+/* =====================================================
+   RENDER & TOOLTIP
+   ===================================================== */
+function renderTokens(tokens){
+  tokensEl.innerHTML=''; let i=0; const BATCH=1200;
+  function chunk(){
+    const frag=document.createDocumentFragment();
+    for(let j=0;j<BATCH&&i<tokens.length;j++,i++){
+      const t=tokens[i];
+      const span=document.createElement('span');
+      span.dataset.idx=i;
+      if(t.token.includes('\n')){
+        span.className='token newline';
+        span.style.height=`${1.2*(t.token.match(/\n/g)||[]).length}em`;
+      }else{ span.className='token'; span.textContent=t.token; }
+      span.title=escapeToken(t.token);
+      span.addEventListener('click',e=>handleTokenClick(e,tokens));
+      frag.appendChild(span);
     }
     tokensEl.appendChild(frag);
-
-    if (i < tokens.length) {
-      requestAnimationFrame(chunk);
-    } else {
-      loadingEl.remove();
-      tokensEl.hidden = false;
-    }
+    if(i<tokens.length){requestAnimationFrame(chunk);}else{loadingEl.remove();tokensEl.hidden=false;}
   }
   chunk();
 }
 
-function clearSelection () {
-  tokensEl.querySelectorAll('.selected').forEach(el =>
-    el.classList.remove('selected')
-  );
-}
+function clearSelection(){tokensEl.querySelectorAll('.selected').forEach(el=>el.classList.remove('selected'));}
 
-function handleTokenClick (e, tokens) {
+function handleTokenClick(e,tokens){
   e.stopPropagation();
-  const idx = +e.currentTarget.dataset.idx;
-  if (e.shiftKey) {
-    if (selectionStart === null) {
-      selectionStart = idx;
-      clearSelection();
-      e.currentTarget.classList.add('selected');
-    } else {
-      const start = Math.min(selectionStart, idx);
-      const end   = Math.max(selectionStart, idx);
-      clearSelection();
-      for (let j = start; j <= end; j++) {
-        tokensEl.children[j].classList.add('selected');
-      }
-      const logSum = tokens.slice(start, end + 1)
-        .reduce((s, t) => s + t.logprob, 0);
-      tooltipEl.innerHTML =
-        `<strong>Sequence</strong><br>` +
-        `log p = ${logSum.toFixed(2)}<br>` +
-        `p = ${Math.exp(logSum).toFixed(4)}`;
-      tooltipEl.classList.remove('hidden');
-      positionTooltip(e);
-      selectionStart = null;
+  const idx=+e.currentTarget.dataset.idx;
+  if(e.shiftKey){ // range selection log‑prob
+    if(selectionStart===null){selectionStart=idx;clearSelection();e.currentTarget.classList.add('selected');}
+    else{
+      const [start,end]=[selectionStart,idx].sort((a,b)=>a-b);
+      clearSelection(); for(let j=start;j<=end;j++){tokensEl.children[j].classList.add('selected');}
+      const logSum=tokens.slice(start,end+1).reduce((s,t)=>s+t.logprob,0);
+      tooltipEl.innerHTML=`<strong>Sequence</strong><br>log p = ${logSum.toFixed(2)}<br>p = ${Math.exp(logSum).toFixed(4)}`;
+      tooltipEl.classList.remove('hidden'); positionTooltip(e); selectionStart=null;
     }
-  } else {
-    clearSelection();
-    selectionStart = null;
-    showTopLogprobs(e, tokens);
-  }
+  }else{clearSelection();selectionStart=null;showTopLogprobs(e,tokens);}
 }
 
-function showTopLogprobs (e, tokens) {
+function showTopLogprobs(e,tokens){
+  const i=+e.currentTarget.dataset.idx; const {token,top_logprobs}=tokens[i];
+  const rows=top_logprobs.slice(0,20).map((r,idx)=>`<tr class="prob-row ${idx===0?'best':''}"><td class="tok" data-idx="${i}" data-alt="${r.token}">${escapeToken(r.token)}</td><td>${r.logprob.toFixed(2)}</td><td>${Math.exp(r.logprob).toFixed(6)}</td></tr>`).join('');
+  tooltipEl.innerHTML=`<strong data-idx="${i}">Token: "${escapeToken(token)}"</strong><br><table><tr><th>token</th><th>log p</th><th>p</th></tr>${rows}</table>`;
+  tooltipEl.classList.remove('hidden'); tooltipEl.querySelectorAll('.prob-row .tok').forEach(td=>td.addEventListener('click',completion)); positionTooltip(e);
+}
+function positionTooltip(e){const rect=e.currentTarget.getBoundingClientRect();const tRect=tooltipEl.getBoundingClientRect();let top=rect.bottom+window.scrollY+4;let left=rect.left+window.scrollX;if(left+tRect.width>window.innerWidth){left=window.innerWidth-tRect.width-4;}if(top+tRect.height>window.innerHeight+window.scrollY){top=rect.top+window.scrollY-tRect.height-4;}tooltipEl.style.top=`${top}px`;tooltipEl.style.left=`${left}px`;}
+
+/* =====================================================
+   API REQUESTS
+   ===================================================== */
+async function completion(e){
   e.stopPropagation();
-  const i = +e.currentTarget.dataset.idx;
-  const { token, top_logprobs } = tokens[i];
+  const idx=+e.currentTarget.dataset.idx;
+  const altToken=e.currentTarget.dataset.alt; if(altToken===undefined) return;
 
-  const rows = top_logprobs.slice(0, 20).map((r, idx) =>
-    `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
-       <td class="tok" data-idx="${i}" data-alt="${r.token}">${escapeToken(r.token)}</td>
-       <td>${r.logprob.toFixed(2)}</td>
-       <td>${Math.exp(r.logprob).toFixed(6)}</td>
-     </tr>`
-  ).join('');
+  const prompt=safeTokens.slice(0,idx).join('')+altToken;
+  const key=await ensureApiKey(); if(!key) return;
 
-  tooltipEl.innerHTML =
-    `<strong data-idx="${i}">Token: "${escapeToken(token)}"</strong><br>` +
-    '<table><tr><th>token</th><th>log p</th><th>p</th></tr>' +
-    rows + '</table>';
-  tooltipEl.classList.remove('hidden');
+  const history=JSON.parse(localStorage.getItem('completion_history')||'[]');
+  const existing=history.find(entry=>entry.prompt===prompt);
+  if(existing){applyCompletion(existing.response,idx,altToken);showStatus('Načteno z historie');return;}
 
-  tooltipEl.querySelectorAll('.prob-row .tok').forEach(td =>
-    td.addEventListener('click', completion)
-  );
-
-  positionTooltip(e);
+  try{
+    const data=await fetchCompletion(prompt,16); if(!data) return;
+    applyCompletion(data,idx,altToken);
+    history.push({timestamp:new Date().toISOString(),prompt,model:'gpt-3.5-turbo-instruct',seed:0,temperature:0,max_tokens:16,system_fingerprint:data.system_fingerprint||null,response:data});
+    localStorage.setItem('completion_history',JSON.stringify(history)); updateSavedCount(); showStatus('Uloženo!');
+  }catch(err){statusEl.textContent='Fetch failed: '+err.message;statusEl.classList.add('error');}
 }
 
-function positionTooltip (e) {
-  const rect = e.currentTarget.getBoundingClientRect();
-  const tRect = tooltipEl.getBoundingClientRect();
-  let top  = rect.bottom + window.scrollY + 4;
-  let left = rect.left + window.scrollX;
-
-  if (left + tRect.width > window.innerWidth) {
-    left = window.innerWidth - tRect.width - 4;
-  }
-  if (top + tRect.height > window.innerHeight + window.scrollY) {
-    top = rect.top + window.scrollY - tRect.height - 4;
-  }
-
-  tooltipEl.style.top  = `${top}px`;
-  tooltipEl.style.left = `${left}px`;
-}
-
-async function completion (e) {
-  e.stopPropagation();
-  const idx   = +e.currentTarget.dataset.idx;
-  const token = e.currentTarget.dataset.alt || e.currentTarget.textContent;
-  const prompt = allTokens.slice(0, idx).map(t => t.token).join('') + token;
-
-  const key = await ensureApiKey();
-  if (!key) return;
-
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  const existing = history.find(entry => entry.prompt === prompt);
-  if (existing) {
-    applyCompletion(existing.response, idx, token);
-    showStatus('Načteno z historie');
-    return;
-  }
-
-  try {
-    const data = await fetchCompletion(prompt, 16);
-    if (!data) return;
-
-    applyCompletion(data, idx, token);
-
-    history.push({
-      timestamp: new Date().toISOString(),
-      prompt,
-      model: 'gpt-3.5-turbo-instruct',
-      seed: 0,
-      temperature: 0,
-      max_tokens: 16,
-      system_fingerprint: data.system_fingerprint || null,
-      response: data
-    });
-    localStorage.setItem('completion_history', JSON.stringify(history));
-    updateSavedCount();
-    showStatus('Uloženo!');
-  } catch (err) {
-    statusEl.textContent = 'Fetch failed: ' + err.message;
-    statusEl.classList.add('error');
-  }
-}
-
-async function continueText(maxTokens) {
-  const prompt = allTokens.map(t => t.token).join('');
-  const key = await ensureApiKey();
-  if (!key) return;
-
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-
-  try {
-    const data = await fetchCompletion(prompt, maxTokens);
-    if (!data) return;
-
+async function continueText(maxTokens){
+  const prompt=safeTokens.join('');
+  const key=await ensureApiKey(); if(!key) return;
+  const history=JSON.parse(localStorage.getItem('completion_history')||'[]');
+  try{
+    const data=await fetchCompletion(prompt,maxTokens); if(!data) return;
     appendCompletion(data);
-    history.push({
-      timestamp: new Date().toISOString(),
-      prompt,
-      model: 'gpt-3.5-turbo-instruct',
-      seed: 0,
-      temperature: 0,
-      max_tokens: maxTokens,
-      system_fingerprint: data.system_fingerprint || null,
-      response: data
-    });
-    localStorage.setItem('completion_history', JSON.stringify(history));
-    updateSavedCount();
-    showStatus(`Pokračování ${maxTokens} tokenů uloženo!`);
-  } catch (err) {
-    statusEl.textContent = 'Fetch failed: ' + err.message;
-    statusEl.classList.add('error');
-  }
+    history.push({timestamp:new Date().toISOString(),prompt,model:'gpt-3.5-turbo-instruct',seed:0,temperature:0,max_tokens:maxTokens,system_fingerprint:data.system_fingerprint||null,response:data});
+    localStorage.setItem('completion_history',JSON.stringify(history)); updateSavedCount(); showStatus(`Pokračování ${maxTokens} tokenů uloženo!`);
+  }catch(err){statusEl.textContent='Fetch failed: '+err.message;statusEl.classList.add('error');}
 }
 
-async function fetchCompletion(prompt, maxTokens) {
-  try {
-    const res = await fetch('https://api.openai.com/v1/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${await ensureApiKey()}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo-instruct',
-        prompt,
-        logprobs: 20,
-        max_tokens: maxTokens,
-        temperature: 0,
-        seed: 0
-      })
-    });
-    const data = await res.json();
-    if (data.error) {
-      statusEl.textContent = `Error: ${data.error.message}`;
-      statusEl.classList.add('error');
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
+async function fetchCompletion(prompt,maxTokens){
+  try{
+    const res=await fetch('https://api.openai.com/v1/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${await ensureApiKey()}`},body:JSON.stringify({model:'gpt-3.5-turbo-instruct',prompt,logprobs:20,max_tokens:maxTokens,temperature:0,seed:0})});
+    const data=await res.json(); if(data.error){statusEl.textContent=`Error: ${data.error.message}`; statusEl.classList.add('error'); return null;} return data;
+  }catch{return null;}
 }
 
-function applyCompletion(response, idx, token) {
-  const choice = response.choices[0];
-  const lp = choice.logprobs;
-  const newTokens = lp.tokens.map((t, i) => {
-    const sortedTop = Object.entries(lp.top_logprobs[i])
-      .map(([tok, log]) => ({ token: tok, logprob: log }))
-      .sort((a,b) => b.logprob - a.logprob);
-    return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
-  });
-
-  const selectedTokenObj = {
-    token,
-    logprob: 0,
-    top_logprobs: allTokens[idx].top_logprobs || []
-  };
-
-  allTokens = allTokens.slice(0, idx).concat(selectedTokenObj, newTokens);
-  renderTokens(allTokens);
-  tooltipEl.classList.add('hidden');
+/* =====================================================
+   TOKEN LIST MUTATIONS
+   ===================================================== */
+function applyCompletion(response,idx,replacementToken){
+  const choice=response.choices[0]; const lp=choice.logprobs;
+  const newTokens=lp.tokens.map((t,i)=>{const sorted=Object.entries(lp.top_logprobs[i]).map(([tok,log])=>({token:tok,logprob:log})).sort((a,b)=>b.logprob-a.logprob);return{token:t,logprob:lp.token_logprobs[i],top_logprobs:sorted};});
+  const replacedObj={token:replacementToken,logprob:0,top_logprobs:allTokens[idx].top_logprobs||[]};
+  allTokens=allTokens.slice(0,idx).concat(replacedObj,newTokens);
+  safeTokens=allTokens.map(t=>t.token); // update safety snapshot
+  renderTokens(allTokens); tooltipEl.classList.add('hidden');
 }
 
-function appendCompletion(response) {
-  const choice = response.choices[0];
-  const lp = choice.logprobs;
-  const newTokens = lp.tokens.map((t, i) => {
-    const sortedTop = Object.entries(lp.top_logprobs[i])
-      .map(([tok, log]) => ({ token: tok, logprob: log }))
-      .sort((a,b) => b.logprob - a.logprob);
-    return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sortedTop };
-  });
-
-  allTokens = allTokens.concat(newTokens);
-  renderTokens(allTokens);
-  tooltipEl.classList.add('hidden');
+function appendCompletion(response){
+  const choice=response.choices[0]; const lp=choice.logprobs;
+  const newTokens=lp.tokens.map((t,i)=>{const sorted=Object.entries(lp.top_logprobs[i]).map(([tok,log])=>({token:tok,logprob:log})).sort((a,b)=>b.logprob-a.logprob);return{token:t,logprob:lp.token_logprobs[i],top_logprobs:sorted};});
+  allTokens=allTokens.concat(newTokens);
+  safeTokens=allTokens.map(t=>t.token);
+  renderTokens(allTokens); tooltipEl.classList.add('hidden');
 }
 
-async function ensureApiKey() {
-  let key = localStorage.getItem('openai_key');
-  if (!key) {
-    key = window.prompt('OpenAI API key:');
-    if (!key) return null;
-    localStorage.setItem('openai_key', key);
-  }
-  return key;
-}
+/* =====================================================
+   UTILITIES
+   ===================================================== */
+async function ensureApiKey(){let key=localStorage.getItem('openai_key'); if(!key){key=window.prompt('OpenAI API key:'); if(!key) return null; localStorage.setItem('openai_key',key);} return key;}
 
-function updateSavedCount() {
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  savedCountEl.textContent = history.length;
-}
+/* =====================================================
+   EXPORT / CLEAR BUTTONS
+   ===================================================== */
+exportBtn.addEventListener('click',()=>{const h=localStorage.getItem('completion_history'); if(!h||h==='[]'){alert('No completions saved yet.');return;} const blob=new Blob([h],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='completion_history.json'; a.click(); URL.revokeObjectURL(url);});
 
-function showStatus(msg) {
-  statusEl.textContent = msg;
-  statusEl.classList.remove('error');
-  setTimeout(() => { statusEl.textContent = ''; }, 2000);
-}
+clearBtn.addEventListener('click',()=>{localStorage.removeItem('completion_history'); updateSavedCount(); showStatus('Historie vymazána');});
+continueBtn16.addEventListener('click',()=>continueText(16));
+continueBtn256.addEventListener('click',()=>continueText(256));
 
-exportBtn.addEventListener('click', () => {
-  const history = localStorage.getItem('completion_history');
-  if (!history || history === '[]') {
-    alert('No completions saved yet.');
-    return;
-  }
-  const blob = new Blob([history], {type: 'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'completion_history.json';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-clearBtn.addEventListener('click', () => {
-  localStorage.removeItem('completion_history');
-  updateSavedCount();
-  showStatus('Historie vymazána');
-});
-
-continueBtn16.addEventListener('click', () => continueText(16));
-continueBtn256.addEventListener('click', () => continueText(256));
-
-document.addEventListener('click', () => tooltipEl.classList.add('hidden'), { passive: true });
-window.addEventListener('DOMContentLoaded', loadTokens);
+document.addEventListener('click',()=>tooltipEl.classList.add('hidden'),{passive:true});
+window.addEventListener('DOMContentLoaded',loadTokens);
 </script>
 </body>
 </html>
