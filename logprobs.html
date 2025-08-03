@@ -41,7 +41,8 @@
       <span id="status"></span>
     </div>
     <div>
-      <button id="continueBtn" hidden>Pokračovat text</button>
+      <button id="continueBtn16" hidden>Pokračovat (16)</button>
+      <button id="continueBtn256" hidden>Pokračovat (256)</button>
       <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
     </div>
@@ -55,7 +56,8 @@ const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
 const clearBtn  = document.getElementById('clearBtn');
-const continueBtn = document.getElementById('continueBtn');
+const continueBtn16 = document.getElementById('continueBtn16');
+const continueBtn256 = document.getElementById('continueBtn256');
 const statusEl  = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
@@ -88,7 +90,8 @@ async function loadTokens () {
     renderTokens(allTokens);
     exportBtn.hidden = false;
     clearBtn.hidden = false;
-    continueBtn.hidden = false;
+    continueBtn16.hidden = false;
+    continueBtn256.hidden = false;
     updateSavedCount();
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
@@ -167,11 +170,11 @@ function showTopLogprobs (e, tokens) {
   const i = +e.currentTarget.dataset.idx;
   const { token, top_logprobs } = tokens[i];
 
-  const rows = top_logprobs.slice(0, 10).map((r, idx) =>
+  const rows = top_logprobs.slice(0, 20).map((r, idx) =>  // ✅ zobrazíme 20
     `<tr class="prob-row ${idx === 0 ? 'best' : ''}">
        <td class="tok" data-idx="${i}" data-alt="${r.token}">${r.token}</td>
        <td>${r.logprob.toFixed(2)}</td>
-       <td>${Math.exp(r.logprob).toFixed(4)}</td>
+       <td>${Math.exp(r.logprob).toFixed(6)}</td>
      </tr>`
   ).join('');
 
@@ -212,13 +215,8 @@ async function completion (e) {
   const token = e.currentTarget.dataset.alt || e.currentTarget.textContent;
   const prompt = allTokens.slice(0, idx).map(t => t.token).join('') + token;
 
-  // API key
-  let key = localStorage.getItem('openai_key');
-  if (!key) {
-    key = window.prompt('OpenAI API key:');
-    if (!key) return;
-    localStorage.setItem('openai_key', key);
-  }
+  const key = await ensureApiKey();
+  if (!key) return;
 
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
   const existing = history.find(entry => entry.prompt === prompt);
@@ -229,29 +227,10 @@ async function completion (e) {
   }
 
   try {
-    const res = await fetch('https://api.openai.com/v1/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo-instruct',
-        prompt,
-        logprobs: 20,
-        max_tokens: 16,
-        temperature: 0
-      })
-    });
-    const data = await res.json();
-    if (data.error) {
-      statusEl.textContent = `Error: ${data.error.message}`;
-      statusEl.classList.add('error');
-      return;
-    }
+    const data = await fetchCompletion(prompt, 16);
+    if (!data) return;
 
     applyCompletion(data, idx, token);
-
     history.push({ timestamp: new Date().toISOString(), prompt, response: data });
     localStorage.setItem('completion_history', JSON.stringify(history));
     updateSavedCount();
@@ -259,6 +238,56 @@ async function completion (e) {
   } catch (err) {
     statusEl.textContent = 'Fetch failed: ' + err.message;
     statusEl.classList.add('error');
+  }
+}
+
+async function continueText(maxTokens) {
+  const prompt = allTokens.map(t => t.token).join('');
+  const key = await ensureApiKey();
+  if (!key) return;
+
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+
+  try {
+    const data = await fetchCompletion(prompt, maxTokens);
+    if (!data) return;
+
+    appendCompletion(data);
+    history.push({ timestamp: new Date().toISOString(), prompt, response: data });
+    localStorage.setItem('completion_history', JSON.stringify(history));
+    updateSavedCount();
+    showStatus(`Pokračování ${maxTokens} tokenů uloženo!`);
+  } catch (err) {
+    statusEl.textContent = 'Fetch failed: ' + err.message;
+    statusEl.classList.add('error');
+  }
+}
+
+async function fetchCompletion(prompt, maxTokens) {
+  try {
+    const res = await fetch('https://api.openai.com/v1/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${await ensureApiKey()}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo-instruct',
+        prompt,
+        logprobs: 20,
+        max_tokens: maxTokens,
+        temperature: 0
+      })
+    });
+    const data = await res.json();
+    if (data.error) {
+      statusEl.textContent = `Error: ${data.error.message}`;
+      statusEl.classList.add('error');
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
   }
 }
 
@@ -283,56 +312,6 @@ function applyCompletion(response, idx, token) {
   tooltipEl.classList.add('hidden');
 }
 
-async function continueText() {
-  const prompt = allTokens.map(t => t.token).join('');
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  const existing = history.find(entry => entry.prompt === prompt);
-  if (existing) {
-    appendCompletion(existing.response);
-    showStatus('Načteno z historie');
-    return;
-  }
-
-  let key = localStorage.getItem('openai_key');
-  if (!key) {
-    key = window.prompt('OpenAI API key:');
-    if (!key) return;
-    localStorage.setItem('openai_key', key);
-  }
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${key}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo-instruct',
-        prompt,
-        logprobs: 20,
-        max_tokens: 16,
-        temperature: 0
-      })
-    });
-    const data = await res.json();
-    if (data.error) {
-      statusEl.textContent = `Error: ${data.error.message}`;
-      statusEl.classList.add('error');
-      return;
-    }
-
-    appendCompletion(data);
-    history.push({ timestamp: new Date().toISOString(), prompt, response: data });
-    localStorage.setItem('completion_history', JSON.stringify(history));
-    updateSavedCount();
-    showStatus('Uloženo!');
-  } catch (err) {
-    statusEl.textContent = 'Fetch failed: ' + err.message;
-    statusEl.classList.add('error');
-  }
-}
-
 function appendCompletion(response) {
   const choice = response.choices[0];
   const lp = choice.logprobs;
@@ -346,6 +325,16 @@ function appendCompletion(response) {
   allTokens = allTokens.concat(newTokens);
   renderTokens(allTokens);
   tooltipEl.classList.add('hidden');
+}
+
+async function ensureApiKey() {
+  let key = localStorage.getItem('openai_key');
+  if (!key) {
+    key = window.prompt('OpenAI API key:');
+    if (!key) return null;
+    localStorage.setItem('openai_key', key);
+  }
+  return key;
 }
 
 function updateSavedCount() {
@@ -380,7 +369,8 @@ clearBtn.addEventListener('click', () => {
   showStatus('Historie vymazána');
 });
 
-continueBtn.addEventListener('click', continueText);
+continueBtn16.addEventListener('click', () => continueText(16));
+continueBtn256.addEventListener('click', () => continueText(256));
 
 document.addEventListener('click', () => tooltipEl.classList.add('hidden'), { passive: true });
 window.addEventListener('DOMContentLoaded', loadTokens);
