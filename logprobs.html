@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer (token-safe version)</title>
+  <title>Logprobs Viewer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body        { font: 16px/1.5 system-ui, sans-serif; margin: 0; padding: 1rem; }
@@ -54,33 +54,25 @@
   <div id="tooltip" class="hidden"></div>
 
 <script>
-/* =====================================================
-   GLOBAL STATE
-   ===================================================== */
-const tokensEl       = document.getElementById('tokens');
-const loadingEl      = document.getElementById('loading');
-const tooltipEl      = document.getElementById('tooltip');
-const exportBtn      = document.getElementById('exportBtn');
-const clearBtn       = document.getElementById('clearBtn');
-const continueBtn16  = document.getElementById('continueBtn16');
-const continueBtn256 = document.getElementById('continueBtn256');
-const statusEl       = document.getElementById('status');
-const savedCountEl   = document.getElementById('savedCount');
-
-let allTokens  = [];  
-let safeTokens = [];  
+let allTokens = [];
+let safeTokens = [];
 let currentCompletionId = null;
 
-/* =====================================================
-   HELPERS
-   ===================================================== */
+const tokensEl = document.getElementById('tokens');
+const loadingEl = document.getElementById('loading');
+const tooltipEl = document.getElementById('tooltip');
+const exportBtn = document.getElementById('exportBtn');
+const clearBtn = document.getElementById('clearBtn');
+const continueBtn16 = document.getElementById('continueBtn16');
+const continueBtn256 = document.getElementById('continueBtn256');
+const statusEl = document.getElementById('status');
+const savedCountEl = document.getElementById('savedCount');
+
 function escapeToken(tok){return tok.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣');}
 function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);}
 function updateSavedCount(){const h=JSON.parse(localStorage.getItem('completion_history')||'[]');savedCountEl.textContent=h.length;}
 
-/* =====================================================
-   LOAD TOKENS (INITIAL)
-   ===================================================== */
+/* ============ INITIAL LOAD ============ */
 async function loadTokens() {
   try {
     const res = await fetch('logprobs.json');
@@ -131,30 +123,47 @@ async function loadTokens() {
     continueBtn16.hidden = false;
     continueBtn256.hidden = false;
     updateSavedCount();
+    loadingEl.remove();
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
     statusEl.textContent = '';
   }
 }
 
-/* =====================================================
-   HISTORY UTILITIES
-   ===================================================== */
+/* ============ HISTORY FUNCTIONS ============ */
 function getCompletionById(id) {
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
   const entry = history.find(e => e.completion.id === id);
   if (!entry) return null;
 
+  const promptTokensUI = entry.prompt.tokens.map((t, i) => {
+    const lpData = entry.prompt.logprobs && entry.prompt.logprobs[i] ? entry.prompt.logprobs[i] : null;
+    return {
+      token: t,
+      logprob: lpData ? lpData.logprob : null,
+      top_logprobs: lpData ? lpData.top_logprobs : []
+    };
+  });
+
+  const completionTokensUI = entry.completion.tokens.map((t, i) => {
+    const sorted = Object.entries(entry.completion.top_logprobs[i])
+      .map(([tok, log]) => ({ token: tok, logprob: log }))
+      .sort((a, b) => b.logprob - a.logprob);
+    return {
+      token: t,
+      logprob: entry.completion.token_logprobs[i],
+      top_logprobs: sorted
+    };
+  });
+
   return {
     promptTokens: entry.prompt.tokens,
     completionTokens: entry.completion.tokens,
-    allTokens: entry.prompt.tokens.concat(entry.completion.tokens)
+    allTokens: promptTokensUI.concat(completionTokensUI)
   };
 }
 
-/* =====================================================
-   API REQUESTS
-   ===================================================== */
+/* ============ CREATE COMPLETION ============ */
 async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
   const prev = getCompletionById(prevId);
   if (!prev) {
@@ -163,9 +172,36 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     return null;
   }
 
-  const allTokens = prev.allTokens;
-  const updatedTokens = allTokens.slice(0, replaceIdx).concat(newToken);
+  const allTokensArr = prev.promptTokens.concat(prev.completionTokens);
+  const updatedTokens = allTokensArr.slice(0, replaceIdx).concat(newToken);
   const prompt = updatedTokens.join('');
+
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  const existing = history.find(e => JSON.stringify(e.prompt.tokens) === JSON.stringify(updatedTokens));
+
+  if (existing) {
+    console.log('[HIT] Found existing completion for same tokens:', updatedTokens);
+    showStatus('Načteno!');
+    return {
+      response: {
+        id: existing.completion.id,
+        choices: [
+          {
+            text: existing.completion.text,
+            logprobs: {
+              tokens: existing.completion.tokens,
+              token_logprobs: existing.completion.token_logprobs,
+              top_logprobs: existing.completion.top_logprobs
+            }
+          }
+        ]
+      },
+      prompt,
+      fromHistory: true
+    };
+  }
+
+  console.log('[MISS] Sending API request for prompt:', prompt);
 
   const key = await ensureApiKey();
   if (!key) return null;
@@ -175,7 +211,6 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
 
   const lp = data.choices[0].logprobs;
 
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
   history.push({
     timestamp: new Date().toISOString(),
     model: data.model,
@@ -186,7 +221,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     prompt: {
       text: prompt,
       tokens: updatedTokens,
-      logprobs: [] 
+      logprobs: [] // zatím prázdné
     },
     completion: {
       id: data.id,
@@ -229,9 +264,7 @@ async function fetchCompletion(prompt, maxTokens, key){
   }catch{return null;}
 }
 
-/* =====================================================
-   TOKEN LIST MUTATIONS
-   ===================================================== */
+/* ============ APPLY COMPLETION ============ */
 function applyCompletion(response, idx, replacementToken){
   const lp=response.choices[0].logprobs;
   const newTokens=lp.tokens.map((t,i)=>{
@@ -249,9 +282,7 @@ function applyCompletion(response, idx, replacementToken){
   tooltipEl.classList.add('hidden');
 }
 
-/* =====================================================
-   UI RENDERING & TOOLTIP
-   ===================================================== */
+/* ============ UI RENDERING & TOOLTIP ============ */
 function renderTokens(tokens){
   tokensEl.innerHTML=''; let i=0; const BATCH=1200;
   function chunk(){
@@ -269,7 +300,7 @@ function renderTokens(tokens){
       frag.appendChild(span);
     }
     tokensEl.appendChild(frag);
-    if(i<tokens.length){requestAnimationFrame(chunk);}else{loadingEl.remove();tokensEl.hidden=false;}
+    if(i<tokens.length){requestAnimationFrame(chunk);}else{tokensEl.hidden=false;}
   }
   chunk();
 }
@@ -309,7 +340,7 @@ async function completion(e){
   const result=await createCompletion(currentCompletionId,idx,altToken,16);
   if(!result) return;
   applyCompletion(result.response,idx,altToken);
-  showStatus('Uloženo!');
+  showStatus(result.fromHistory ? 'Načteno!' : 'Uloženo!');
 }
 
 async function ensureApiKey(){
@@ -322,9 +353,7 @@ async function ensureApiKey(){
   return key;
 }
 
-/* =====================================================
-   EXPORT / CLEAR BUTTONS
-   ===================================================== */
+/* ============ EXPORT / CLEAR ============ */
 exportBtn.addEventListener('click',()=>{
   const h=localStorage.getItem('completion_history'); 
   if(!h||h==='[]'){alert('No completions saved yet.');return;} 
