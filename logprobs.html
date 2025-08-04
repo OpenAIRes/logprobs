@@ -101,7 +101,25 @@ async function loadTokens(){
 
     renderTokens(allTokens);
     exportBtn.hidden=false;clearBtn.hidden=false;continueBtn16.hidden=false;continueBtn256.hidden=false;updateSavedCount();
+    restoreContinuations();
   }catch(err){loadingEl.textContent='Error loading logprobs.json: '+err.message;statusEl.textContent='';}
+}
+
+/* =====================================================
+   HISTORY RESTORE
+   ===================================================== */
+function restoreContinuations(){
+  const history=JSON.parse(localStorage.getItem('completion_history')||'[]');
+  let current=safeTokens.join('');
+  let restored=false;
+  while(true){
+    const entry=history.find(e=>e.prompt===current);
+    if(!entry) break;
+    appendCompletion(entry.response);
+    current=safeTokens.join('');
+    restored=true;
+  }
+  if(restored) showStatus('Načtena uložená pokračování');
 }
 
 /* =====================================================
