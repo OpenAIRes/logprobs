@@ -81,24 +81,36 @@ async function loadTokens() {
     const lp = data.choices[0].logprobs;
 
     const firstEntry = {
-      timestamp: new Date().toISOString(),
+      id: data.id,
+      object: "text_completion",
+      created: Math.floor(Date.now()/1000),
       model: data.model,
-      seed: 0,
-      temperature: 0,
-      max_tokens: 16,
-      system_fingerprint: data.system_fingerprint || null,
+      previous_response_id: null,
       prompt: {
         text: (data.prompt && data.prompt.length ? data.prompt.map(p => p.content || '').join('') : ''),
-        tokens: [],
-        logprobs: []
+        index: 0,
+        logprobs: {
+          tokens: [], 
+          token_logprobs: [],
+          top_logprobs: []
+        }
       },
-      completion: {
-        id: data.id,
-        text: data.choices[0].text,
-        tokens: lp.tokens,
-        token_logprobs: lp.token_logprobs,
-        top_logprobs: lp.top_logprobs
-      }
+      choices: [
+        {
+          text: data.choices[0].text,
+          index: 0,
+          logprobs: lp,
+          finish_reason: data.choices[0].finish_reason
+        }
+      ],
+      usage: data.usage || {
+        prompt_tokens: 0,
+        completion_tokens: lp.tokens.length,
+        total_tokens: lp.tokens.length
+      },
+      max_tokens: 16,
+      temperature: 0,
+      seed: 0
     };
 
     const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
@@ -133,32 +145,29 @@ async function loadTokens() {
 /* ============ HISTORY FUNCTIONS ============ */
 function getCompletionById(id) {
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  const entry = history.find(e => e.completion.id === id);
+  const entry = history.find(e => e.id === id);
   if (!entry) return null;
 
-  const promptTokensUI = entry.prompt.tokens.map((t, i) => {
-    const lpData = entry.prompt.logprobs && entry.prompt.logprobs[i] ? entry.prompt.logprobs[i] : null;
-    return {
-      token: t,
-      logprob: lpData ? lpData.logprob : null,
-      top_logprobs: lpData ? lpData.top_logprobs : []
-    };
+  const promptTokensUI = entry.prompt.logprobs.tokens.map((t, i) => {
+    const logprob = entry.prompt.logprobs.token_logprobs[i] || null;
+    const top = entry.prompt.logprobs.top_logprobs[i] || {};
+    const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log })).sort((a,b)=>b.logprob-a.logprob);
+    return { token: t, logprob, top_logprobs: sorted };
   });
 
-  const completionTokensUI = entry.completion.tokens.map((t, i) => {
-    const sorted = Object.entries(entry.completion.top_logprobs[i])
-      .map(([tok, log]) => ({ token: tok, logprob: log }))
-      .sort((a, b) => b.logprob - a.logprob);
+  const completionTokensUI = entry.choices[0].logprobs.tokens.map((t, i) => {
+    const top = entry.choices[0].logprobs.top_logprobs[i] || {};
+    const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log })).sort((a,b)=>b.logprob-a.logprob);
     return {
       token: t,
-      logprob: entry.completion.token_logprobs[i],
+      logprob: entry.choices[0].logprobs.token_logprobs[i],
       top_logprobs: sorted
     };
   });
 
   return {
-    promptTokens: entry.prompt.tokens,
-    completionTokens: entry.completion.tokens,
+    promptTokens: entry.prompt.logprobs.tokens,
+    completionTokens: entry.choices[0].logprobs.tokens,
     allTokens: promptTokensUI.concat(completionTokensUI)
   };
 }
@@ -167,76 +176,110 @@ function getCompletionById(id) {
 async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
   const prev = getCompletionById(prevId);
   if (!prev) {
-    statusEl.textContent = 'Previous completion not found';
-    statusEl.classList.add('error');
+    console.error('[ERROR] Previous completion not found for ID:', prevId);
+    showStatus('Previous completion not found');
     return null;
   }
 
   const allTokensArr = prev.promptTokens.concat(prev.completionTokens);
-  const updatedTokens = allTokensArr.slice(0, replaceIdx).concat(newToken);
-  const prompt = updatedTokens.join('');
+  const updatedTokens = allTokensArr.slice(0, replaceIdx);
+  if (newToken !== undefined && newToken !== null) updatedTokens.push(newToken);
+  const promptText = updatedTokens.join('');
 
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  const existing = history.find(e => JSON.stringify(e.prompt.tokens) === JSON.stringify(updatedTokens));
 
+  // Deduplication
+  const existing = history.find(e => JSON.stringify(e.prompt.logprobs.tokens) === JSON.stringify(updatedTokens));
   if (existing) {
-    console.log('[HIT] Found existing completion for same tokens:', updatedTokens);
-    showStatus('Načteno!');
+    console.log('[HIT] Found existing completion');
     return {
       response: {
-        id: existing.completion.id,
-        choices: [
-          {
-            text: existing.completion.text,
-            logprobs: {
-              tokens: existing.completion.tokens,
-              token_logprobs: existing.completion.token_logprobs,
-              top_logprobs: existing.completion.top_logprobs
-            }
-          }
-        ]
+        id: existing.id,
+        choices: existing.choices
       },
-      prompt,
+      prompt: promptText,
       fromHistory: true
     };
   }
 
-  console.log('[MISS] Sending API request for prompt:', prompt);
+  console.log('[MISS] Calling API for prompt:', promptText);
 
   const key = await ensureApiKey();
   if (!key) return null;
 
-  const data = await fetchCompletion(prompt, maxTokens, key);
+  const data = await fetchCompletion(promptText, maxTokens, key);
   if (!data) return null;
 
   const lp = data.choices[0].logprobs;
 
-  history.push({
-    timestamp: new Date().toISOString(),
+  const newEntry = {
+    id: data.id,
+    object: "text_completion",
+    created: Math.floor(Date.now() / 1000),
     model: data.model,
-    seed: 0,
-    temperature: 0,
-    max_tokens: maxTokens,
-    system_fingerprint: data.system_fingerprint || null,
+    previous_response_id: prevId,
     prompt: {
-      text: prompt,
-      tokens: updatedTokens,
-      logprobs: [] // zatím prázdné
+      text: promptText,
+      index: 0,
+      logprobs: {
+        tokens: updatedTokens,
+        token_logprobs: [],
+        top_logprobs: []
+      }
     },
-    completion: {
-      id: data.id,
-      text: data.choices[0].text,
-      tokens: lp.tokens,
-      token_logprobs: lp.token_logprobs,
-      top_logprobs: lp.top_logprobs
-    }
-  });
+    choices: [
+      {
+        text: data.choices[0].text,
+        index: 0,
+        logprobs: lp,
+        finish_reason: data.choices[0].finish_reason
+      }
+    ],
+    usage: data.usage,
+    max_tokens: maxTokens,
+    temperature: 0,
+    seed: 0
+  };
+
+  history.push(newEntry);
   localStorage.setItem('completion_history', JSON.stringify(history));
   updateSavedCount();
 
-  return { response: data, prompt, fromHistory: false };
+  return { response: data, prompt: promptText, fromHistory: false };
 }
 
+/* ============ CONTINUE USING createCompletion ============ */
+async function continueText(maxTokens) {
+  const prevId = currentCompletionId;
+  const prev = getCompletionById(prevId);
+  if (!prev) {
+    console.error('[ERROR] Cannot continue: previous completion not found');
+    showStatus('Nelze pokračovat – chybí aktuální záznam');
+    return;
+  }
+
+  const allTokensArr = prev.promptTokens.concat(prev.completionTokens);
+  const replaceIdx = allTokensArr.length;
+
+  const result = await createCompletion(prevId, replaceIdx, "", maxTokens);
+  if (!result) return;
+
+  const lp = result.response.choices[0].logprobs;
+  const newTokens = lp.tokens.map((t, i) => {
+    const sorted = Object.entries(lp.top_logprobs[i])
+      .map(([tok, log]) => ({ token: tok, logprob: log }))
+      .sort((a, b) => b.logprob - a.logprob);
+    return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sorted };
+  });
+
+  allTokens = allTokens.concat(newTokens);
+  safeTokens = allTokens.map(t => t.token);
+  currentCompletionId = result.response.id;
+  renderTokens(allTokens);
+  showStatus(result.fromHistory ? 'Načteno!' : 'Pokračování uloženo!');
+}
+
+/* ============ API HELPER ============ */
 async function fetchCompletion(prompt, maxTokens, key){
   try{
     const res = await fetch('https://api.openai.com/v1/completions',{
@@ -282,7 +325,7 @@ function applyCompletion(response, idx, replacementToken){
   tooltipEl.classList.add('hidden');
 }
 
-/* ============ UI RENDERING & TOOLTIP ============ */
+/* ============ UI RENDERING ============ */
 function renderTokens(tokens){
   tokensEl.innerHTML=''; let i=0; const BATCH=1200;
   function chunk(){
