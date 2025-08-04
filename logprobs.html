@@ -78,56 +78,100 @@ async function loadTokens() {
     const res = await fetch('logprobs.json');
     const data = await res.json();
 
-    const lp = data.choices[0].logprobs;
+    let firstEntry;
+    if (data.object === "text_completion") {
+      // Standard completions
+      const lp = data.choices[0].logprobs;
+      allTokens = lp.tokens.map((t, i) => {
+        const sorted = Object.entries(lp.top_logprobs[i])
+          .map(([tok, log]) => ({ token: tok, logprob: log }))
+          .sort((a, b) => b.logprob - a.logprob);
+        return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sorted };
+      });
+      safeTokens = allTokens.map(t => t.token);
+      currentCompletionId = data.id;
 
-    const firstEntry = {
-      id: data.id,
-      object: "text_completion",
-      created: Math.floor(Date.now()/1000),
-      model: data.model,
-      previous_response_id: null,
-      prompt: {
-        text: (data.prompt && data.prompt.length ? data.prompt.map(p => p.content || '').join('') : ''),
-        index: 0,
-        logprobs: {
-          tokens: [], 
-          token_logprobs: [],
-          top_logprobs: []
-        }
-      },
-      choices: [
-        {
-          text: data.choices[0].text,
+      firstEntry = {
+        id: data.id,
+        object: "text_completion",
+        created: data.created || Math.floor(Date.now()/1000),
+        model: data.model,
+        previous_response_id: null,
+        prompt: {
+          text: (data.prompt && data.prompt.length ? data.prompt.map(p => p.content || '').join('') : ''),
           index: 0,
-          logprobs: lp,
-          finish_reason: data.choices[0].finish_reason
-        }
-      ],
-      usage: data.usage || {
-        prompt_tokens: 0,
-        completion_tokens: lp.tokens.length,
-        total_tokens: lp.tokens.length
-      },
-      max_tokens: 16,
-      temperature: 0,
-      seed: 0
-    };
+          logprobs: { tokens: [], token_logprobs: [], top_logprobs: [] }
+        },
+        choices: [
+          {
+            text: data.choices[0].text,
+            index: 0,
+            logprobs: lp,
+            finish_reason: data.choices[0].finish_reason
+          }
+        ],
+        usage: data.usage || {
+          prompt_tokens: 0,
+          completion_tokens: lp.tokens.length,
+          total_tokens: lp.tokens.length
+        },
+        max_tokens: 16,
+        temperature: 0,
+        seed: 0
+      };
+    } else if (data.object === "chat.completion") {
+      // Chat completions
+      const lp = data.choices[0].logprobs;
+      allTokens = lp.content.map(item => {
+        const sorted = (item.top_logprobs || [])
+          .map(t => ({ token: t.token, logprob: t.logprob }))
+          .sort((a,b) => b.logprob - a.logprob);
+        return { token: item.token, logprob: item.logprob, top_logprobs: sorted };
+      });
+      safeTokens = allTokens.map(t => t.token);
+      currentCompletionId = data.id;
+
+      firstEntry = {
+        id: data.id,
+        object: "chat.completion",
+        created: data.created || Math.floor(Date.now()/1000),
+        model: data.model,
+        previous_response_id: null,
+        prompt: {
+          text: "", // Chat prompt se neukládá explicitně
+          index: 0,
+          logprobs: { tokens: [], token_logprobs: [], top_logprobs: [] }
+        },
+        choices: [
+          {
+            text: data.choices[0].message?.content || "",
+            index: 0,
+            logprobs: {
+              tokens: lp.content.map(t => t.token),
+              token_logprobs: lp.content.map(t => t.logprob),
+              top_logprobs: lp.content.map(t => {
+                const obj = {};
+                (t.top_logprobs || []).forEach(tt => obj[tt.token] = tt.logprob);
+                return obj;
+              })
+            },
+            finish_reason: data.choices[0].finish_reason
+          }
+        ],
+        usage: data.usage,
+        max_tokens: 16,
+        temperature: 0,
+        seed: 0
+      };
+    } else {
+      throw new Error("Unsupported JSON format");
+    }
 
     const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
     if (history.length === 0) {
       history.push(firstEntry);
       localStorage.setItem('completion_history', JSON.stringify(history));
     }
-
-    allTokens = lp.tokens.map((t, i) => {
-      const sorted = Object.entries(lp.top_logprobs[i])
-        .map(([tok, log]) => ({ token: tok, logprob: log }))
-        .sort((a, b) => b.logprob - a.logprob);
-      return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sorted };
-    });
-
-    safeTokens = allTokens.map(t => t.token);
-    currentCompletionId = data.id;
 
     renderTokens(allTokens);
     exportBtn.hidden = false;
@@ -158,11 +202,7 @@ function getCompletionById(id) {
   const completionTokensUI = entry.choices[0].logprobs.tokens.map((t, i) => {
     const top = entry.choices[0].logprobs.top_logprobs[i] || {};
     const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log })).sort((a,b)=>b.logprob-a.logprob);
-    return {
-      token: t,
-      logprob: entry.choices[0].logprobs.token_logprobs[i],
-      top_logprobs: sorted
-    };
+    return { token: t, logprob: entry.choices[0].logprobs.token_logprobs[i], top_logprobs: sorted };
   });
 
   return {
@@ -188,15 +228,11 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
 
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
 
-  // Deduplication
   const existing = history.find(e => JSON.stringify(e.prompt.logprobs.tokens) === JSON.stringify(updatedTokens));
   if (existing) {
     console.log('[HIT] Found existing completion');
     return {
-      response: {
-        id: existing.id,
-        choices: existing.choices
-      },
+      response: { id: existing.id, choices: existing.choices },
       prompt: promptText,
       fromHistory: true
     };
@@ -221,11 +257,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     prompt: {
       text: promptText,
       index: 0,
-      logprobs: {
-        tokens: updatedTokens,
-        token_logprobs: [],
-        top_logprobs: []
-      }
+      logprobs: { tokens: updatedTokens, token_logprobs: [], top_logprobs: [] }
     },
     choices: [
       {
