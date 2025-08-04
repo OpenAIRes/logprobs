@@ -70,6 +70,8 @@ const savedCountEl   = document.getElementById('savedCount');
 let allTokens  = [];  // objekty {token, logprob, top_logprobs}
 let safeTokens = [];  // pole stringů – zdroj pravdy pro prompt
 let selectionStart = null;
+let baseCompletion = null; // původní completion načtená z logprobs.json
+let currentCompletionId = null; // id aktuální completion
 
 /* =====================================================
    HELPERS
@@ -85,6 +87,8 @@ async function loadTokens(){
   try{
     const res = await fetch('logprobs.json');
     const data= await res.json();
+    baseCompletion = data;
+    currentCompletionId = data.id;
 
     // --- parse depending on object type
     if(data.object==='chat.completion'){
@@ -175,41 +179,53 @@ function positionTooltip(e){const rect=e.currentTarget.getBoundingClientRect();c
 /* =====================================================
    API REQUESTS
    ===================================================== */
+function getCompletionById(id){
+  if(baseCompletion && baseCompletion.id===id){
+    const prompt=(baseCompletion.prompt||[]).map(p=>p.content||'').join('');
+    return{prompt,tokens:baseCompletion.choices[0].logprobs.tokens};
+  }
+  const history=JSON.parse(localStorage.getItem('completion_history')||'[]');
+  const entry=history.find(e=>e.response.id===id);
+  if(entry){
+    return{prompt:entry.prompt,tokens:entry.response.choices[0].logprobs.tokens};
+  }
+  return null;
+}
+
+async function createCompletion(prevId,prevTokCount,newToken,maxTokens){
+  const base=getCompletionById(prevId);
+  if(!base){statusEl.textContent='Previous completion not found';statusEl.classList.add('error');return null;}
+  const prompt=base.prompt+base.tokens.slice(0,prevTokCount).join('')+newToken;
+  const history=JSON.parse(localStorage.getItem('completion_history')||'[]');
+  const existing=history.find(e=>e.prompt===prompt);
+  if(existing){return{response:existing.response,prompt,fromHistory:true};}
+  const key=await ensureApiKey(); if(!key) return null;
+  const data=await fetchCompletion(prompt,maxTokens,key); if(!data) return null;
+  history.push({timestamp:new Date().toISOString(),prompt,model:'gpt-3.5-turbo-instruct',seed:0,temperature:0,max_tokens:maxTokens,system_fingerprint:data.system_fingerprint||null,response:data});
+  localStorage.setItem('completion_history',JSON.stringify(history)); updateSavedCount();
+  return{response:data,prompt,fromHistory:false};
+}
+
 async function completion(e){
   e.stopPropagation();
   const idx=+e.currentTarget.dataset.idx;
   const altToken=e.currentTarget.dataset.alt; if(altToken===undefined) return;
-
-  const prompt=safeTokens.slice(0,idx).join('')+altToken;
-  const key=await ensureApiKey(); if(!key) return;
-
-  const history=JSON.parse(localStorage.getItem('completion_history')||'[]');
-  const existing=history.find(entry=>entry.prompt===prompt);
-  if(existing){applyCompletion(existing.response,idx,altToken);showStatus('Načteno z historie');return;}
-
-  try{
-    const data=await fetchCompletion(prompt,16); if(!data) return;
-    applyCompletion(data,idx,altToken);
-    history.push({timestamp:new Date().toISOString(),prompt,model:'gpt-3.5-turbo-instruct',seed:0,temperature:0,max_tokens:16,system_fingerprint:data.system_fingerprint||null,response:data});
-    localStorage.setItem('completion_history',JSON.stringify(history)); updateSavedCount(); showStatus('Uloženo!');
-  }catch(err){statusEl.textContent='Fetch failed: '+err.message;statusEl.classList.add('error');}
+  const result=await createCompletion(currentCompletionId,idx,altToken,16);
+  if(!result) return;
+  applyCompletion(result.response,idx,altToken);
+  showStatus(result.fromHistory?'Načteno z historie':'Uloženo!');
 }
 
 async function continueText(maxTokens){
-  const prompt=safeTokens.join('');
-  const key=await ensureApiKey(); if(!key) return;
-  const history=JSON.parse(localStorage.getItem('completion_history')||'[]');
-  try{
-    const data=await fetchCompletion(prompt,maxTokens); if(!data) return;
-    appendCompletion(data);
-    history.push({timestamp:new Date().toISOString(),prompt,model:'gpt-3.5-turbo-instruct',seed:0,temperature:0,max_tokens:maxTokens,system_fingerprint:data.system_fingerprint||null,response:data});
-    localStorage.setItem('completion_history',JSON.stringify(history)); updateSavedCount(); showStatus(`Pokračování ${maxTokens} tokenů uloženo!`);
-  }catch(err){statusEl.textContent='Fetch failed: '+err.message;statusEl.classList.add('error');}
+  const result=await createCompletion(currentCompletionId,allTokens.length,'',maxTokens);
+  if(!result) return;
+  appendCompletion(result.response);
+  showStatus(result.fromHistory?'Načteno z historie':`Pokračování ${maxTokens} tokenů uloženo!`);
 }
 
-async function fetchCompletion(prompt,maxTokens){
+async function fetchCompletion(prompt,maxTokens,key){
   try{
-    const res=await fetch('https://api.openai.com/v1/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${await ensureApiKey()}`},body:JSON.stringify({model:'gpt-3.5-turbo-instruct',prompt,logprobs:20,max_tokens:maxTokens,temperature:0,seed:0})});
+    const res=await fetch('https://api.openai.com/v1/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key||await ensureApiKey()}`},body:JSON.stringify({model:'gpt-3.5-turbo-instruct',prompt,logprobs:20,max_tokens:maxTokens,temperature:0,seed:0})});
     const data=await res.json(); if(data.error){statusEl.textContent=`Error: ${data.error.message}`; statusEl.classList.add('error'); return null;} return data;
   }catch{return null;}
 }
@@ -223,6 +239,7 @@ function applyCompletion(response,idx,replacementToken){
   const replacedObj={token:replacementToken,logprob:0,top_logprobs:allTokens[idx].top_logprobs||[]};
   allTokens=allTokens.slice(0,idx).concat(replacedObj,newTokens);
   safeTokens=allTokens.map(t=>t.token); // update safety snapshot
+  currentCompletionId=response.id;
   renderTokens(allTokens); tooltipEl.classList.add('hidden');
 }
 
@@ -231,6 +248,7 @@ function appendCompletion(response){
   const newTokens=lp.tokens.map((t,i)=>{const sorted=Object.entries(lp.top_logprobs[i]).map(([tok,log])=>({token:tok,logprob:log})).sort((a,b)=>b.logprob-a.logprob);return{token:t,logprob:lp.token_logprobs[i],top_logprobs:sorted};});
   allTokens=allTokens.concat(newTokens);
   safeTokens=allTokens.map(t=>t.token);
+  currentCompletionId=response.id;
   renderTokens(allTokens); tooltipEl.classList.add('hidden');
 }
 
