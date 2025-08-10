@@ -398,16 +398,36 @@ function showTopLogprobs(e,tokens,idx){
 }
 
 function positionTooltip(e){
-  const rect=e.currentTarget.getBoundingClientRect();
-  const tRect=tooltipEl.getBoundingClientRect();
-  let top=rect.bottom+window.scrollY+4;
-  let left=rect.left+window.scrollX;
-  if(left+tRect.width>window.innerWidth){left=window.innerWidth-tRect.width-4;}
-  if(top+tRect.height>window.innerHeight+window.scrollY){top=rect.top+window.scrollY-tRect.height-4;}
-  tooltipEl.style.top=`${top}px`;
-  tooltipEl.style.left=`${left}px`;
-}
+  const rect = e.currentTarget.getBoundingClientRect();
 
+  // Zviditelnit kvůli měření, ale neukazovat
+  const prevVis = tooltipEl.style.visibility;
+  tooltipEl.classList.remove('hidden');
+  tooltipEl.style.visibility = 'hidden';
+  tooltipEl.style.top = '0px';
+  tooltipEl.style.left = '0px';
+
+  const tRect = tooltipEl.getBoundingClientRect();
+
+  let top  = rect.bottom + window.scrollY + 4;
+  let left = rect.left   + window.scrollX;
+
+  // hranice viewportu
+  const vwLeft  = window.scrollX;
+  const vwRight = window.scrollX + window.innerWidth;
+  const vwTop   = window.scrollY;
+  const vwBot   = window.scrollY + window.innerHeight;
+
+  if (left + tRect.width > vwRight) left = vwRight - tRect.width - 4;
+  if (top  + tRect.height > vwBot)  top  = rect.top + window.scrollY - tRect.height - 4;
+  if (left < vwLeft) left = vwLeft + 4;
+  if (top  < vwTop)  top  = rect.bottom + window.scrollY + 4;
+
+  tooltipEl.style.top = `${top}px`;
+  tooltipEl.style.left = `${left}px`;
+  tooltipEl.style.visibility = prevVis || '';
+}
+  
 async function completion(e){
   e.stopPropagation();
   const idx=+e.currentTarget.dataset.idx;
