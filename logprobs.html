@@ -293,7 +293,7 @@ async function continueText(maxTokens) {
   const allTokensArr = prev.promptTokens.concat(prev.completionTokens);
   const replaceIdx = allTokensArr.length;
 
-  const result = await createCompletion(prevId, replaceIdx, "", maxTokens);
+  const result = await createCompletion(prevId, replaceIdx, undefined, maxTokens);
   if (!result) return;
 
   const lp = result.response.choices[0].logprobs;
