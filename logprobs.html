@@ -45,7 +45,8 @@
     </div>
     <div>
       <!-- Odebráno tlačítko Pokračovat (16) -->
-      <button id="continueBtn256" hidden>max_tokens=256</button>
+      <button id="continueBtn256" hidden>"max_tokens": 256</button>
+<button id="continueBtn4096" hidden>"max_tokens": 4096</button>
 <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
     </div>
@@ -64,6 +65,7 @@ const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
 const clearBtn = document.getElementById('clearBtn');
 const continueBtn256 = document.getElementById('continueBtn256');
+const continueBtn4096 = document.getElementById('continueBtn4096');
 const statusEl = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
@@ -176,6 +178,7 @@ async function loadTokens() {
     exportBtn.hidden = false;
     clearBtn.hidden = false;
     if (continueBtn256) continueBtn256.hidden = false;
+    if (continueBtn4096) continueBtn4096.hidden = false;
     updateSavedCount();
     loadingEl.remove();
   } catch (err) {
@@ -226,7 +229,10 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
 
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
 
-  const existing = history.find(e => JSON.stringify(e.prompt.logprobs.tokens) === JSON.stringify(updatedTokens) && Number(e.max_tokens) === Number(maxTokens));
+  const existing = history.find(e => {
+    const target = Number(e?.meta?.target_max_tokens ?? e.max_tokens);
+    return JSON.stringify(e.prompt.logprobs.tokens) === JSON.stringify(updatedTokens) && Number(target) === Number(maxTokens);
+  });
   if (existing) {
     console.log('[HIT] Found existing completion');
     return {
@@ -241,7 +247,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
   const key = await ensureApiKey();
   if (!key) return null;
 
-  const data = await fetchCompletion(promptText, maxTokens, key);
+  const data = await fetchCompletionAutoFit(promptText, maxTokens, key);
   if (!data) return null;
 
   const lp = data.choices[0].logprobs;
@@ -266,9 +272,10 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
       }
     ],
     usage: data.usage,
-    max_tokens: maxTokens,
+    max_tokens: Number(data._effective_max_tokens ?? maxTokens),
     temperature: 0,
-    seed: 0
+    seed: 0,
+    meta: { target_max_tokens: Number(maxTokens) }
   };
 
   const history2 = JSON.parse(localStorage.getItem('completion_history') || '[]');
@@ -336,6 +343,68 @@ async function fetchCompletion(prompt, maxTokens, key){
     }
     return data;
   }catch{return null;}
+}
+
+/* ============ AUTO-FIT WRAPPER ============ */
+async function fetchCompletionAutoFit(prompt, maxTokens, key){
+  async function callOnce(effectiveMax){
+    const res = await fetch('https://api.openai.com/v1/completions',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${key||await ensureApiKey()}`
+      },
+      body:JSON.stringify({
+        model:'gpt-3.5-turbo-instruct',
+        prompt,
+        logprobs:20,
+        max_tokens: effectiveMax,
+        temperature:0,
+        seed:0
+      })
+    });
+    const data = await res.json();
+    return data;
+  }
+  try{
+    let effectiveMax = maxTokens;
+    let data = await callOnce(effectiveMax);
+    if(data && data.error && typeof data.error.message === 'string'){
+      const msg = data.error.message;
+      // const re = new RegExp('maximum context length is\s+(\d+) tokens[\s\S]*?\((\d+) in your prompt;\s*(\d+) for the completion\)','i');
+      const m = msg.match(new RegExp("maximum context length is\s+(\d+) tokens[\s\S]*?\((\d+) in your prompt;\s*(\d+) for the completion\)","i"));
+      if(m){
+        const limit = parseInt(m[1],10);
+        const promptCount = parseInt(m[2],10);
+        const allowed = Math.max(1, limit - promptCount);
+        if(allowed < effectiveMax){
+          effectiveMax = allowed;
+          data = await callOnce(effectiveMax);
+        }
+      } else {
+        // Fallback: vytáhni čísla bez regex escape problémů
+        const nums = [];
+        let cur = '';
+        for (let ch of msg) {
+          if (ch >= '0' && ch <= '9') { cur += ch; }
+          else if (cur) { nums.push(parseInt(cur,10)); cur = ''; }
+        }
+        if (cur) nums.push(parseInt(cur,10));
+        if (nums.length >= 3) {
+          const limit = nums[0];
+          const promptCount = nums[2];
+          const allowed = Math.max(1, limit - promptCount);
+          if (allowed < effectiveMax) {
+            effectiveMax = allowed;
+            data = await callOnce(effectiveMax);
+          }
+        }
+      }
+    }
+    if(data && !data.error){ data._effective_max_tokens = effectiveMax; return data; }
+    if(data && data.error){ statusEl.textContent=`Error: ${data.error.message}`; statusEl.classList.add('error'); return null; }
+    return null;
+  }catch(err){ return null; }
 }
 
 /* ============ APPLY COMPLETION ============ */
@@ -467,6 +536,9 @@ clearBtn.addEventListener('click',()=>{
 
 // Nové chování: pokračovat z POUHÉHO promptu
 if (continueBtn256) continueBtn256.addEventListener('click',()=>continueFromPromptOnly(256));
+
+// Nové tlačítko 4096
+if (continueBtn4096) continueBtn4096.addEventListener('click',()=>continueFromPromptOnly(4096));
 
 document.addEventListener('click',()=>tooltipEl.classList.add('hidden'),{passive:true});
 window.addEventListener('DOMContentLoaded',loadTokens);
