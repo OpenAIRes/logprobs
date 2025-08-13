@@ -44,9 +44,9 @@
       <span id="status"></span>
     </div>
     <div>
-      <button id="continueBtn16" hidden>Pokračovat (16)</button>
-      <button id="continueBtn256" hidden>Pokračovat (256)</button>
-      <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
+      <!-- Odebráno tlačítko Pokračovat (16) -->
+      <button id="continueBtn256" hidden>max_tokens=256</button>
+<button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
     </div>
   </div>
@@ -63,13 +63,12 @@ const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
 const clearBtn = document.getElementById('clearBtn');
-const continueBtn16 = document.getElementById('continueBtn16');
 const continueBtn256 = document.getElementById('continueBtn256');
 const statusEl = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
 function escapeToken(tok){return tok.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣');}
-function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);}
+function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);} 
 function updateSavedCount(){const h=JSON.parse(localStorage.getItem('completion_history')||'[]');savedCountEl.textContent=h.length;}
 
 /* ============ INITIAL LOAD ============ */
@@ -98,9 +97,9 @@ async function loadTokens() {
         model: data.model,
         previous_response_id: null,
         prompt: {
-          text: (data.prompt && data.prompt.length ? data.prompt.map(p => p.content || '').join('') : ''),
+          text: (typeof data.prompt === 'string' ? data.prompt : Array.isArray(data.prompt) ? data.prompt.join('') : ''),
           index: 0,
-          logprobs: { tokens: [], token_logprobs: [], top_logprobs: [] }
+          logprobs: { tokens: ((typeof data.prompt === 'string' && data.prompt) ? [data.prompt] : (Array.isArray(data.prompt) && data.prompt.length ? [data.prompt.join('')] : [])), token_logprobs: [], top_logprobs: [] }
         },
         choices: [
           {
@@ -176,8 +175,7 @@ async function loadTokens() {
     renderTokens(allTokens);
     exportBtn.hidden = false;
     clearBtn.hidden = false;
-    continueBtn16.hidden = false;
-    continueBtn256.hidden = false;
+    if (continueBtn256) continueBtn256.hidden = false;
     updateSavedCount();
     loadingEl.remove();
   } catch (err) {
@@ -228,7 +226,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
 
   const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
 
-  const existing = history.find(e => JSON.stringify(e.prompt.logprobs.tokens) === JSON.stringify(updatedTokens));
+  const existing = history.find(e => JSON.stringify(e.prompt.logprobs.tokens) === JSON.stringify(updatedTokens) && Number(e.max_tokens) === Number(maxTokens));
   if (existing) {
     console.log('[HIT] Found existing completion');
     return {
@@ -273,15 +271,16 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     seed: 0
   };
 
-  history.push(newEntry);
-  localStorage.setItem('completion_history', JSON.stringify(history));
+  const history2 = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  history2.push(newEntry);
+  localStorage.setItem('completion_history', JSON.stringify(history2));
   updateSavedCount();
 
   return { response: data, prompt: promptText, fromHistory: false };
 }
 
-/* ============ CONTINUE USING createCompletion ============ */
-async function continueText(maxTokens) {
+/* ============ CONTINUE (PROMPT ONLY) ============ */
+async function continueFromPromptOnly(maxTokens) {
   const prevId = currentCompletionId;
   const prev = getCompletionById(prevId);
   if (!prev) {
@@ -290,10 +289,10 @@ async function continueText(maxTokens) {
     return;
   }
 
-  const allTokensArr = prev.promptTokens.concat(prev.completionTokens);
-  const replaceIdx = allTokensArr.length;
+  // Použij pouze původní prompt (bez completionu). Fallback pro chat: když není prompt, použij celé zobrazení.
+  const promptOnlyIdx = prev.promptTokens.length > 0 ? prev.promptTokens.length : 0;
 
-  const result = await createCompletion(prevId, replaceIdx, undefined, maxTokens);
+  const result = await createCompletion(prevId, promptOnlyIdx, undefined, maxTokens);
   if (!result) return;
 
   const lp = result.response.choices[0].logprobs;
@@ -303,12 +302,12 @@ async function continueText(maxTokens) {
       .sort((a, b) => b.logprob - a.logprob);
     return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sorted };
   });
-
-  allTokens = allTokens.concat(newTokens);
+  const promptLen = prev.promptTokens.length > 0 ? prev.promptTokens.length : allTokens.length;
+  allTokens = allTokens.slice(0, promptLen).concat(newTokens);
   safeTokens = allTokens.map(t => t.token);
   currentCompletionId = result.response.id;
   renderTokens(allTokens);
-  showStatus(result.fromHistory ? 'Načteno!' : 'Pokračování uloženo!');
+  showStatus(result.fromHistory ? 'Načteno!' : 'Pokračování (z promptu) nahrazeno!');
 }
 
 /* ============ API HELPER ============ */
@@ -465,8 +464,9 @@ clearBtn.addEventListener('click',()=>{
   updateSavedCount(); 
   showStatus('Historie vymazána');
 });
-continueBtn16.addEventListener('click',()=>continueText(16));
-continueBtn256.addEventListener('click',()=>continueText(256));
+
+// Nové chování: pokračovat z POUHÉHO promptu
+if (continueBtn256) continueBtn256.addEventListener('click',()=>continueFromPromptOnly(256));
 
 document.addEventListener('click',()=>tooltipEl.classList.add('hidden'),{passive:true});
 window.addEventListener('DOMContentLoaded',loadTokens);
