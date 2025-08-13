@@ -10,7 +10,10 @@
     #tokens     { max-width: 100%; line-height: 1.5; white-space: normal; }
     .token      { display: inline; cursor: pointer; }
     .token:hover{ background: #ffeaa7; }
-    .newline    { display: block; width: 100%; }
+    .newline    { display: inline; white-space: normal; }
+.newline.only-nl { position: relative; display: inline-block; width: 1ch; height: calc(var(--nl-count, 1) * 1.5em); vertical-align: baseline; }
+.newline.only-nl::after { content: ""; position: absolute; inset: 0; cursor: pointer; pointer-events: auto; background: transparent; }
+.newline.only-nl:hover::after { background: #ffeaa7; }
     .newline:hover { background: #ffeaa7; }
     .selected   { background: #74b9ff; }
 
@@ -35,6 +38,20 @@
     #status   { font-size: 14px; color: #2d3436; margin-left: 1rem; }
     #status.error { color: #d63031; }
     #savedCount { margin-left: 0.5rem; font-weight: bold; }
+
+    /* Raw object overlay */
+    #rawOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001; }
+    #rawOverlay.hidden { display: none; }
+    #rawBox { position: fixed; top: 5%; left: 5%; right: 5%; bottom: 5%; background: #fff; box-shadow: 0 10px 30px #0006; display: flex; flex-direction: column; border: 1px solid #ddd; }
+    #rawBoxHeader { display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; border-bottom: 1px solid #eee; font-weight: 600; }
+    #rawClose { border: none; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+    #rawPre { flex: 1; margin: 0; padding: .75rem; overflow: auto; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; white-space: pre; }
+
+    /* newline visualization (override) */
+    .nl-hit { display:inline-block; width: 1ch; height: 1.2em; vertical-align: baseline; cursor: pointer; }
+    .nl-hit:hover { background: #ffeaa7; }
+    .newline.only-nl { position: relative; display: inline; width: auto; height: auto; }
+    .newline.only-nl::after { content: none; }
   </style>
 </head>
 <body>
@@ -47,12 +64,22 @@
       <!-- Odebráno tlačítko Pokračovat (16) -->
       <button id="continueBtn256" hidden>"max_tokens": 256</button>
 <button id="continueBtn4096" hidden>"max_tokens": 4096</button>
+<button id="objectBtn" hidden>object</button>
 <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
     </div>
   </div>
   <div id="tokens" hidden></div>
   <div id="tooltip" class="hidden"></div>
+  <div id="rawOverlay" class="hidden">
+    <div id="rawBox">
+      <div id="rawBoxHeader">
+        <span>Raw object</span>
+        <button id="rawClose" aria-label="Close">×</button>
+      </div>
+      <pre id="rawPre"></pre>
+    </div>
+  </div>
 
 <script>
 let allTokens = [];
@@ -66,6 +93,10 @@ const exportBtn = document.getElementById('exportBtn');
 const clearBtn = document.getElementById('clearBtn');
 const continueBtn256 = document.getElementById('continueBtn256');
 const continueBtn4096 = document.getElementById('continueBtn4096');
+const objectBtn = document.getElementById('objectBtn');
+const rawOverlay = document.getElementById('rawOverlay');
+const rawPre = document.getElementById('rawPre');
+const rawClose = document.getElementById('rawClose');
 const statusEl = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
@@ -179,6 +210,7 @@ async function loadTokens() {
     clearBtn.hidden = false;
     if (continueBtn256) continueBtn256.hidden = false;
     if (continueBtn4096) continueBtn4096.hidden = false;
+    if (objectBtn) objectBtn.hidden = false;
     updateSavedCount();
     loadingEl.remove();
   } catch (err) {
@@ -434,10 +466,29 @@ function renderTokens(tokens){
       const t=tokens[i];
       const span=document.createElement('span');
       span.dataset.idx=i;
-      if(t.token.includes('\n')){
-        span.className='token newline';
-        span.style.height=`${1.2*(t.token.match(/\n/g)||[]).length}em`;
-      }else{ span.className='token'; span.textContent=t.token; }
+      if (t.token.indexOf('\n') !== -1) {
+        const count = (t.token.match(/\n/g) || []).length;
+        const onlyNL = t.token.replace(/\n/g,'') === '';
+        span.className = 'token newline' + (onlyNL ? ' only-nl' : '');
+        if (onlyNL) {
+          for (let k = 0; k < count; k++) {
+            const hit = document.createElement('span');
+            hit.className = 'nl-hit';
+            span.appendChild(hit);
+            span.appendChild(document.createElement('br'));
+          }
+        } else {
+          const parts = t.token.split('\n');
+          for (let p = 0; p < parts.length; p++) {
+            if (parts[p]) span.appendChild(document.createTextNode(parts[p]));
+            if (p < parts.length - 1) span.appendChild(document.createElement('br'));
+          }
+        }
+
+      } else {
+        span.className = 'token';
+        span.textContent = t.token;
+      }
       span.title=escapeToken(t.token);
       span.addEventListener('click',e=>handleTokenClick(e,tokens));
       frag.appendChild(span);
@@ -542,6 +593,21 @@ if (continueBtn4096) continueBtn4096.addEventListener('click',()=>continueFromPr
 
 document.addEventListener('click',()=>tooltipEl.classList.add('hidden'),{passive:true});
 window.addEventListener('DOMContentLoaded',loadTokens);
+
+// =========== RAW OBJECT VIEWER ===========
+function showCurrentRaw(){
+  try{
+    const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+    const entry = history.find(e => e.id === currentCompletionId);
+    if(!entry){ showStatus('Nenalezen aktuální záznam'); return; }
+    rawPre.textContent = JSON.stringify(entry, null, 2);
+    rawOverlay.classList.remove('hidden');
+  }catch(err){ showStatus('Chyba při čtení raw dat'); }
+}
+if (objectBtn) objectBtn.addEventListener('click', showCurrentRaw);
+if (rawClose) rawClose.addEventListener('click', ()=> rawOverlay.classList.add('hidden'));
+if (rawOverlay) rawOverlay.addEventListener('click', (e)=>{ if(e.target===rawOverlay) rawOverlay.classList.add('hidden'); });
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') rawOverlay.classList.add('hidden'); });
 </script>
 </body>
 </html>
