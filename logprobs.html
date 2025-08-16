@@ -52,6 +52,15 @@
     .nl-hit:hover { background: #ffeaa7; }
     .newline.only-nl { position: relative; display: inline; width: auto; height: auto; }
     .newline.only-nl::after { content: none; }
+      /* Prompts overlay */
+    #promptsOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001; }
+    #promptsOverlay.hidden { display: none; }
+    #promptsBox { position: fixed; top: 5%; left: 5%; right: 5%; bottom: 5%; background: #fff; box-shadow: 0 10px 30px #0006; display: flex; flex-direction: column; border: 1px solid #ddd; }
+    #promptsBoxHeader { display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; border-bottom: 1px solid #eee; font-weight: 600; }
+    #promptsClose { border: none; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+    #promptsList { flex: 1; overflow: auto; padding: .75rem; font: 14px/1.45 system-ui, sans-serif; }
+    #promptsList ul { margin: 0; padding-left: 1.25rem; }
+    #promptsList li { margin: .125rem 0; }
   </style>
 </head>
 <body>
@@ -65,6 +74,7 @@
       <button id="continueBtn256" hidden>"max_tokens": 256</button>
 <button id="continueBtn4096" hidden>"max_tokens": 4096</button>
 <button id="objectBtn" hidden>object</button>
+      <button id="promptsBtn" hidden>prompts</button>
 <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
     </div>
@@ -78,6 +88,16 @@
         <button id="rawClose" aria-label="Close">×</button>
       </div>
       <pre id="rawPre"></pre>
+    </div>
+  </div>
+
+  <div id="promptsOverlay" class="hidden">
+    <div id="promptsBox">
+      <div id="promptsBoxHeader">
+        <span>Prompts</span>
+        <button id="promptsClose" aria-label="Close">×</button>
+      </div>
+      <div id="promptsList"></div>
     </div>
   </div>
 
@@ -97,6 +117,10 @@ const objectBtn = document.getElementById('objectBtn');
 const rawOverlay = document.getElementById('rawOverlay');
 const rawPre = document.getElementById('rawPre');
 const rawClose = document.getElementById('rawClose');
+const promptsBtn = document.getElementById('promptsBtn');
+const promptsOverlay = document.getElementById('promptsOverlay');
+const promptsClose = document.getElementById('promptsClose');
+const promptsList = document.getElementById('promptsList');
 const statusEl = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
@@ -211,6 +235,7 @@ async function loadTokens() {
     if (continueBtn256) continueBtn256.hidden = false;
     if (continueBtn4096) continueBtn4096.hidden = false;
     if (objectBtn) objectBtn.hidden = false;
+    if (promptsBtn) promptsBtn.hidden = false;
     updateSavedCount();
     loadingEl.remove();
   } catch (err) {
@@ -608,6 +633,67 @@ if (objectBtn) objectBtn.addEventListener('click', showCurrentRaw);
 if (rawClose) rawClose.addEventListener('click', ()=> rawOverlay.classList.add('hidden'));
 if (rawOverlay) rawOverlay.addEventListener('click', (e)=>{ if(e.target===rawOverlay) rawOverlay.classList.add('hidden'); });
 window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') rawOverlay.classList.add('hidden'); });
+
+// =========== PROMPTS VIEWER ===========
+function extractPromptText(entry){
+  try{
+    const t = entry?.prompt;
+    if(!t) return '';
+    if (typeof t.text === 'string' && t.text.trim() !== '') return t.text;
+    const toks = t.logprobs?.tokens;
+    if (Array.isArray(toks) && toks.length) return toks.join('');
+    return '';
+  }catch{ return ''; }
+}
+function formatDt(epoch){ try{ if(!epoch) return ''; const d=new Date(Number(epoch)*1000); return d.toLocaleString(); }catch{ return ''; } }
+function openEntryById(id){
+  try{
+    const view = getCompletionById(id);
+    if(!view){ showStatus('Záznam nenalezen'); return; }
+    allTokens = view.allTokens;
+    safeTokens = allTokens.map(t=>t.token);
+    currentCompletionId = id;
+    renderTokens(allTokens);
+    promptsOverlay.classList.add('hidden');
+    showStatus('Načteno z historie');
+  }catch{ showStatus('Chyba při otevírání záznamu'); }
+}
+function showPromptMatches(promptStr){
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  const matches = history.filter(e => (extractPromptText(e)||'').trim() === promptStr);
+  if(matches.length===0){ showStatus('Žádné záznamy pro tento prompt'); return; }
+  // Vypiš seznam záznamů seřazený od nejnovějších
+  matches.sort((a,b)=> (b.created||0)-(a.created||0));
+  const ul = document.createElement('ul');
+  matches.forEach(e=>{
+    const li=document.createElement('li');
+    const a=document.createElement('a'); a.href='#'; a.textContent = `${formatDt(e.created)} — ${e.id}`;
+    a.addEventListener('click',(ev)=>{ ev.preventDefault(); openEntryById(e.id); });
+    li.appendChild(a); ul.appendChild(li);
+  });
+  promptsList.innerHTML = '';
+  const back = document.createElement('button'); back.textContent='← Zpět'; back.style.marginBottom='.5rem';
+  back.addEventListener('click', showPrompts);
+  promptsList.appendChild(back);
+  promptsList.appendChild(ul);
+}
+function showPrompts(){
+  try{
+    const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+    const prompts = history.map(extractPromptText).map(s=> (s||'').trim()).filter(Boolean);
+    const uniq = Array.from(new Set(prompts)).sort((a,b)=>a.localeCompare(b));
+    if (uniq.length === 0) { showStatus('Žádné prompty v historii'); return; }
+    const ul = document.createElement('ul');
+    uniq.forEach(p=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=p; a.addEventListener('click',(e)=>{e.preventDefault(); showPromptMatches(p);}); li.appendChild(a); ul.appendChild(li); });
+    promptsList.innerHTML='';
+    promptsList.appendChild(ul);
+    promptsOverlay.classList.remove('hidden');
+  }catch(err){ showStatus('Chyba při čtení promptů'); }
+}
+if (promptsBtn) promptsBtn.addEventListener('click', showPrompts);
+if (promptsClose) promptsClose.addEventListener('click', ()=> promptsOverlay.classList.add('hidden'));
+if (promptsOverlay) promptsOverlay.addEventListener('click', (e)=>{ if(e.target===promptsOverlay) promptsOverlay.classList.add('hidden'); });
+window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') promptsOverlay.classList.add('hidden'); });
 </script>
 </body>
 </html>
