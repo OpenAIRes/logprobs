@@ -75,6 +75,7 @@
 <button id="continueBtn4096" hidden>"max_tokens": 4096</button>
 <button id="objectBtn" hidden>object</button>
       <button id="promptsBtn" hidden>prompts</button>
+<button id="repairBtn" hidden>repair links</button>
 <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
     </div>
@@ -121,6 +122,7 @@ const promptsBtn = document.getElementById('promptsBtn');
 const promptsOverlay = document.getElementById('promptsOverlay');
 const promptsClose = document.getElementById('promptsClose');
 const promptsList = document.getElementById('promptsList');
+const repairBtn = document.getElementById('repairBtn');
 const statusEl = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 
@@ -236,6 +238,7 @@ async function loadTokens() {
     if (continueBtn4096) continueBtn4096.hidden = false;
     if (objectBtn) objectBtn.hidden = false;
     if (promptsBtn) promptsBtn.hidden = false;
+    if (repairBtn) repairBtn.hidden = false;
     updateSavedCount();
     loadingEl.remove();
   } catch (err) {
@@ -250,9 +253,105 @@ function getCompletionById(id) {
   const entry = history.find(e => e.id === id);
   if (!entry) return null;
 
+  // Build a SOURCE entry for backfilling prompt alternatives.
+  // Prefer entry.previous_response_id; if it doesn't align, search the whole history
+  const currPromptArr = entry?.prompt?.logprobs?.tokens || [];
+
+  function mapInSource(src){
+    if (!src) return null;
+    const sp  = (src?.prompt?.logprobs?.tokens) || [];
+    const scl = src?.choices?.[0]?.logprobs || null;
+    const sct = scl?.tokens || [];
+    const stop= scl?.top_logprobs || [];
+    if (!scl || sct.length === 0) return null;
+    const baseIdx = sp.length;
+
+    // 1) EXAKTNÍ SHODA: aktuální prompt je přesně subsekvence v (prompt+completion) zdroje
+    {
+      const all = sp.concat(sct);
+      if (currPromptArr.length > 0 && all.length >= currPromptArr.length){
+        for (let s = 0; s <= all.length - currPromptArr.length; s++){
+          let ok = true;
+          for (let k = 0; k < currPromptArr.length; k++){
+            if (all[s + k] !== currPromptArr[k]) { ok = false; break; }
+          }
+          if (ok && s >= baseIdx) return { src, baseIdx, start: s, mode: 'exact' };
+        }
+      }
+    }
+
+    // 2) ALT-MATCH: prompt vznikl klikem na alternativy v předchozí completion
+    if (currPromptArr.length > 0 && sct.length >= currPromptArr.length){
+      for (let j = baseIdx; j <= baseIdx + sct.length - currPromptArr.length; j++){
+        let ok = true;
+        for (let k = 0; k < currPromptArr.length; k++){
+          const want = currPromptArr[k];
+          const idx  = (j - baseIdx) + k; // index do completion části
+          const actual = sct[idx];
+          const topObj = stop[idx] || {};
+          if (!(actual === want || Object.prototype.hasOwnProperty.call(topObj, want))) { ok = false; break; }
+        }
+        if (ok) return { src, baseIdx, start: j, mode: 'alt' };
+      }
+    }
+    return null;
+  }
+
+  let source = history.find(e => e.id === entry.previous_response_id) || null;
+  let mapping = mapInSource(source);
+
+  if (!mapping){
+    // najdi prvního (nejstaršího) kandidáta v historii, který obsahuje aktuální prompt v completion
+    const sorted = [...history].sort((a,b)=> (a.created||0) - (b.created||0));
+    for (const cand of sorted){
+      if (cand.id === entry.id) continue;
+      const m = mapInSource(cand);
+      if (m){ mapping = m; break; }
+    }
+  }
+
+  // Persistuj opravu previous_response_id do localStorage (neinvazivně)
+  if (mapping && (!entry.previous_response_id || entry.previous_response_id !== mapping.src.id)){
+    const idxHist = history.findIndex(e => e.id === entry.id);
+    if (idxHist >= 0){
+      entry.previous_response_id = mapping.src.id;
+      try { localStorage.setItem('completion_history', JSON.stringify(history)); } catch {}
+    }
+    source = mapping.src;
+  } else if (mapping){
+    source = mapping.src;
+  }
+
+  const srcPrompt     = (source?.prompt?.logprobs?.tokens) || [];
+  const srcCompLog    = source?.choices?.[0]?.logprobs || null;
+  const srcCompTokens = srcCompLog?.tokens || [];
+  const srcCompLPs    = srcCompLog?.token_logprobs || [];
+  const srcTopArr     = srcCompLog?.top_logprobs || [];
+  const baseIdx       = mapping ? mapping.baseIdx : (source ? srcPrompt.length : 0);
+  const subseqStart   = mapping ? mapping.start   : -1;
+
   const promptTokensUI = entry.prompt.logprobs.tokens.map((t, i) => {
-    const logprob = entry.prompt.logprobs.token_logprobs[i] || null;
-    const top = entry.prompt.logprobs.top_logprobs[i] || {};
+    let logprob = entry.prompt.logprobs.token_logprobs[i] || null;
+    let top = entry.prompt.logprobs.top_logprobs[i] || null;
+
+    // Backfill: pokud prompt token nemá alternativy, zkus je převzít ze ZDROJOVÉ completion
+    if ((!top || Object.keys(top).length === 0) && source) {
+      let mappedJ = null;
+      if (subseqStart >= 0) {
+        const abs = subseqStart + i; // absolutní index v (srcPrompt + srcCompletion)
+        if (abs >= baseIdx) mappedJ = abs - baseIdx; // index do srcComp*
+      }
+      if (mappedJ === null && i >= baseIdx) mappedJ = i - baseIdx; // fallback původní hrana
+
+      if (mappedJ !== null && mappedJ >= 0 && mappedJ < srcCompTokens.length) {
+        top = srcTopArr[mappedJ] || {};
+        if (logprob == null) {
+          if (srcCompTokens[mappedJ] === t) logprob = srcCompLPs[mappedJ];
+          else if (top && Object.prototype.hasOwnProperty.call(top, t)) logprob = top[t];
+        }
+      }
+    }
+    if (!top) top = {};
     const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log })).sort((a,b)=>b.logprob-a.logprob);
     return { token: t, logprob, top_logprobs: sorted };
   });
@@ -270,6 +369,7 @@ function getCompletionById(id) {
   };
 }
 
+/* Removed stray duplicate block that broke script execution */
 /* ============ CREATE COMPLETION ============ */
 async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
   const prev = getCompletionById(prevId);
@@ -694,6 +794,204 @@ if (promptsBtn) promptsBtn.addEventListener('click', showPrompts);
 if (promptsClose) promptsClose.addEventListener('click', ()=> promptsOverlay.classList.add('hidden'));
 if (promptsOverlay) promptsOverlay.addEventListener('click', (e)=>{ if(e.target===promptsOverlay) promptsOverlay.classList.add('hidden'); });
 window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') promptsOverlay.classList.add('hidden'); });
+
+// =========== REPAIR PREVIOUS_RESPONSE_ID LINKS ===========
+function repairLinks(){
+  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+  if (!Array.isArray(history) || history.length === 0){ showStatus('Historie je prázdná'); return; }
+
+  const MAX_TARGET = 4096; // sledujeme jen "max" délky
+
+  // ---- Helpery ----
+  const getTarget = (e)=> Number(e?.meta?.target_max_tokens ?? e?.max_tokens ?? 0);
+  const isMaxTargetStrict = (e)=> getTarget(e) === MAX_TARGET;
+  // Heuristika: staré záznamy nemusí mít meta.target_max_tokens; berme je jako "max" když jsou dlouhé
+  const isMaxTargetHeuristic = (e)=> isMaxTargetStrict(e) || getTarget(e) >= 1024 || Number(e?.usage?.completion_tokens ?? 0) >= 512;
+
+  const getPromptTokens = (e)=> (e?.prompt?.logprobs?.tokens) || [];
+  const getPromptText = (e)=> {
+    const t = e?.prompt?.text;
+    if (typeof t === 'string' && t.length) return t;
+    const toks = getPromptTokens(e);
+    return Array.isArray(toks) && toks.length ? toks.join('') : '';
+  };
+
+  // ---- Indexy: podle tokenů i podle textu ----
+  const indexTok = new Map(); // key = JSON.stringify(promptTokens)
+  const indexTxt = new Map(); // key = promptText (joined string)
+  for (const e of history){
+    const ptoks = getPromptTokens(e);
+    const ptxt  = getPromptText(e);
+    const keyTok = JSON.stringify(ptoks);
+    if (!indexTok.has(keyTok)) indexTok.set(keyTok, []);
+    indexTok.get(keyTok).push(e);
+    const keyTxt = ptxt;
+    if (!indexTxt.has(keyTxt)) indexTxt.set(keyTxt, []);
+    indexTxt.get(keyTxt).push(e);
+  }
+
+  const parents = [...history].sort((a,b)=> (a.created||0)-(b.created||0));
+
+  // Dedup proti vícenásobným zásahům téhož dítěte
+  const matchedAltSet = new Set();
+  const matchedSameSet = new Set();
+  const matchedContFullSet = new Set();
+  const matchedContPromptMaxSet = new Set();
+
+  let fixedAlt = 0, okAlt = 0; const okAltIds = [];
+  let fixedSame = 0, okSame = 0; const okSameIds = [];
+  let fixedCont = 0, okCont = 0; const okContIds = [];
+  let fixedContPrompt = 0, okContPrompt = 0; const okContPromptIds = [];
+
+  for (const p of parents){
+    const lp = p?.choices?.[0]?.logprobs;
+    if (!lp || !Array.isArray(lp.tokens) || !Array.isArray(lp.top_logprobs)) continue;
+
+    const sp  = getPromptTokens(p);
+    const sct = lp.tokens; 
+    const stop= lp.top_logprobs;
+
+    // 1) Větve přes ALT token (odlišný od zvoleného) + 2) klik na zvolený token (SAME)
+    for (let j=0; j<sct.length; j++){
+      const prefix = sp.concat(sct.slice(0,j));
+      const chosenTok = sct[j];
+
+      // 1) ALT: všechny jiné tokeny z top_logprobs
+      const topObj = stop[j] || {};
+      for (const altTok of Object.keys(topObj)){
+        const candTokArr = prefix.concat([altTok]);
+        const keyTok = JSON.stringify(candTokArr);
+        const childsTok = indexTok.get(keyTok) || [];
+        for (const c of childsTok){
+          if (altTok === chosenTok){
+            // patří do SAME kategorie
+            if (matchedSameSet.has(c.id)) continue;
+            matchedSameSet.add(c.id);
+            if (c.previous_response_id === p.id){ okSame++; okSameIds.push(c.id); }
+            else { c.previous_response_id = p.id; fixedSame++; }
+          } else {
+            // pravá ALT větev
+            if (matchedAltSet.has(c.id)) continue;
+            matchedAltSet.add(c.id);
+            if (c.previous_response_id === p.id){ okAlt++; okAltIds.push(c.id); }
+            else { c.previous_response_id = p.id; fixedAlt++; }
+          }
+        }
+      }
+
+      // 2b) SAME fallback: i kdyby chosenTok náhodou nebyl v top_logprobs (nemělo by nastat), dohledej explicitně
+      const candTokArrSame = prefix.concat([chosenTok]);
+      const keyTokSame = JSON.stringify(candTokArrSame);
+      const childsSame = indexTok.get(keyTokSame) || [];
+      for (const c of childsSame){
+        if (matchedSameSet.has(c.id)) continue;
+        matchedSameSet.add(c.id);
+        if (c.previous_response_id === p.id){ okSame++; okSameIds.push(c.id); }
+        else { c.previous_response_id = p.id; fixedSame++; }
+      }
+    }
+
+    // 3) Čisté pokračování z CELÉHO textu (full) — jen pro "max" délku
+    const fullTokArr = sp.concat(sct);
+    const keyTokFull = JSON.stringify(fullTokArr);
+    const keyTxtFull = fullTokArr.join('');
+    const listTokFull = indexTok.get(keyTokFull) || [];
+    const listTxtFull = indexTxt.get(keyTxtFull) || [];
+
+    const seenFull = new Set();
+    const contsFull = [];
+    for (const e of listTokFull){ if(!seenFull.has(e.id)){ seenFull.add(e.id); contsFull.push(e); } }
+    for (const e of listTxtFull){ if(!seenFull.has(e.id)){ seenFull.add(e.id); contsFull.push(e); } }
+
+    for (const c of contsFull){
+      if (!isMaxTargetHeuristic(c)) continue;
+      if (matchedContFullSet.has(c.id)) continue;
+      matchedContFullSet.add(c.id);
+      if (c.previous_response_id === p.id){ okCont++; okContIds.push(c.id); }
+      else { c.previous_response_id = p.id; fixedCont++; }
+    }
+
+    // 4) Čisté pokračování pouze z PROMPTU (nová funkce, max)
+    const keyTokPromptOnly = JSON.stringify(sp);
+    const keyTxtPromptOnly = sp.join('');
+    const listTokPrompt = indexTok.get(keyTokPromptOnly) || [];
+    const listTxtPrompt = indexTxt.get(keyTxtPromptOnly) || [];
+
+    const seenPrompt = new Set();
+    const contsPrompt = [];
+    for (const e of listTokPrompt){ if(!seenPrompt.has(e.id)){ seenPrompt.add(e.id); contsPrompt.push(e); } }
+    for (const e of listTxtPrompt){ if(!seenPrompt.has(e.id)){ seenPrompt.add(e.id); contsPrompt.push(e); } }
+
+    for (const c of contsPrompt){
+      if (c.id === p.id) continue; // sám sebe nepočítat
+      if (!isMaxTargetHeuristic(c)) continue; // jen "max" varianta
+      // musí to být skutečné "pokračování": stejné prompty, jiný completion
+      // (neumíme 100% poznat, ale stačí že c má nějaké completion tokens)
+      const hasComp = Array.isArray(c?.choices?.[0]?.logprobs?.tokens) && c.choices[0].logprobs.tokens.length > 0;
+      if (!hasComp) continue;
+      if (matchedContPromptMaxSet.has(c.id)) continue;
+      matchedContPromptMaxSet.add(c.id);
+      if (c.previous_response_id === p.id){ okContPrompt++; okContPromptIds.push(c.id); }
+      else { c.previous_response_id = p.id; fixedContPrompt++; }
+    }
+  }
+
+  try { localStorage.setItem('completion_history', JSON.stringify(history)); } catch {}
+  updateSavedCount();
+
+  // ===== Inventura =====
+  const total = history.length;
+  const rootIds = history.filter(e => !e.previous_response_id).map(e=>e.id);
+  const rootsSet = new Set(rootIds);
+
+  // Unikátní pokrytí (union všech kategorií + kořeny)
+  const covered = new Set([
+    ...rootIds,
+    ...matchedAltSet,
+    ...matchedSameSet,
+    ...matchedContFullSet,
+    ...matchedContPromptMaxSet
+  ]);
+  const unmatchedCount = Math.max(0, total - covered.size);
+
+  // Překryvy pro lepší diagnostiku
+  const inter = (A,B)=>{ let c=0; A.forEach(x=>{ if(B.has(x)) c++; }); return c; };
+  const inter3 = (A,B,C)=>{ let c=0; A.forEach(x=>{ if(B.has(x) && C.has(x)) c++; }); return c; };
+
+  const inventory = {
+    total,
+    covered: covered.size,
+    roots: { count: rootIds.length, ids: rootIds },
+    alt_children: { count: matchedAltSet.size },
+    same_children: { count: matchedSameSet.size },
+    cont_full_max: { count: matchedContFullSet.size },
+    cont_prompt_only_max: { count: matchedContPromptMaxSet.size },
+    overlaps: {
+      alt_and_same: inter(matchedAltSet, matchedSameSet),
+      alt_and_full: inter(matchedAltSet, matchedContFullSet),
+      alt_and_prompt: inter(matchedAltSet, matchedContPromptMaxSet),
+      same_and_full: inter(matchedSameSet, matchedContFullSet),
+      same_and_prompt: inter(matchedSameSet, matchedContPromptMaxSet),
+      full_and_prompt: inter(matchedContFullSet, matchedContPromptMaxSet),
+      alt_same_prompt: inter3(matchedAltSet, matchedSameSet, matchedContPromptMaxSet)
+    },
+    unmatched: { count: unmatchedCount }
+  };
+
+  const report = {
+    inventory,
+    alt: { found_unique: matchedAltSet.size, fixed: fixedAlt, ok: okAlt, ok_ids: okAltIds },
+    same: { found_unique: matchedSameSet.size, fixed: fixedSame, ok: okSame, ok_ids: okSameIds },
+    cont_full_max: { found_unique: matchedContFullSet.size, fixed: fixedCont, ok: okCont, ok_ids: okContIds },
+    cont_prompt_only_max: { found_unique: matchedContPromptMaxSet.size, fixed: fixedContPrompt, ok: okContPrompt, ok_ids: okContPromptIds }
+  };
+
+  if (rawPre) rawPre.textContent = JSON.stringify(report, null, 2);
+  if (rawOverlay) rawOverlay.classList.remove('hidden');
+  showStatus(`Repair: ALT(${matchedAltSet.size}→fixed ${fixedAlt}, ok ${okAlt}) · SAME(${matchedSameSet.size}→fixed ${fixedSame}, ok ${okSame}) · FULL(${matchedContFullSet.size}→fixed ${fixedCont}, ok ${okCont}) · PROMPT(${matchedContPromptMaxSet.size}→fixed ${fixedContPrompt}, ok ${okContPrompt})`);
+}
+if (repairBtn) repairBtn.addEventListener('click', repairLinks);
+
 </script>
 </body>
 </html>
