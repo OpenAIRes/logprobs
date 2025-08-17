@@ -70,9 +70,7 @@
       <span id="status"></span>
     </div>
     <div>
-      <!-- Odebráno tlačítko Pokračovat (16) -->
-      <button id="continueBtn256" hidden>"max_tokens": 256</button>
-<button id="continueBtn4096" hidden>"max_tokens": 4096</button>
+      <!-- Odebráno tlačítko Pokračovat (16) --><button id="continueBtn4096" hidden>"max_tokens": 4096</button>
 <button id="objectBtn" hidden>object</button>
       <button id="promptsBtn" hidden>prompts</button>
 <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
@@ -110,9 +108,7 @@ const tokensEl = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
 const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
-const clearBtn = document.getElementById('clearBtn');
-const continueBtn256 = document.getElementById('continueBtn256');
-const continueBtn4096 = document.getElementById('continueBtn4096');
+const clearBtn = document.getElementById('clearBtn');const continueBtn4096 = document.getElementById('continueBtn4096');
 const objectBtn = document.getElementById('objectBtn');
 const rawOverlay = document.getElementById('rawOverlay');
 const rawPre = document.getElementById('rawPre');
@@ -232,7 +228,6 @@ async function loadTokens() {
     renderTokens(allTokens);
     exportBtn.hidden = false;
     clearBtn.hidden = false;
-    if (continueBtn256) continueBtn256.hidden = false;
     if (continueBtn4096) continueBtn4096.hidden = false;
     if (objectBtn) objectBtn.hidden = false;
     if (promptsBtn) promptsBtn.hidden = false;    updateSavedCount();
@@ -707,8 +702,6 @@ clearBtn.addEventListener('click',()=>{
 });
 
 // Nové chování: pokračovat z POUHÉHO promptu
-if (continueBtn256) continueBtn256.addEventListener('click',()=>continueFromPromptOnly(256));
-
 // Nové tlačítko 4096
 if (continueBtn4096) continueBtn4096.addEventListener('click',()=>continueFromPromptOnly(4096));
 
