@@ -122,11 +122,12 @@ const savedCountEl = document.getElementById('savedCount');
 
 function escapeToken(tok){return tok.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣');}
 function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);} 
-function updateSavedCount(){const h=JSON.parse(localStorage.getItem('completion_history')||'[]');savedCountEl.textContent=h.length;}
+async function updateSavedCount(){ try{ const n = await idbCount(); savedCountEl.textContent = n; }catch{ savedCountEl.textContent = '0'; } }
 
 /* ============ INITIAL LOAD ============ */
 async function loadTokens() {
   try {
+    await migrateFromLocalStorage();
     const res = await fetch('logprobs.json');
     const data = await res.json();
 
@@ -219,11 +220,8 @@ async function loadTokens() {
       throw new Error("Unsupported JSON format");
     }
 
-    const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-    if (history.length === 0) {
-      history.push(firstEntry);
-      localStorage.setItem('completion_history', JSON.stringify(history));
-    }
+    const cnt = await idbCount();
+    if (cnt === 0) { await idbPut(firstEntry); await updateSavedCount(); }
 
     renderTokens(allTokens);
     exportBtn.hidden = false;
@@ -239,13 +237,151 @@ async function loadTokens() {
 }
 
 /* ============ HISTORY FUNCTIONS ============ */
-function getCompletionById(id) {
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  const entry = history.find(e => e.id === id);
+
+// ---------- IndexedDB helpers ----------
+const DB_NAME = 'logprobsDB';
+const DB_VERSION = 1;
+const STORE = 'completions';
+
+function idbOpen(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      let store;
+      if (!db.objectStoreNames.contains(STORE)) {
+        store = db.createObjectStore(STORE, { keyPath: 'id' });
+      } else {
+        store = req.transaction.objectStore(STORE);
+      }
+      if (store && !store.indexNames.contains('by_created')) { store.createIndex('by_created','created',{unique:false}); }
+      if (store && !store.indexNames.contains('by_prompt_text')) { store.createIndex('by_prompt_text','prompt_text',{unique:false}); }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function idbWithStore(mode, fn){ return idbOpen().then(db=> new Promise((resolve,reject)=>{ const tx=db.transaction(STORE,mode); const store=tx.objectStore(STORE); Promise.resolve(fn(store,tx)).then(res=>{ tx.oncomplete=()=>resolve(res); tx.onerror=()=>reject(tx.error); }).catch(reject); })); }
+function extractPromptTextSafe(entry){ try{ const t=entry?.prompt; if(!t) return ''; if(typeof t.text==='string'&&t.text.trim()!=='') return t.text.trim(); const toks=t.logprobs?.tokens; if(Array.isArray(toks)&&toks.length) return toks.join(''); return ''; }catch{ return ''; } }
+function normalizeEntry(e){ try{ const c=JSON.parse(JSON.stringify(e)); c.prompt_text = extractPromptTextSafe(c); return c; }catch{ return e; } }
+async function idbPut(entry){ return idbWithStore('readwrite', store => store.put(normalizeEntry(entry))); }
+async function idbBulkPut(arr){ return idbWithStore('readwrite', store => { arr.forEach(e=> store.put(normalizeEntry(e))); }); }
+async function idbGet(id){ return idbWithStore('readonly', store => new Promise((res,rej)=>{ const r=store.get(id); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);})); }
+async function idbGetAll(){ return idbWithStore('readonly', store => new Promise((res,rej)=>{ if(store.getAll){ const r=store.getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error);} else { const out=[]; const req=store.openCursor(); req.onsuccess=e=>{ const c=e.target.result; if(c){ out.push(c.value); c.continue(); } else res(out); }; req.onerror=()=>rej(req.error); } })); }
+async function idbClear(){ return idbWithStore('readwrite', store => store.clear()); }
+async function idbCount(){ return idbWithStore('readonly', store => new Promise((res,rej)=>{ const r=store.count(); r.onsuccess=()=>res(r.result||0); r.onerror=()=>rej(r.error);})); }
+async function idbQueryByPrompt(p){ p=(p||'').trim(); return idbWithStore('readonly', store => new Promise((res,rej)=>{ let idx; try{ idx=store.index('by_prompt_text'); }catch{} if(idx){ const range=IDBKeyRange.only(p); const r=idx.getAll(range); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); } else { const out=[]; const req=store.openCursor(); req.onsuccess=e=>{ const c=e.target.result; if(c){ const v=c.value; const t=v?.prompt_text||extractPromptTextSafe(v)||''; if(t.trim()===p) out.push(v); c.continue(); } else res(out); }; req.onerror=()=>rej(req.error); } })); }
+async function migrateFromLocalStorage(){ try{ const raw=localStorage.getItem('completion_history'); if(!raw) return; const arr=JSON.parse(raw); if(Array.isArray(arr)&&arr.length){ await idbBulkPut(arr); localStorage.removeItem('completion_history'); await updateSavedCount(); showStatus('Migrated history to IndexedDB'); } }catch{} }
+
+
+// --- Storage helpers: robust read + compaction + eviction ---
+function estimateBytes(str){ try { return new TextEncoder().encode(str).length; } catch { return str.length; } }
+
+function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+// Odlehčení historie: u starších položek odstraníme největší pole (top_logprobs)
+function compactHistory(hist, keepLastN=60){
+  const out = clone(hist);
+  for (let i=0; i<out.length - keepLastN; i++){
+    const e = out[i];
+    // prompt top_logprobs
+    if (e?.prompt?.logprobs?.top_logprobs) e.prompt.logprobs.top_logprobs = [];
+    // completion top_logprobs
+    const lp = e?.choices?.[0]?.logprobs;
+    if (lp?.top_logprobs) e.choices[0].logprobs.top_logprobs = [];
+  }
+  return out;
+}
+
+function persistHistory(hist){
+  const key = 'completion_history';
+  const downloadBlob = (text, filename) => {
+    try {
+      const blob = new Blob([text], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
+  const fmtTs = () => {
+    const d = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  };
+  const trySet = (arr) => { const s = JSON.stringify(arr); localStorage.setItem(key, s); return s; };
+
+  try {
+    const s = trySet(hist);
+    updateSavedCount();
+    return {ok:true, evicted:0, exported:0, used: s.length};
+  } catch (err) {
+    // Bez mačkání: místo kompakce exportujeme nejstarší chunk a smažeme ho, dokud se nevejdeme
+    let tmp = JSON.parse(JSON.stringify(hist));
+    let removedTotal = 0;
+    let exportedCount = 0;
+    let chunk = Math.max(10, Math.ceil(tmp.length * 0.25)); // začni čtvrtinou historie (min 10)
+
+    while (tmp.length > 1) {
+      const take = Math.min(chunk, Math.max(1, tmp.length - 1));
+      const removed = tmp.splice(0, take);
+      removedTotal += removed.length;
+      // export právě odříznutého bloku
+      try {
+        const fname = `completion_history_archive_${fmtTs()}_${removed.length}.json`;
+        downloadBlob(JSON.stringify(removed), fname);
+        exportedCount += removed.length;
+      } catch {}
+      try {
+        const s2 = trySet(tmp);
+        updateSavedCount();
+        showStatus(`Storage full — exported & cleared ${removedTotal} oldest item(s).`);
+        return {ok:true, evicted:removedTotal, exported:exportedCount, used:s2.length};
+      } catch (e) {
+        // pořád plné: zmenši chunk a zkus znovu
+        if (chunk > 1) chunk = Math.max(1, Math.floor(chunk / 2));
+        continue;
+      }
+    }
+
+    alert('Storage is full and cannot be reduced automatically. Please use Export and then Clear.');
+    return {ok:false, evicted:0, exported:0, used:0};
+  }
+};
+  }catch(err){
+    // Zkus kompakci starších položek (zahodíme top_logprobs u starších než posledních 60)
+    try{
+      const compacted = compactHistory(hist);
+      const s2 = JSON.stringify(compacted);
+      localStorage.setItem(key, s2);
+      updateSavedCount();
+      showStatus('Storage near limit — compacted older items (dropped top_logprobs).');
+      return {ok:true, evicted:0, compacted:true, used:estimateBytes(s2)};
+    }catch(err2){
+      // Evikce nejstarších, dokud se nevejdeme
+      const tmp = clone(hist);
+      let evicted = 0; let lastErr = err2; let s3='';
+      while (tmp.length > 1){
+        tmp.shift(); evicted++;
+        try{ s3 = JSON.stringify(tmp); localStorage.setItem(key, s3); lastErr=null; break; }catch(e){ lastErr=e; }
+      }
+      if (!lastErr){
+        updateSavedCount();
+        showStatus(`Storage full — evicted ${evicted} oldest item(s).`);
+        return {ok:true, evicted, compacted:false, used:estimateBytes(s3)};
+      }
+      // Pořád se nevejdeme
+      console.error('Persist failed after compaction+eviction:', err, err2);
+      alert('Storage is full and could not be compacted. Please use Export and then Clear some items.');
+      return {ok:false, evicted:0, compacted:false, used:0};
+    }
+  }
+}
+
+async function getCompletionById(id) {
+  const entry = await idbGet(id);
   if (!entry) return null;
 
-  // Build a SOURCE entry for backfilling prompt alternatives.
-  // Prefer entry.previous_response_id; if it doesn't align, search the whole history
+  const history = await idbGetAll();
   const currPromptArr = entry?.prompt?.logprobs?.tokens || [];
 
   function mapInSource(src){
@@ -257,7 +393,7 @@ function getCompletionById(id) {
     if (!scl || sct.length === 0) return null;
     const baseIdx = sp.length;
 
-    // 1) EXAKTNÍ SHODA: aktuální prompt je přesně subsekvence v (prompt+completion) zdroje
+    // EXAKTNÍ SHODA
     {
       const all = sp.concat(sct);
       if (currPromptArr.length > 0 && all.length >= currPromptArr.length){
@@ -270,8 +406,7 @@ function getCompletionById(id) {
         }
       }
     }
-
-    // 2) ALT-MATCH: prompt vznikl klikem na alternativy v předchozí completion
+    // ALT-MATCH
     if (currPromptArr.length > 0 && sct.length >= currPromptArr.length){
       for (let j = baseIdx; j <= baseIdx + sct.length - currPromptArr.length; j++){
         let ok = true;
@@ -292,26 +427,13 @@ function getCompletionById(id) {
   let mapping = mapInSource(source);
 
   if (!mapping){
-    // najdi prvního (nejstaršího) kandidáta v historii, který obsahuje aktuální prompt v completion
     const sorted = [...history].sort((a,b)=> (a.created||0) - (b.created||0));
-    for (const cand of sorted){
-      if (cand.id === entry.id) continue;
-      const m = mapInSource(cand);
-      if (m){ mapping = m; break; }
-    }
+    for (const cand of sorted){ if (cand.id === entry.id) continue; const m = mapInSource(cand); if (m){ mapping = m; break; } }
   }
 
-  // Persistuj opravu previous_response_id do localStorage (neinvazivně)
   if (mapping && (!entry.previous_response_id || entry.previous_response_id !== mapping.src.id)){
-    const idxHist = history.findIndex(e => e.id === entry.id);
-    if (idxHist >= 0){
-      entry.previous_response_id = mapping.src.id;
-      try { localStorage.setItem('completion_history', JSON.stringify(history)); } catch {}
-    }
-    source = mapping.src;
-  } else if (mapping){
-    source = mapping.src;
-  }
+    entry.previous_response_id = mapping.src.id; await idbPut(entry); source = mapping.src;
+  } else if (mapping){ source = mapping.src; }
 
   const srcPrompt     = (source?.prompt?.logprobs?.tokens) || [];
   const srcCompLog    = source?.choices?.[0]?.logprobs || null;
@@ -321,19 +443,15 @@ function getCompletionById(id) {
   const baseIdx       = mapping ? mapping.baseIdx : (source ? srcPrompt.length : 0);
   const subseqStart   = mapping ? mapping.start   : -1;
 
-  const promptTokensUI = entry.prompt.logprobs.tokens.map((t, i) => {
-    let logprob = entry.prompt.logprobs.token_logprobs[i] || null;
-    let top = entry.prompt.logprobs.top_logprobs[i] || null;
-
-    // Backfill: pokud prompt token nemá alternativy, zkus je převzít ze ZDROJOVÉ completion
+  const promptTokensUI = (entry.prompt.logprobs.tokens||[]).map((t, i) => {
+    let logprob = entry.prompt.logprobs.token_logprobs?.[i] ?? null;
+    let top = entry.prompt.logprobs.top_logprobs?.[i] ?? null;
     if ((!top || Object.keys(top).length === 0) && source) {
       let mappedJ = null;
       if (subseqStart >= 0) {
-        const abs = subseqStart + i; // absolutní index v (srcPrompt + srcCompletion)
-        if (abs >= baseIdx) mappedJ = abs - baseIdx; // index do srcComp*
+        const abs = subseqStart + i; if (abs >= baseIdx) mappedJ = abs - baseIdx;
       }
-      if (mappedJ === null && i >= baseIdx) mappedJ = i - baseIdx; // fallback původní hrana
-
+      if (mappedJ === null && i >= baseIdx) mappedJ = i - baseIdx;
       if (mappedJ !== null && mappedJ >= 0 && mappedJ < srcCompTokens.length) {
         top = srcTopArr[mappedJ] || {};
         if (logprob == null) {
@@ -347,23 +465,19 @@ function getCompletionById(id) {
     return { token: t, logprob, top_logprobs: sorted };
   });
 
-  const completionTokensUI = entry.choices[0].logprobs.tokens.map((t, i) => {
-    const top = entry.choices[0].logprobs.top_logprobs[i] || {};
+  const completionTokensUI = (entry.choices?.[0]?.logprobs?.tokens||[]).map((t, i) => {
+    const top = entry.choices[0].logprobs.top_logprobs?.[i] || {};
     const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log })).sort((a,b)=>b.logprob-a.logprob);
-    return { token: t, logprob: entry.choices[0].logprobs.token_logprobs[i], top_logprobs: sorted };
+    return { token: t, logprob: entry.choices[0].logprobs.token_logprobs?.[i], top_logprobs: sorted };
   });
 
-  return {
-    promptTokens: entry.prompt.logprobs.tokens,
-    completionTokens: entry.choices[0].logprobs.tokens,
-    allTokens: promptTokensUI.concat(completionTokensUI)
-  };
+  return { promptTokens: entry.prompt.logprobs.tokens||[], completionTokens: entry.choices?.[0]?.logprobs?.tokens||[], allTokens: promptTokensUI.concat(completionTokensUI) };
 }
 
 /* Removed stray duplicate block that broke script execution */
 /* ============ CREATE COMPLETION ============ */
 async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
-  const prev = getCompletionById(prevId);
+  const prev = await getCompletionById(prevId);
   if (!prev) {
     console.error('[ERROR] Previous completion not found for ID:', prevId);
     showStatus('Previous completion not found');
@@ -375,16 +489,13 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
   if (newToken !== undefined && newToken !== null) updatedTokens.push(newToken);
   const promptText = updatedTokens.join('');
 
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-
-  const existing = history.find(e => {
-    const target = Number(e?.meta?.target_max_tokens ?? e.max_tokens);
-    return JSON.stringify(e.prompt.logprobs.tokens) === JSON.stringify(updatedTokens) && Number(target) === Number(maxTokens);
-  });
+  const candidates = await idbQueryByPrompt(promptText.trim());
+  const existing = candidates.find(e => JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify(updatedTokens) && Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens));
   if (existing) {
     console.log('[HIT] Found existing completion');
-    return {
-      response: { id: existing.id, choices: existing.choices },
+    return { response: { id: existing.id, choices: existing.choices }, prompt: promptText, fromHistory: true };
+  }
+  ,
       prompt: promptText,
       fromHistory: true
     };
@@ -426,10 +537,8 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     meta: { target_max_tokens: Number(maxTokens) }
   };
 
-  const history2 = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  history2.push(newEntry);
-  localStorage.setItem('completion_history', JSON.stringify(history2));
-  updateSavedCount();
+  await idbPut(newEntry);
+  await updateSavedCount();
 
   return { response: data, prompt: promptText, fromHistory: false };
 }
@@ -684,10 +793,14 @@ async function ensureApiKey(){
 }
 
 /* ============ EXPORT / CLEAR ============ */
-exportBtn.addEventListener('click',()=>{
-  const h=localStorage.getItem('completion_history'); 
-  if(!h||h==='[]'){alert('No completions saved yet.');return;} 
-  const blob=new Blob([h],{type:'application/json'}); 
+exportBtn.addEventListener('click', async ()=>{
+  const arr = await idbGetAll();
+  if(!arr || !arr.length){ alert('No completions saved yet.'); return; }
+  const json = JSON.stringify(arr);
+  const blob=new Blob([json],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download='completion_history.json'; a.click(); URL.revokeObjectURL(url);
+}); 
   const url=URL.createObjectURL(blob); 
   const a=document.createElement('a'); 
   a.href=url; a.download='completion_history.json'; 
@@ -695,9 +808,9 @@ exportBtn.addEventListener('click',()=>{
   URL.revokeObjectURL(url);
 });
 
-clearBtn.addEventListener('click',()=>{
-  localStorage.removeItem('completion_history'); 
-  updateSavedCount(); 
+clearBtn.addEventListener('click', async ()=>{
+  await idbClear();
+  await updateSavedCount();
   showStatus('Historie vymazána');
 });
 
@@ -709,11 +822,14 @@ document.addEventListener('click',()=>tooltipEl.classList.add('hidden'),{passive
 window.addEventListener('DOMContentLoaded',loadTokens);
 
 // =========== RAW OBJECT VIEWER ===========
-function showCurrentRaw(){
+async function showCurrentRaw(){
   try{
-    const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-    const entry = history.find(e => e.id === currentCompletionId);
+    const entry = await idbGet(currentCompletionId);
     if(!entry){ showStatus('Nenalezen aktuální záznam'); return; }
+    rawPre.textContent = JSON.stringify(entry, null, 2);
+    rawOverlay.classList.remove('hidden');
+  }catch(err){ showStatus('Chyba při čtení raw dat'); }
+}
     rawPre.textContent = JSON.stringify(entry, null, 2);
     rawOverlay.classList.remove('hidden');
   }catch(err){ showStatus('Chyba při čtení raw dat'); }
@@ -747,10 +863,14 @@ function openEntryById(id){
     showStatus('Načteno z historie');
   }catch{ showStatus('Chyba při otevírání záznamu'); }
 }
-function showPromptMatches(promptStr){
-  const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
-  const matches = history.filter(e => (extractPromptText(e)||'').trim() === promptStr);
+async function showPromptMatches(promptStr){
+  const matches = await idbQueryByPrompt(promptStr);
   if(matches.length===0){ showStatus('Žádné záznamy pro tento prompt'); return; }
+  matches.sort((a,b)=> (b.created||0)-(a.created||0));
+  const ul = document.createElement('ul');
+  matches.forEach(e=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent = `${formatDt(e.created)} — ${e.id}`; a.addEventListener('click',(ev)=>{ ev.preventDefault(); openEntryById(e.id); }); li.appendChild(a); ul.appendChild(li); });
+  promptsList.innerHTML=''; const back=document.createElement('button'); back.textContent='← Zpět'; back.style.marginBottom='.5rem'; back.addEventListener('click', showPrompts); promptsList.appendChild(back); promptsList.appendChild(ul);
+}
   // Vypiš seznam záznamů seřazený od nejnovějších
   matches.sort((a,b)=> (b.created||0)-(a.created||0));
   const ul = document.createElement('ul');
@@ -766,12 +886,17 @@ function showPromptMatches(promptStr){
   promptsList.appendChild(back);
   promptsList.appendChild(ul);
 }
-function showPrompts(){
+async function showPrompts(){
   try{
-    const history = JSON.parse(localStorage.getItem('completion_history') || '[]');
+    const history = await idbGetAll();
     const prompts = history.map(extractPromptText).map(s=> (s||'').trim()).filter(Boolean);
     const uniq = Array.from(new Set(prompts)).sort((a,b)=>a.localeCompare(b));
     if (uniq.length === 0) { showStatus('Žádné prompty v historii'); return; }
+    const ul = document.createElement('ul');
+    uniq.forEach(p=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=p; a.addEventListener('click',(e)=>{e.preventDefault(); showPromptMatches(p);}); li.appendChild(a); ul.appendChild(li); });
+    promptsList.innerHTML=''; promptsList.appendChild(ul); promptsOverlay.classList.remove('hidden');
+  }catch(err){ showStatus('Chyba při čtení promptů'); }
+}
     const ul = document.createElement('ul');
     uniq.forEach(p=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=p; a.addEventListener('click',(e)=>{e.preventDefault(); showPromptMatches(p);}); li.appendChild(a); ul.appendChild(li); });
     promptsList.innerHTML='';
