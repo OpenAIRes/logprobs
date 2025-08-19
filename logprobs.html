@@ -512,7 +512,8 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
 /* ============ CONTINUE (PROMPT ONLY) ============ */
 async function continueFromPromptOnly(maxTokens) {
   const prevId = currentCompletionId;
-  const prev = getCompletionById(prevId);
+  // getCompletionById returns a Promise, so we need to await it here
+  const prev = await getCompletionById(prevId);
   if (!prev) {
     console.error('[ERROR] Cannot continue: previous completion not found');
     showStatus('Nelze pokračovat – chybí aktuální záznam');
