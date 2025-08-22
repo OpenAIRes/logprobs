@@ -808,9 +808,9 @@ function extractPromptText(entry){
   }catch{ return ''; }
 }
 function formatDt(epoch){ try{ if(!epoch) return ''; const d=new Date(Number(epoch)*1000); return d.toLocaleString(); }catch{ return ''; } }
-function openEntryById(id){
+async function openEntryById(id){
   try{
-    const view = getCompletionById(id);
+    const view = await getCompletionById(id);
     if(!view){ showStatus('Záznam nenalezen'); return; }
     allTokens = view.allTokens;
     safeTokens = allTokens.map(t=>t.token);
