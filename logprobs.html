@@ -123,8 +123,9 @@ const savedCountEl = document.getElementById('savedCount');
 const repairBtn = document.getElementById('repairBtn');
 
 function escapeToken(tok){return tok.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣');}
-function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);} 
+function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);}
 async function updateSavedCount(){ try{ const n = await idbCount(); savedCountEl.textContent = n; }catch{ savedCountEl.textContent = '0'; } }
+function toPlainTokens(arr){return (arr||[]).map(t=>typeof t==='string'?t:(t&&typeof t.token==='string'?t.token:String(t)))}
 
 /* ============ INITIAL LOAD ============ */
 async function loadTokens() {
@@ -266,7 +267,7 @@ function idbOpen(){
   });
 }
 function idbWithStore(mode, fn){ return idbOpen().then(db=> new Promise((resolve,reject)=>{ const tx=db.transaction(STORE,mode); const store=tx.objectStore(STORE); Promise.resolve(fn(store,tx)).then(res=>{ tx.oncomplete=()=>resolve(res); tx.onerror=()=>reject(tx.error); }).catch(reject); })); }
-function extractPromptTextSafe(entry){ try{ const t=entry?.prompt; if(!t) return ''; if(typeof t.text==='string'&&t.text.trim()!=='') return t.text.trim(); const toks=t.logprobs?.tokens; if(Array.isArray(toks)&&toks.length) return toks.join(''); return ''; }catch{ return ''; } }
+function extractPromptTextSafe(entry){ try{ const t=entry?.prompt; if(!t) return ''; if(typeof t.text==='string'&&t.text.trim()!=='') return t.text.trim(); const toks=toPlainTokens(t.logprobs?.tokens); if(toks.length) return toks.join(''); return ''; }catch{ return ''; } }
 function normalizeEntry(e){ try{ const c=JSON.parse(JSON.stringify(e)); c.prompt_text = extractPromptTextSafe(c); return c; }catch{ return e; } }
 async function idbPut(entry){ return idbWithStore('readwrite', store => store.put(normalizeEntry(entry))); }
 async function idbBulkPut(arr){ return idbWithStore('readwrite', store => { arr.forEach(e=> store.put(normalizeEntry(e))); }); }
@@ -459,7 +460,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     return null;
   }
 
-  const allTokensArr = prev.promptTokens.concat(prev.completionTokens);
+  const allTokensArr = toPlainTokens(prev.promptTokens.concat(prev.completionTokens));
   const updatedTokens = allTokensArr.slice(0, replaceIdx);
   if (newToken !== undefined && newToken !== null) updatedTokens.push(newToken);
   const promptText = updatedTokens.join('');
@@ -806,8 +807,8 @@ function extractPromptText(entry){
     const t = entry?.prompt;
     if(!t) return '';
     if (typeof t.text === 'string' && t.text.trim() !== '') return t.text;
-    const toks = t.logprobs?.tokens;
-    if (Array.isArray(toks) && toks.length) return toks.join('');
+    const toks = toPlainTokens(t.logprobs?.tokens);
+    if (toks.length) return toks.join('');
     return '';
   }catch{ return ''; }
 }
