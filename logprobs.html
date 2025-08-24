@@ -270,6 +270,7 @@ function extractPromptTextSafe(entry){ try{ const t=entry?.prompt; if(!t) return
 function normalizeEntry(e){ try{ const c=JSON.parse(JSON.stringify(e)); c.prompt_text = extractPromptTextSafe(c); return c; }catch{ return e; } }
 async function idbPut(entry){ return idbWithStore('readwrite', store => store.put(normalizeEntry(entry))); }
 async function idbBulkPut(arr){ return idbWithStore('readwrite', store => { arr.forEach(e=> store.put(normalizeEntry(e))); }); }
+async function idbBulkDelete(ids){ return idbWithStore('readwrite', store => { ids.forEach(id=> store.delete(id)); }); }
 async function idbGet(id){ return idbWithStore('readonly', store => new Promise((res,rej)=>{ const r=store.get(id); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);})); }
 async function idbGetAll(){ return idbWithStore('readonly', store => new Promise((res,rej)=>{ if(store.getAll){ const r=store.getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error);} else { const out=[]; const req=store.openCursor(); req.onsuccess=e=>{ const c=e.target.result; if(c){ out.push(c.value); c.continue(); } else res(out); }; req.onerror=()=>rej(req.error); } })); }
 async function idbClear(){ return idbWithStore('readwrite', store => store.clear()); }
@@ -832,6 +833,16 @@ async function showPromptMatches(promptStr){
   matches.forEach(e=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent = `${formatDt(e.created)} — ${e.id}`; a.addEventListener('click',(ev)=>{ ev.preventDefault(); openEntryById(e.id); }); li.appendChild(a); ul.appendChild(li); });
   promptsList.innerHTML=''; const back=document.createElement('button'); back.textContent='← Zpět'; back.style.marginBottom='.5rem'; back.addEventListener('click', showPrompts); promptsList.appendChild(back); promptsList.appendChild(ul);
 }
+async function deletePrompt(promptStr){
+  try{
+    const matches = await idbQueryByPrompt(promptStr);
+    if(matches.length===0){ showStatus('Žádné záznamy k odstranění'); return; }
+    await idbBulkDelete(matches.map(m=>m.id));
+    await updateSavedCount();
+    showStatus('Prompt odstraněn');
+    showPrompts();
+  }catch(err){ showStatus('Chyba při mazání promptu'); }
+}
 async function showPrompts(){
   try{
     const history = await idbGetAll();
@@ -839,7 +850,12 @@ async function showPrompts(){
     const uniq = Array.from(new Set(prompts)).sort((a,b)=>a.localeCompare(b));
     if (uniq.length === 0) { showStatus('Žádné prompty v historii'); return; }
     const ul = document.createElement('ul');
-    uniq.forEach(p=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=p; a.addEventListener('click',(e)=>{e.preventDefault(); showPromptMatches(p);}); li.appendChild(a); ul.appendChild(li); });
+    uniq.forEach(p=>{
+      const li=document.createElement('li');
+      const a=document.createElement('a'); a.href='#'; a.textContent=p; a.addEventListener('click',(e)=>{e.preventDefault(); showPromptMatches(p);});
+      const btn=document.createElement('button'); btn.textContent='Smazat'; btn.addEventListener('click', async (e)=>{ e.preventDefault(); e.stopPropagation(); await deletePrompt(p); });
+      li.appendChild(a); li.appendChild(btn); ul.appendChild(li);
+    });
     promptsList.innerHTML=''; promptsList.appendChild(ul); promptsOverlay.classList.remove('hidden');
   }catch(err){ showStatus('Chyba při čtení promptů'); }
 }
