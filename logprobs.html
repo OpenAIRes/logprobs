@@ -463,11 +463,15 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
 
   const allTokensArr = toPlainTokens(prev.promptTokens.concat(prev.completionTokens));
   const updatedTokens = allTokensArr.slice(0, replaceIdx);
-  if (newToken !== undefined && newToken !== null) updatedTokens.push(newToken);
-  const promptText = updatedTokens.join('');
+  if (newToken !== undefined && newToken !== null) {
+    const plainNew = toPlainTokens([newToken])[0];
+    if (plainNew !== undefined && plainNew !== null) updatedTokens.push(plainNew);
+  }
+  const plainPromptTokens = toPlainTokens(updatedTokens);
+  const promptText = plainPromptTokens.join('');
 
   const candidates = await idbQueryByPrompt(promptText.trim());
-  const existing = candidates.find(e => JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify(updatedTokens) && Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens));
+  const existing = candidates.find(e => JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify(plainPromptTokens) && Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens));
   if (existing) {
     console.log('[HIT] Found existing completion');
     return { response: { id: existing.id, choices: existing.choices }, prompt: promptText, fromHistory: true };
@@ -492,7 +496,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     prompt: {
       text: promptText,
       index: 0,
-      logprobs: { tokens: updatedTokens, token_logprobs: [], top_logprobs: [] }
+      logprobs: { tokens: plainPromptTokens, token_logprobs: [], top_logprobs: [] }
     },
     choices: [
       {
