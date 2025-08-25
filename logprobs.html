@@ -267,6 +267,7 @@ async function loadTokens() {
     if (promptsBtn) promptsBtn.hidden = false;
     if (repairBtn) repairBtn.hidden = false;
     updateSavedCount();
+    await openBestCompletion();
     loadingEl.remove();
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
@@ -1134,6 +1135,16 @@ async function openEntryById(id){
     promptsOverlay.classList.add('hidden');
     showStatus('Načteno z historie');
   }catch{ showStatus('Chyba při otevírání záznamu'); }
+}
+
+async function openBestCompletion(){
+  try{
+    const history = await idbGetAll();
+    const best = history.find(e => e?.metadata?.best === true);
+    if(best && best.id !== currentCompletionId){
+      await openEntryById(best.id);
+    }
+  }catch{}
 }
 async function showPromptMatches(promptStr){
   const matches = await idbQueryByPrompt(promptStr);
