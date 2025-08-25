@@ -917,9 +917,9 @@ async function repairLinks(){
 
   for (const target of entries){
     const ptoks = target.promptTokens;
-    if (!ptoks.length) continue;
-
-    const ids = [];
+    if (!target.entry.prompt) target.entry.prompt = {};
+    if (!target.entry.prompt.logprobs) target.entry.prompt.logprobs = {};
+    const ids = target.entry.prompt.logprobs.ids = [];
     for (let i=0; i<ptoks.length; i++){
       if (i === 0){
         ids.push([INITIAL_ID]);
@@ -942,9 +942,6 @@ async function repairLinks(){
       matches.sort((a,b)=> b.len - a.len);
       ids.push(matches.map(m=>m.id));
     }
-    if (!target.entry.prompt) target.entry.prompt = {};
-    if (!target.entry.prompt.logprobs) target.entry.prompt.logprobs = {};
-    target.entry.prompt.logprobs.ids = ids;
   }
 
   await idbBulkPut(history);
