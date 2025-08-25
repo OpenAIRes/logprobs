@@ -429,10 +429,11 @@ async function getCompletionById(id) {
     entry.previous_response_id = mapping.src.id; await idbPut(entry); source = mapping.src;
   } else if (mapping){ source = mapping.src; }
 
-  // ---- Prefetch zdrojů dle IDS pro prompt tokeny ----
+  // ---- Prefetch zdrojů dle IDS pro prompt tokeny (včetně INITIAL_ID) ----
+  const INITIAL_ID = 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O';
   const promptIds = Array.isArray(entry?.prompt?.logprobs?.ids) ? entry.prompt.logprobs.ids : [];
   const uniqueIds = Array.from(new Set(
-    promptIds.flat().filter(id => typeof id === 'string' && id !== 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O')
+    promptIds.flat().filter(id => typeof id === 'string')
   ));
   const srcEntriesArr = await Promise.all(uniqueIds.map(async (cid) => {
     try { return { id: cid, entry: await idbGet(cid) }; } catch { return { id: cid, entry: null }; }
@@ -461,11 +462,16 @@ async function getCompletionById(id) {
       });
       cTokLPs     = cLP.content.map(t => t.logprob);
     }
-
     if (!cCompTokens || !cTopArr) return null;
 
-    const k = i - cPromptToks.length; // relativní index v completion kandidáta
-    if (k < 0 || k >= cCompTokens.length) return null;
+    // Relativní index v completion kandidáta
+    let k = i - cPromptToks.length;
+
+    // ✅ Nově: pokud i leží "uvnitř" promptu kandidáta (i < promptLen),
+    // použij první krok jeho completion (k = 0) – to umožní i initial ID na i===0.
+    if (k < 0) k = 0;
+
+    if (k >= cCompTokens.length) return null;
 
     const topObj = cTopArr[k] || {};
     const sorted = Object.entries(topObj)
@@ -480,17 +486,67 @@ async function getCompletionById(id) {
     };
   }
 
-  // ---- Sestavení PROMPT tokenů s alternativami z IDS (fallback na původní mapování, když nic není) ----
+  // pomocný fallback: zkus vytáhnout distribuci pro prompt token i z "mapping source"
+  function extractFromMappingForPromptIndex(i) {
+    try {
+      if (!mapping || !source) return null;
+      const sp  = (source?.prompt?.logprobs?.tokens) || [];
+      const scl = source?.choices?.[0]?.logprobs || null;
+      if (!scl) return null;
+
+      const sct = Array.isArray(scl.tokens) ? scl.tokens
+                : Array.isArray(scl.content) ? scl.content.map(t => t.token)
+                : [];
+      const stop= Array.isArray(scl.top_logprobs) ? scl.top_logprobs
+                : Array.isArray(scl.content) ? scl.content.map(t => {
+                     const o={}; (t.top_logprobs||[]).forEach(tt=>o[tt.token]=tt.logprob); return o;
+                  })
+                : [];
+      const sLPs= Array.isArray(scl.token_logprobs) ? scl.token_logprobs
+                : Array.isArray(scl.content) ? scl.content.map(t => t.logprob)
+                : [];
+
+      const baseIdx     = mapping.baseIdx;   // délka promptu zdroje
+      const subseqStart = mapping.start;     // kde v (prompt+completion) zdroje začíná náš prompt
+
+      const abs = subseqStart + i;
+      const idxInCompletion = abs - baseIdx;
+      if (idxInCompletion < 0 || idxInCompletion >= sct.length) return null;
+
+      const topObj = stop[idxInCompletion] || {};
+      const sorted = Object.entries(topObj)
+        .map(([tok, log]) => ({ token: tok, logprob: log }))
+        .sort((a,b) => b.logprob - a.logprob);
+
+      return {
+        nextToken: sct[idxInCompletion],
+        nextLogprob: sLPs[idxInCompletion] ?? null,
+        top_logprobs_sorted: sorted,
+        top_logprobs_obj: topObj
+      };
+    } catch { return null; }
+  }
+
+  // ---- Sestavení PROMPT tokenů s alternativami z IDS (vč. initial pro i===0; fallback přes mapping) ----
   const promptRawTokens = entry?.prompt?.logprobs?.tokens || [];
   const promptTokensUI = promptRawTokens.map((t, i) => {
     const idList = Array.isArray(promptIds[i]) ? promptIds[i] : [];
-
     let chosen = null;
+
+    // 1) standardně z ids (NEPŘESKAKUJ initial pro i===0)
     for (const cid of idList) {
-      if (cid === 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O') continue; // initial completion nemá logprobs
+      // initial klidně ignoruj pro i>0, ale není nutné — repairLinks ho stejně dává jen na index 0
+      if (cid === INITIAL_ID && i !== 0) continue;
+
       const src = srcMap[cid];
       const res = extractNextTokenLogprobsFromCandidate(src, i);
-      if (res) { chosen = { src, res }; break; } // použij první použitelný zdroj dle pořadí
+      if (res) { chosen = { res }; break; }
+    }
+
+    // 2) fallback: mapping->source
+    if (!chosen) {
+      const res = extractFromMappingForPromptIndex(i);
+      if (res) chosen = { res };
     }
 
     if (chosen) {
@@ -504,7 +560,7 @@ async function getCompletionById(id) {
       return { token: t, logprob: lpForT, top_logprobs: res.top_logprobs_sorted };
     }
 
-    // fallback: bez alternativ
+    // nic použitelného → prázdné alternativy
     return { token: t, logprob: null, top_logprobs: [] };
   });
 
