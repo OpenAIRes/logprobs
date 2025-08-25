@@ -891,66 +891,77 @@ if (promptsOverlay) promptsOverlay.addEventListener('click', (e)=>{ if(e.target=
 window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') promptsOverlay.classList.add('hidden'); });
 
 // =========== REPAIR PROMPT TOKEN IDS ==========
-async function repairLinks(){
+async function repairLinks() {
   const history = await idbGetAll();
-  if (!Array.isArray(history) || history.length === 0){
+  if (!Array.isArray(history) || history.length === 0) {
     showStatus('Historie je prázdná');
     return;
   }
 
-  const INITIAL_ID = 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O';
-  const getPromptTokens = (e)=> Array.isArray(e?.prompt?.logprobs?.tokens) ? e.prompt.logprobs.tokens : [];
-  const getCompletionTokens = (e)=>{
+  const getPromptTokens = (e) =>
+    Array.isArray(e?.prompt?.logprobs?.tokens) ? e.prompt.logprobs.tokens : [];
+  const getCompletionTokens = (e) => {
     const lp = e?.choices?.[0]?.logprobs;
     if (!lp) return [];
-    if (Array.isArray(lp.tokens)) return lp.tokens;
-    if (Array.isArray(lp.content)) return lp.content.map(t=>t.token);
+    if (Array.isArray(lp.tokens)) return lp.tokens;                    // text_completion
+    if (Array.isArray(lp.content)) return lp.content.map(t => t.token); // chat.completion
     return [];
   };
 
-  const entries = history.map(e=>({
+  const entries = history.map(e => ({
     entry: e,
     promptTokens: getPromptTokens(e),
     fullTokens: getPromptTokens(e).concat(getCompletionTokens(e)),
     created: e.created || 0
-  })).sort((a,b)=> a.created - b.created);
+  })).sort((a, b) => a.created - b.created);
 
-  for (const target of entries){
+  const INITIAL_ID = 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O';
+
+  for (const target of entries) {
     const ptoks = target.promptTokens;
     if (!target.entry.prompt) target.entry.prompt = {};
     if (!target.entry.prompt.logprobs) target.entry.prompt.logprobs = {};
-    const ids = target.entry.prompt.logprobs.ids = [];
-    for (let i=0; i<ptoks.length; i++){
-      if (i === 0){
-        ids.push([INITIAL_ID]);
-        continue;
-      }
-      const prefix = ptoks.slice(0, i);
-      const matches = [];
-      for (const cand of entries){
+    const idsPerToken = new Array(ptoks.length).fill(null).map(() => []);
+
+    if (ptoks.length > 0) idsPerToken[0] = [INITIAL_ID];
+
+    // i = index tokenu v promptu; pro i>=1 používáme prefix prvních i tokenů
+    for (let i = 1; i < ptoks.length; i++) {
+      const prefixLen = i;                  // pro 2. token bereme jen 1. token
+      const threshold = i + 1;              // prompt kandidáta musí mít < threshold tokenů
+      const prefix = ptoks.slice(0, prefixLen);
+      const candidates = [];
+
+      for (const cand of entries) {
         if (cand.entry.id === target.entry.id) continue;
         if (cand.created >= target.created) continue;
-        if (cand.promptTokens.length >= i+1) continue;
-        const full = cand.fullTokens;
-        if (full.length <= prefix.length) continue;
+        if (cand.promptTokens.length >= threshold) continue;   // prompt < (i+1)
+        if (cand.fullTokens.length < prefixLen) continue;
+
         let ok = true;
-        for (let j=0; j<prefix.length; j++){
-          if (full[j] !== prefix[j]) { ok = false; break; }
+        for (let j = 0; j < prefixLen; j++) {
+          if (cand.fullTokens[j] !== prefix[j]) { ok = false; break; }
         }
         if (!ok) continue;
-        if (full[prefix.length] !== ptoks[i]) continue;
-        matches.push({id: cand.entry.id, len: cand.promptTokens.length});
+
+        candidates.push({
+          id: cand.entry.id,
+          promptLen: cand.promptTokens.length,
+          created: cand.created
+        });
       }
-      matches.sort((a,b)=> b.len - a.len);
-      ids.push(matches.map(m=>m.id));
+
+      candidates.sort((a, b) => (b.promptLen - a.promptLen) || (a.created - b.created));
+      idsPerToken[i] = candidates.map(c => c.id);
     }
+
+    target.entry.prompt.logprobs.ids = idsPerToken;
   }
 
   await idbBulkPut(history);
   await updateSavedCount();
-  showStatus('Repair: doplněna ids pro tokeny promptu');
+  showStatus('Repair: doplněna ids podle nových prefix pravidel');
 }
-
 if (repairBtn) repairBtn.addEventListener('click', repairLinks);
 
 </script>
