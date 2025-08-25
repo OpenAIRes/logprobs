@@ -278,6 +278,12 @@ async function idbGetAll(){ return idbWithStore('readonly', store => new Promise
 async function idbClear(){ return idbWithStore('readwrite', store => store.clear()); }
 async function idbCount(){ return idbWithStore('readonly', store => new Promise((res,rej)=>{ const r=store.count(); r.onsuccess=()=>res(r.result||0); r.onerror=()=>rej(r.error);})); }
 async function idbQueryByPrompt(p){ p=(p||'').trim(); return idbWithStore('readonly', store => new Promise((res,rej)=>{ let idx; try{ idx=store.index('by_prompt_text'); }catch{} if(idx){ const range=IDBKeyRange.only(p); const r=idx.getAll(range); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); } else { const out=[]; const req=store.openCursor(); req.onsuccess=e=>{ const c=e.target.result; if(c){ const v=c.value; const t=v?.prompt_text||extractPromptTextSafe(v)||''; if(t.trim()===p) out.push(v); c.continue(); } else res(out); }; req.onerror=()=>rej(req.error); } })); }
+async function idbSearch(term){
+  const q=(term||'').toLowerCase();
+  if(!q) return [];
+  const all=await idbGetAll();
+  return all.filter(e=>{ try{ return JSON.stringify(e).toLowerCase().includes(q); }catch{ return false; } });
+}
 async function migrateFromLocalStorage(){ try{ const raw=localStorage.getItem('completion_history'); if(!raw) return; const arr=JSON.parse(raw); if(Array.isArray(arr)&&arr.length){ await idbBulkPut(arr); localStorage.removeItem('completion_history'); await updateSavedCount(); showStatus('Migrated history to IndexedDB'); } }catch{} }
 
 
@@ -849,12 +855,26 @@ async function deletePrompt(promptStr){
     showPrompts();
   }catch(err){ showStatus('Chyba při mazání promptu'); }
 }
+async function showSearchResults(query){
+  const matches = await idbSearch(query);
+  if(matches.length===0){ showStatus('Žádné záznamy pro hledaný text'); return; }
+  matches.sort((a,b)=> (b.created||0)-(a.created||0));
+  const ul = document.createElement('ul');
+  matches.forEach(e=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=`${formatDt(e.created)} — ${e.id}`; a.addEventListener('click',(ev)=>{ ev.preventDefault(); openEntryById(e.id); }); li.appendChild(a); ul.appendChild(li); });
+  promptsList.innerHTML=''; const back=document.createElement('button'); back.textContent='← Zpět'; back.style.marginBottom='.5rem'; back.addEventListener('click', showPrompts); promptsList.appendChild(back); promptsList.appendChild(ul);
+}
 async function showPrompts(){
   try{
     const history = await idbGetAll();
     const prompts = history.map(extractPromptText).map(s=> (s||'').trim()).filter(Boolean);
     const uniq = Array.from(new Set(prompts)).sort((a,b)=>a.localeCompare(b));
     if (uniq.length === 0) { showStatus('Žádné prompty v historii'); return; }
+    const searchDiv=document.createElement('div');
+    const searchInput=document.createElement('input'); searchInput.type='text'; searchInput.placeholder='Search…';
+    const searchBtn=document.createElement('button'); searchBtn.textContent='Search';
+    searchBtn.addEventListener('click',()=>{ const q=searchInput.value.trim(); if(q) showSearchResults(q); });
+    searchInput.addEventListener('keydown',(e)=>{ if(e.key==='Enter'){ e.preventDefault(); searchBtn.click(); } });
+    searchDiv.appendChild(searchInput); searchDiv.appendChild(searchBtn); searchDiv.style.marginBottom='.5rem';
     const ul = document.createElement('ul');
     uniq.forEach(p=>{
       const li=document.createElement('li');
@@ -862,7 +882,7 @@ async function showPrompts(){
       const btn=document.createElement('button'); btn.textContent='Smazat'; btn.addEventListener('click', async (e)=>{ e.preventDefault(); e.stopPropagation(); await deletePrompt(p); });
       li.appendChild(a); li.appendChild(btn); ul.appendChild(li);
     });
-    promptsList.innerHTML=''; promptsList.appendChild(ul); promptsOverlay.classList.remove('hidden');
+    promptsList.innerHTML=''; promptsList.appendChild(searchDiv); promptsList.appendChild(ul); promptsOverlay.classList.remove('hidden');
   }catch(err){ showStatus('Chyba při čtení promptů'); }
 }
 if (promptsBtn) promptsBtn.addEventListener('click', showPrompts);
