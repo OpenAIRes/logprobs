@@ -368,12 +368,20 @@ async function getCompletionById(id) {
   const history = await idbGetAll();
   const currPromptArr = entry?.prompt?.logprobs?.tokens || [];
 
+  function toPlainTokens(arr){ return (arr||[]).map(t=>typeof t==='string'?t:(t&&typeof t.token==='string'?t.token:String(t))); }
+
   function mapInSource(src){
     if (!src) return null;
     const sp  = (src?.prompt?.logprobs?.tokens) || [];
     const scl = src?.choices?.[0]?.logprobs || null;
-    const sct = scl?.tokens || [];
-    const stop= scl?.top_logprobs || [];
+    const sct = Array.isArray(scl?.tokens) ? scl.tokens
+               : Array.isArray(scl?.content) ? scl.content.map(t => t.token)
+               : [];
+    const stop= Array.isArray(scl?.top_logprobs) ? scl.top_logprobs
+               : Array.isArray(scl?.content) ? scl.content.map(t => {
+                    const o={}; (t.top_logprobs||[]).forEach(tt=>o[tt.token]=tt.logprob); return o;
+                 })
+               : [];
     if (!scl || sct.length === 0) return null;
     const baseIdx = sp.length;
 
@@ -396,7 +404,7 @@ async function getCompletionById(id) {
         let ok = true;
         for (let k = 0; k < currPromptArr.length; k++){
           const want = currPromptArr[k];
-          const idx  = (j - baseIdx) + k; // index do completion části
+          const idx  = (j - baseIdx) + k;
           const actual = sct[idx];
           const topObj = stop[idx] || {};
           if (!(actual === want || Object.prototype.hasOwnProperty.call(topObj, want))) { ok = false; break; }
@@ -419,43 +427,113 @@ async function getCompletionById(id) {
     entry.previous_response_id = mapping.src.id; await idbPut(entry); source = mapping.src;
   } else if (mapping){ source = mapping.src; }
 
-  const srcPrompt     = (source?.prompt?.logprobs?.tokens) || [];
-  const srcCompLog    = source?.choices?.[0]?.logprobs || null;
-  const srcCompTokens = srcCompLog?.tokens || [];
-  const srcCompLPs    = srcCompLog?.token_logprobs || [];
-  const srcTopArr     = srcCompLog?.top_logprobs || [];
-  const baseIdx       = mapping ? mapping.baseIdx : (source ? srcPrompt.length : 0);
-  const subseqStart   = mapping ? mapping.start   : -1;
+  // ---- Prefetch zdrojů dle IDS pro prompt tokeny ----
+  const promptIds = Array.isArray(entry?.prompt?.logprobs?.ids) ? entry.prompt.logprobs.ids : [];
+  const uniqueIds = Array.from(new Set(
+    promptIds.flat().filter(id => typeof id === 'string' && id !== 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O')
+  ));
+  const srcEntriesArr = await Promise.all(uniqueIds.map(async (cid) => {
+    try { return { id: cid, entry: await idbGet(cid) }; } catch { return { id: cid, entry: null }; }
+  }));
+  const srcMap = Object.create(null);
+  for (const { id: cid, entry: e } of srcEntriesArr) if (e) srcMap[cid] = e;
 
-  const promptTokensUI = (entry.prompt.logprobs.tokens||[]).map((t, i) => {
-    let logprob = entry.prompt.logprobs.token_logprobs?.[i] ?? null;
-    let top = entry.prompt.logprobs.top_logprobs?.[i] ?? null;
-    if ((!top || Object.keys(top).length === 0) && source) {
-      let mappedJ = null;
-      if (subseqStart >= 0) {
-        const abs = subseqStart + i; if (abs >= baseIdx) mappedJ = abs - baseIdx;
-      }
-      if (mappedJ === null && i >= baseIdx) mappedJ = i - baseIdx;
-      if (mappedJ !== null && mappedJ >= 0 && mappedJ < srcCompTokens.length) {
-        top = srcTopArr[mappedJ] || {};
-        if (logprob == null) {
-          if (srcCompTokens[mappedJ] === t) logprob = srcCompLPs[mappedJ];
-          else if (top && Object.prototype.hasOwnProperty.call(top, t)) logprob = top[t];
-        }
-      }
+  // Helper: vytáhne top_logprobs pro „další token“ u kandidáta pro token promptu i
+  function extractNextTokenLogprobsFromCandidate(candEntry, i /* index tokenu v target promptu */) {
+    if (!candEntry) return null;
+
+    const cPromptToks = Array.isArray(candEntry?.prompt?.logprobs?.tokens) ? candEntry.prompt.logprobs.tokens : [];
+    const cLP = candEntry?.choices?.[0]?.logprobs || null;
+
+    let cCompTokens = Array.isArray(cLP?.tokens) ? cLP.tokens : null;
+    let cTopArr     = Array.isArray(cLP?.top_logprobs) ? cLP.top_logprobs : null;
+    let cTokLPs     = Array.isArray(cLP?.token_logprobs) ? cLP.token_logprobs : null;
+
+    // chat.completion fallback
+    if ((!cCompTokens || !cTopArr) && Array.isArray(cLP?.content)) {
+      cCompTokens = cLP.content.map(t => t.token);
+      cTopArr     = cLP.content.map(t => {
+        const o = Object.create(null);
+        (t.top_logprobs || []).forEach(tt => { o[tt.token] = tt.logprob; });
+        return o;
+      });
+      cTokLPs     = cLP.content.map(t => t.logprob);
     }
-    if (!top) top = {};
-    const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log })).sort((a,b)=>b.logprob-a.logprob);
-    return { token: t, logprob, top_logprobs: sorted };
+
+    if (!cCompTokens || !cTopArr) return null;
+
+    const k = i - cPromptToks.length; // relativní index v completion kandidáta
+    if (k < 0 || k >= cCompTokens.length) return null;
+
+    const topObj = cTopArr[k] || {};
+    const sorted = Object.entries(topObj)
+      .map(([tok, log]) => ({ token: tok, logprob: log }))
+      .sort((a,b) => b.logprob - a.logprob);
+
+    return {
+      nextToken: cCompTokens[k],
+      nextLogprob: Array.isArray(cTokLPs) ? cTokLPs[k] : null,
+      top_logprobs_sorted: sorted,
+      top_logprobs_obj: topObj
+    };
+  }
+
+  // ---- Sestavení PROMPT tokenů s alternativami z IDS (fallback na původní mapování, když nic není) ----
+  const promptRawTokens = entry?.prompt?.logprobs?.tokens || [];
+  const promptTokensUI = promptRawTokens.map((t, i) => {
+    const idList = Array.isArray(promptIds[i]) ? promptIds[i] : [];
+
+    let chosen = null;
+    for (const cid of idList) {
+      if (cid === 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O') continue; // initial completion nemá logprobs
+      const src = srcMap[cid];
+      const res = extractNextTokenLogprobsFromCandidate(src, i);
+      if (res) { chosen = { src, res }; break; } // použij první použitelný zdroj dle pořadí
+    }
+
+    if (chosen) {
+      const { res } = chosen;
+      let lpForT = null;
+      if (res.nextToken === t) {
+        lpForT = res.nextLogprob;
+      } else if (res.top_logprobs_obj && Object.prototype.hasOwnProperty.call(res.top_logprobs_obj, t)) {
+        lpForT = res.top_logprobs_obj[t];
+      }
+      return { token: t, logprob: lpForT, top_logprobs: res.top_logprobs_sorted };
+    }
+
+    // fallback: bez alternativ
+    return { token: t, logprob: null, top_logprobs: [] };
   });
 
-  const completionTokensUI = (entry.choices?.[0]?.logprobs?.tokens||[]).map((t, i) => {
-    const top = entry.choices[0].logprobs.top_logprobs?.[i] || {};
-    const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log })).sort((a,b)=>b.logprob-a.logprob);
-    return { token: t, logprob: entry.choices[0].logprobs.token_logprobs?.[i], top_logprobs: sorted };
+  // ---- Sestavení COMPLETION tokenů (beze změny) ----
+  const scl = entry?.choices?.[0]?.logprobs || null;
+  let compTokens = Array.isArray(scl?.tokens) ? scl.tokens
+                 : Array.isArray(scl?.content) ? scl.content.map(t => t.token)
+                 : [];
+  let compTokLPs = Array.isArray(scl?.token_logprobs) ? scl.token_logprobs
+                 : Array.isArray(scl?.content) ? scl.content.map(t => t.logprob)
+                 : [];
+  let compTopArr = Array.isArray(scl?.top_logprobs) ? scl.top_logprobs
+                 : Array.isArray(scl?.content) ? scl.content.map(t => {
+                      const o={}; (t.top_logprobs||[]).forEach(tt=>o[tt.token]=tt.logprob); return o;
+                   })
+                 : [];
+
+  const completionTokensUI = compTokens.map((t, i) => {
+    const top = compTopArr[i] || {};
+    const sorted = Object.entries(top).map(([tok, log]) => ({ token: tok, logprob: log }))
+                                     .sort((a,b) => b.logprob - a.logprob);
+    return { token: t, logprob: compTokLPs[i], top_logprobs: sorted };
   });
 
-  return { promptTokens: entry.prompt.logprobs.tokens||[], completionTokens: entry.choices?.[0]?.logprobs?.tokens||[], allTokens: promptTokensUI.concat(completionTokensUI) };
+  // ---- Vrácení sjednoceného pohledu (prompt + completion) pro renderer ----
+  const allTokens = promptTokensUI.concat(completionTokensUI);
+  return {
+    promptTokens: toPlainTokens(promptRawTokens),
+    completionTokens: toPlainTokens(compTokens),
+    allTokens
+  };
 }
 
 /* Removed stray duplicate block that broke script execution */
