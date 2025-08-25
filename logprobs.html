@@ -930,7 +930,7 @@ async function repairLinks(){
       for (const cand of entries){
         if (cand.entry.id === target.entry.id) continue;
         if (cand.created >= target.created) continue;
-        if (cand.promptTokens.length >= ptoks.length) continue;
+        if (cand.promptTokens.length >= i+1) continue;
         const full = cand.fullTokens;
         if (full.length < prefix.length) continue;
         let ok = true;
