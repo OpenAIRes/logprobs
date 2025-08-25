@@ -925,19 +925,21 @@ async function repairLinks(){
         ids.push([INITIAL_ID]);
         continue;
       }
-      const prefix = ptoks.slice(0, i+1);
+      const prefix = ptoks.slice(0, i);
       const matches = [];
       for (const cand of entries){
         if (cand.entry.id === target.entry.id) continue;
         if (cand.created >= target.created) continue;
-        if (cand.promptTokens.length >= ptoks.length) continue;
+        if (cand.promptTokens.length >= i+1) continue;
         const full = cand.fullTokens;
-        if (full.length < prefix.length) continue;
+        if (full.length <= prefix.length) continue;
         let ok = true;
         for (let j=0; j<prefix.length; j++){
           if (full[j] !== prefix[j]) { ok = false; break; }
         }
-        if (ok) matches.push({id: cand.entry.id, len: cand.promptTokens.length});
+        if (!ok) continue;
+        if (full[prefix.length] !== ptoks[i]) continue;
+        matches.push({id: cand.entry.id, len: cand.promptTokens.length});
       }
       matches.sort((a,b)=> b.len - a.len);
       ids.push(matches.map(m=>m.id));
