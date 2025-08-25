@@ -890,7 +890,7 @@ if (promptsClose) promptsClose.addEventListener('click', ()=> promptsOverlay.cla
 if (promptsOverlay) promptsOverlay.addEventListener('click', (e)=>{ if(e.target===promptsOverlay) promptsOverlay.classList.add('hidden'); });
 window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') promptsOverlay.classList.add('hidden'); });
 
-// =========== REPAIR PREVIOUS_RESPONSE_ID LINKS ===========
+// =========== REPAIR PROMPT TOKEN IDS ==========
 async function repairLinks(){
   const history = await idbGetAll();
   if (!Array.isArray(history) || history.length === 0){
@@ -898,174 +898,58 @@ async function repairLinks(){
     return;
   }
 
-  const MAX_TARGET = 4096;
+  const INITIAL_ID = 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O';
+  const getPromptTokens = (e)=> Array.isArray(e?.prompt?.logprobs?.tokens) ? e.prompt.logprobs.tokens : [];
+  const getCompletionTokens = (e)=>{
+    const lp = e?.choices?.[0]?.logprobs;
+    if (!lp) return [];
+    if (Array.isArray(lp.tokens)) return lp.tokens;
+    if (Array.isArray(lp.content)) return lp.content.map(t=>t.token);
+    return [];
+  };
 
-  const getTarget = (e)=> Number(e?.meta?.target_max_tokens ?? e?.max_tokens ?? 0);
-  const isMaxTargetStrict = (e)=> getTarget(e) === MAX_TARGET;
-  const isMaxTargetHeuristic = (e)=> isMaxTargetStrict(e) || getTarget(e) >= 1024 || Number(e?.usage?.completion_tokens ?? 0) >= 512;
+  const entries = history.map(e=>({
+    entry: e,
+    promptTokens: getPromptTokens(e),
+    fullTokens: getPromptTokens(e).concat(getCompletionTokens(e)),
+    created: e.created || 0
+  })).sort((a,b)=> a.created - b.created);
 
-  const getPromptTokens = (e)=> (e?.prompt?.logprobs?.tokens) || [];
-  const getPromptText = (e)=> extractPromptTextSafe(e);
+  for (const target of entries){
+    const ptoks = target.promptTokens;
+    if (!ptoks.length) continue;
 
-  const indexTok = new Map();
-  const indexTxt = new Map();
-  for (const e of history){
-    const ptoks = getPromptTokens(e);
-    const ptxt  = getPromptText(e);
-    const keyTok = JSON.stringify(ptoks);
-    if (!indexTok.has(keyTok)) indexTok.set(keyTok, []);
-    indexTok.get(keyTok).push(e);
-    const keyTxt = ptxt;
-    if (!indexTxt.has(keyTxt)) indexTxt.set(keyTxt, []);
-    indexTxt.get(keyTxt).push(e);
-  }
-
-  const parents = [...history].sort((a,b)=> (a.created||0)-(b.created||0));
-
-  const matchedAltSet = new Set();
-  const matchedSameSet = new Set();
-  const matchedContFullSet = new Set();
-  const matchedContPromptMaxSet = new Set();
-
-  let fixedAlt = 0, okAlt = 0; const okAltIds = [];
-  let fixedSame = 0, okSame = 0; const okSameIds = [];
-  let fixedCont = 0, okCont = 0; const okContIds = [];
-  let fixedContPrompt = 0, okContPrompt = 0; const okContPromptIds = [];
-
-  for (const p of parents){
-    const lp = p?.choices?.[0]?.logprobs;
-    if (!lp || !Array.isArray(lp.tokens) || !Array.isArray(lp.top_logprobs)) continue;
-
-    const sp  = getPromptTokens(p);
-    const sct = lp.tokens;
-    const stop= lp.top_logprobs;
-
-    for (let j=0; j<sct.length; j++){
-      const prefix = sp.concat(sct.slice(0,j));
-      const chosenTok = sct[j];
-
-      const topObj = stop[j] || {};
-      for (const altTok of Object.keys(topObj)){
-        const candTokArr = prefix.concat([altTok]);
-        const keyTok = JSON.stringify(candTokArr);
-        const childsTok = indexTok.get(keyTok) || [];
-        for (const c of childsTok){
-          if (altTok === chosenTok){
-            if (matchedSameSet.has(c.id)) continue;
-            matchedSameSet.add(c.id);
-            if (c.previous_response_id === p.id){ okSame++; okSameIds.push(c.id); }
-            else { c.previous_response_id = p.id; fixedSame++; }
-          } else {
-            if (matchedAltSet.has(c.id)) continue;
-            matchedAltSet.add(c.id);
-            if (c.previous_response_id === p.id){ okAlt++; okAltIds.push(c.id); }
-            else { c.previous_response_id = p.id; fixedAlt++; }
-          }
+    const ids = [];
+    for (let i=0; i<ptoks.length; i++){
+      if (i === 0){
+        ids.push([INITIAL_ID]);
+        continue;
+      }
+      const prefix = ptoks.slice(0, i+1);
+      const matches = [];
+      for (const cand of entries){
+        if (cand.entry.id === target.entry.id) continue;
+        if (cand.created >= target.created) continue;
+        if (cand.promptTokens.length >= ptoks.length) continue;
+        const full = cand.fullTokens;
+        if (full.length < prefix.length) continue;
+        let ok = true;
+        for (let j=0; j<prefix.length; j++){
+          if (full[j] !== prefix[j]) { ok = false; break; }
         }
+        if (ok) matches.push({id: cand.entry.id, len: cand.promptTokens.length});
       }
-
-      const candTokArrSame = prefix.concat([chosenTok]);
-      const keyTokSame = JSON.stringify(candTokArrSame);
-      const childsSame = indexTok.get(keyTokSame) || [];
-      for (const c of childsSame){
-        if (matchedSameSet.has(c.id)) continue;
-        matchedSameSet.add(c.id);
-        if (c.previous_response_id === p.id){ okSame++; okSameIds.push(c.id); }
-        else { c.previous_response_id = p.id; fixedSame++; }
-      }
+      matches.sort((a,b)=> b.len - a.len);
+      ids.push(matches.map(m=>m.id));
     }
-
-    const fullTokArr = sp.concat(sct);
-    const keyTokFull = JSON.stringify(fullTokArr);
-    const keyTxtFull = fullTokArr.join('');
-    const listTokFull = indexTok.get(keyTokFull) || [];
-    const listTxtFull = indexTxt.get(keyTxtFull) || [];
-
-    const seenFull = new Set();
-    const contsFull = [];
-    for (const e of listTokFull){ if(!seenFull.has(e.id)){ seenFull.add(e.id); contsFull.push(e); } }
-    for (const e of listTxtFull){ if(!seenFull.has(e.id)){ seenFull.add(e.id); contsFull.push(e); } }
-
-    for (const c of contsFull){
-      if (!isMaxTargetHeuristic(c)) continue;
-      if (matchedContFullSet.has(c.id)) continue;
-      matchedContFullSet.add(c.id);
-      if (c.previous_response_id === p.id){ okCont++; okContIds.push(c.id); }
-      else { c.previous_response_id = p.id; fixedCont++; }
-    }
-
-    const keyTokPromptOnly = JSON.stringify(sp);
-    const keyTxtPromptOnly = sp.join('');
-    const listTokPrompt = indexTok.get(keyTokPromptOnly) || [];
-    const listTxtPrompt = indexTxt.get(keyTxtPromptOnly) || [];
-
-    const seenPrompt = new Set();
-    const contsPrompt = [];
-    for (const e of listTokPrompt){ if(!seenPrompt.has(e.id)){ seenPrompt.add(e.id); contsPrompt.push(e); } }
-    for (const e of listTxtPrompt){ if(!seenPrompt.has(e.id)){ seenPrompt.add(e.id); contsPrompt.push(e); } }
-
-    for (const c of contsPrompt){
-      if (c.id === p.id) continue;
-      if (!isMaxTargetHeuristic(c)) continue;
-      const hasComp = Array.isArray(c?.choices?.[0]?.logprobs?.tokens) && c.choices[0].logprobs.tokens.length > 0;
-      if (!hasComp) continue;
-      if (matchedContPromptMaxSet.has(c.id)) continue;
-      matchedContPromptMaxSet.add(c.id);
-      if (c.previous_response_id === p.id){ okContPrompt++; okContPromptIds.push(c.id); }
-      else { c.previous_response_id = p.id; fixedContPrompt++; }
-    }
+    if (!target.entry.prompt) target.entry.prompt = {};
+    if (!target.entry.prompt.logprobs) target.entry.prompt.logprobs = {};
+    target.entry.prompt.logprobs.ids = ids;
   }
 
   await idbBulkPut(history);
   await updateSavedCount();
-
-  const total = history.length;
-  const rootIds = history.filter(e => !e.previous_response_id).map(e=>e.id);
-  const rootsSet = new Set(rootIds);
-
-  const covered = new Set([
-    ...rootIds,
-    ...matchedAltSet,
-    ...matchedSameSet,
-    ...matchedContFullSet,
-    ...matchedContPromptMaxSet
-  ]);
-  const unmatchedCount = Math.max(0, total - covered.size);
-
-  const inter = (A,B)=>{ let c=0; A.forEach(x=>{ if(B.has(x)) c++; }); return c; };
-  const inter3 = (A,B,C)=>{ let c=0; A.forEach(x=>{ if(B.has(x) && C.has(x)) c++; }); return c; };
-
-  const inventory = {
-    total,
-    covered: covered.size,
-    roots: { count: rootIds.length, ids: rootIds },
-    alt_children: { count: matchedAltSet.size },
-    same_children: { count: matchedSameSet.size },
-    cont_full_max: { count: matchedContFullSet.size },
-    cont_prompt_only_max: { count: matchedContPromptMaxSet.size },
-    overlaps: {
-      alt_and_same: inter(matchedAltSet, matchedSameSet),
-      alt_and_full: inter(matchedAltSet, matchedContFullSet),
-      alt_and_prompt: inter(matchedAltSet, matchedContPromptMaxSet),
-      same_and_full: inter(matchedSameSet, matchedContFullSet),
-      same_and_prompt: inter(matchedSameSet, matchedContPromptMaxSet),
-      full_and_prompt: inter(matchedContFullSet, matchedContPromptMaxSet),
-      alt_same_prompt: inter3(matchedAltSet, matchedSameSet, matchedContPromptMaxSet)
-    },
-    unmatched: { count: unmatchedCount }
-  };
-
-  const report = {
-    inventory,
-    alt: { found_unique: matchedAltSet.size, fixed: fixedAlt, ok: okAlt, ok_ids: okAltIds },
-    same: { found_unique: matchedSameSet.size, fixed: fixedSame, ok: okSame, ok_ids: okSameIds },
-    cont_full_max: { found_unique: matchedContFullSet.size, fixed: fixedCont, ok: okCont, ok_ids: okContIds },
-    cont_prompt_only_max: { found_unique: matchedContPromptMaxSet.size, fixed: fixedContPrompt, ok: okContPrompt, ok_ids: okContPromptIds }
-  };
-
-  if (rawPre) rawPre.textContent = JSON.stringify(report, null, 2);
-  if (rawOverlay) rawOverlay.classList.remove('hidden');
-  showStatus(`Repair: ALT(${matchedAltSet.size}→fixed ${fixedAlt}, ok ${okAlt}) · SAME(${matchedSameSet.size}→fixed ${fixedSame}, ok ${okSame}) · FULL(${matchedContFullSet.size}→fixed ${fixedCont}, ok ${okCont}) · PROMPT(${matchedContPromptMaxSet.size}→fixed ${fixedContPrompt}, ok ${okContPrompt})`);
+  showStatus('Repair: doplněna ids pro tokeny promptu');
 }
 
 if (repairBtn) repairBtn.addEventListener('click', repairLinks);
