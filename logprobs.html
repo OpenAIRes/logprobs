@@ -224,8 +224,10 @@ async function loadTokens() {
       throw new Error("Unsupported JSON format");
     }
 
-    const cnt = await idbCount();
-    if (cnt === 0) { await idbPut(firstEntry); await updateSavedCount(); }
+    // Ulož aktuální položku do IndexedDB, aby bylo možné zobrazit její raw data,
+    // i když už existují starší záznamy v historii.
+    await idbPut(firstEntry);
+    await updateSavedCount();
 
     renderTokens(allTokens);
     exportBtn.hidden = false;
