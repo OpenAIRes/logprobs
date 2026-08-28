@@ -10,12 +10,16 @@ const status = document.querySelector("#status");
 const copyPrompt = document.querySelector("#copy-prompt");
 const refreshLogButton = document.querySelector("#refresh-log");
 const logTable = document.querySelector("#log-table");
+const logFilterNote = document.querySelector("#log-filter-note");
 const submitButton = form.querySelector("button[type='submit']");
 
 const PARAM_NAMES = ["temperature", "topP", "maxTokens", "frequencyPenalty", "presencePenalty"];
 
 /** Filled from /api/backends so the server stays the single source of truth. */
 let backends = {};
+
+/** Every row from the last /api/log fetch; the table renders a filtered view. */
+let logRows = [];
 
 const META_INSTRUCTION = "Generate a variation of the following instruction while keeping the semantic meaning.";
 const BASE_RESAMPLING_PROMPT = [
@@ -254,7 +258,31 @@ function responseSummary(entry) {
   return parts.join(" · ");
 }
 
-function renderLog(entries) {
+/**
+ * The table follows the mode switch: in Meta mode only meta runs, in Custom
+ * mode only custom ones. The seed stays in both — it is the shared template
+ * every run descends from, not a run of either mode.
+ */
+function visibleLogRows() {
+  const mode = selectedMode();
+  return logRows.filter((row) => row.mode === mode || row.mode === "seed");
+}
+
+function renderLog() {
+  const mode = selectedMode();
+  const entries = visibleLogRows();
+  const runs = entries.filter((row) => row.mode !== "seed").length;
+  const hidden = logRows.filter((row) => row.mode !== mode && row.mode !== "seed").length;
+
+  logFilterNote.textContent = hidden
+    ? `${runs} run${runs === 1 ? "" : "s"} in ${mode} mode · ${hidden} hidden from the other mode`
+    : `${runs} run${runs === 1 ? "" : "s"} in ${mode} mode`;
+
+  if (!entries.length) {
+    logTable.innerHTML = '<tr><td colspan="7"><span class="muted">Nothing logged yet.</span></td></tr>';
+    return;
+  }
+
   logTable.innerHTML = entries.map((entry) => `
     <tr>
       <td>
@@ -291,7 +319,8 @@ function renderLog(entries) {
 async function loadLog() {
   try {
     const json = await getJson("/api/log");
-    renderLog(json.promptRows || json.entries || []);
+    logRows = json.promptRows || json.entries || [];
+    renderLog();
   } catch (error) {
     logTable.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
   }
@@ -309,6 +338,7 @@ function escapeHtml(value) {
 form.addEventListener("input", (event) => {
   if (event.target.name === "mode") {
     instructionInput.disabled = selectedMode() === "meta";
+    renderLog();
   }
   if (event.target.name === "backend") {
     applyBackend();

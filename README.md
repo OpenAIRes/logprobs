@@ -80,6 +80,12 @@ i z toho reasoning cast), `finish_reason` a pocet variant, ktere ten jeden
 request vratil. Token usage plati na cely request, takze pri `n>1` maji vsechny
 radky teze cislo — proto ten stitek `request of N`.
 
+Tabulka se ridi prepinacem modu: v modu `Meta` vidis jen meta behy, v modu
+`Vlastni` jen custom. Seed radek je v obou, protoze to je sablona, ze ktere
+oba mody vychazeji, ne beh jednoho z nich. Pocet skrytych radku je pod
+nadpisem. Filtruje se na klientovi z jednoho fetche, prepnuti tedy neposila
+novy dotaz.
+
 Nahled promptu a request body bez API volani:
 
 ```powershell
