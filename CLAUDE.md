@@ -54,14 +54,17 @@ Q: [Q2]
 A: [A2]
 ```
 
-**Resample** (iterative APE, Fig. 3):
+**Resample** (iterative APE, Table 5 „Resample Instruction" + Fig. 3):
 
 ```
 Generate a variation of the following instruction while keeping the semantic meaning.
 
 Input: [INSTRUCTION]
-Output: <COMPLETE>
+Output:<COMPLETE>
 ```
+
+Ověřeno 28. 8. 2026 proti PDF (`arxiv.org/pdf/2211.01910`, `pdftotext -layout`,
+Table 5 je na str. 19). Detaily k té verifikaci níže v §1.1.
 
 **Vyhodnocení** (zero-shot; few-shot přidá před testovací vstup další `Input:/Output:` páry):
 
@@ -80,6 +83,62 @@ Instruction: Answer the following question.
 Q: [INPUT]
 A: Let's <INSERT>. [OUTPUT]
 ```
+
+### 1.1 Verifikace resample šablony proti PDF (28. 8. 2026)
+
+Šablona v repu není (viz níže), takže jediný zdroj pravdy je článek. Ověřeno
+tedy přímo proti PDF, ne proti téhle předávce.
+
+**Jak je Table 5 vytištěná** (`pdftotext -layout`, str. 19):
+
+```
+Resample Instruction  Generate a variation of the following instruction while keeping the semantic
+                      meaning.
+
+                      Input: [INSTRUCTION]\nOutput:<COMPLETE>
+```
+
+První dva řádky jsou jen zalomení jedné věty. Po dekódování a odebrání
+`<COMPLETE>` (značka místa doplnění, ne text promptu):
+
+```
+"Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+```
+
+`buildResamplingPrompt('[INSTRUCTION]')` v `resample-prompt.mjs` vrací **bajt
+za bajt totéž**. Věta má 85 znaků v obou.
+
+**Pozor: Table 5 zapisuje newlines nekonzistentně.** `\n` uvnitř řádku píše
+explicitně, ale zlomy mezi bloky nechává typograficky. Nedá se z ní tedy přímo
+vyčíst, jestli je mezi „meaning." a „Input:" jeden newline nebo dva. Kalibrace
+přes řádek, u kterého skutečnou odpověď známe z kódu:
+
+| Řádek Table 5 | jak je vytištěný | skutečný kód |
+|---|---|---|
+| Zero-shot Evaluation | `Instruction: [INSTRUCTION]` ⏎ `Input: [ ]\nOutput:<COMPLETE>` | `Instruction: [PROMPT]\n\nInput: [INPUT]\nOutput: [OUTPUT]` |
+
+Table 5 tedy zobrazuje `\n\n` jako pouhý zlom řádku — newlines **podreprezentuje**,
+ne nadreprezentuje. Když je u resample řádku vytištěný celý prázdný řádek, je to
+nejméně `\n\n`. Potvrzuje to i Fig. 3, kde je v rámečku promptu mezi „meaning."
+a „Input: write the antonym of the word." taky mezera. `\n\n` je tedy dobře
+podložené čtení, ne odhad.
+
+**Rozpor uvnitř článku, o jednu mezeru:**
+
+- Table 5: `Output:<COMPLETE>` — bez mezery
+- Fig. 3: `Output: <COMPLETE>` — s mezerou
+
+Table 5 je v tom konzistentní napříč všemi řádky (`Output:<COMPLETE>`,
+`The instruction was<COMPLETE>`, `to<INSERT>`), takže výjimka je Fig. 3.
+Ostatní šablony výše v této sekci mají v předávce zapsané `Output: <COMPLETE>`
+s mezerou — to je znění Fig. 3, ne Table 5.
+
+Na kód to nemá vliv v žádném čtení. Posílá se `Output:` a tím prompt končí. Podle
+Table 5 je to přesná shoda; podle Fig. 3 by prompt končil `Output: ` s mezerou,
+kterou ale `llm.py:156` (`.strip()`) stejně odstraní. Obě čtení se sbíhají.
+
+Na okraj: Fig. 3 používá jako příklad `write the antonym of the word.`, což je
+default v UI i v README.
 
 ### Znění v kódu (liší se od článku!)
 
