@@ -27,8 +27,14 @@ export const BACKENDS = {
       maxTokens: 50,
       frequencyPenalty: 0,
       presencePenalty: 0,
+      // Not from the paper. Purely observational — it cannot change the tokens
+      // that get generated — and it is what makes P(sequence) exact instead of
+      // estimated from repeated sampling. Set it to "off" for a request body
+      // literally identical to instruction_induction.yaml.
+      logprobs: 5,
     },
-    supported: ["temperature", "topP", "maxTokens", "frequencyPenalty", "presencePenalty"],
+    supported: ["temperature", "topP", "maxTokens", "frequencyPenalty", "presencePenalty", "logprobs"],
+    maxLogprobs: 20,
     // One request returns n completions, exactly like the reference code.
     supportsN: true,
     retiresOn: COMPLETIONS_DEADLINE,
@@ -43,6 +49,9 @@ export const BACKENDS = {
     // Verified 2026-08-28 against gpt-5.5: temperature and top_p are refused
     // outright ("Unsupported parameter"), not ignored — only the default
     // temperature of 1 is accepted, which makes sending it pointless.
+    // logprobs is refused too, in every form the Responses API offers
+    // (top_logprobs, include: [message.output_text.logprobs], both together):
+    // "logprobs are not supported with reasoning models."
     supported: ["maxTokens"],
     // No `n`; variations need one request each.
     supportsN: false,
@@ -66,6 +75,7 @@ const WIRE_NAMES = {
     maxTokens: "max_tokens",
     frequencyPenalty: "frequency_penalty",
     presencePenalty: "presence_penalty",
+    logprobs: "logprobs",
   },
   responses: {
     temperature: "temperature",
@@ -131,6 +141,14 @@ export function minMaxTokens(backendId) {
   return getBackend(backendId).minMaxTokens ?? 1;
 }
 
+/**
+ * Ceiling on alternatives per token. The endpoint clamps silently above this
+ * rather than erroring, so asking for more would quietly return fewer.
+ */
+export function maxLogprobs(backendId) {
+  return getBackend(backendId).maxLogprobs ?? 0;
+}
+
 export function buildOpenAIRequestBody({ backend: backendId = DEFAULT_BACKEND, prompt, model, n = 1, params = {} } = {}) {
   const backend = getBackend(backendId);
   const wire = WIRE_NAMES[backend.id];
@@ -172,6 +190,29 @@ function extractResponsesText(responseJson) {
 }
 
 /**
+ * P(sequence) is the product of the per-token probabilities, so summing the
+ * token logprobs gives it exactly — no sampling needed. Returns nulls when
+ * logprobs were not requested.
+ *
+ * Note this is the raw model distribution: logprobs are unaffected by
+ * temperature and top_p (verified 2026-08-28 — identical values across
+ * temperature 0/0.9/1/2 and top_p 0.1/0.9/1). To get the probability under
+ * the paper's sampling config, both transforms have to be re-applied.
+ */
+function sequenceProbability(logprobs) {
+  const tokenLogprobs = logprobs?.token_logprobs;
+  if (!Array.isArray(tokenLogprobs) || !tokenLogprobs.length) {
+    return { logprob: null, probability: null };
+  }
+  if (tokenLogprobs.some((value) => typeof value !== "number")) {
+    return { logprob: null, probability: null };
+  }
+
+  const logprob = tokenLogprobs.reduce((total, value) => total + value, 0);
+  return { logprob, probability: Math.exp(logprob) };
+}
+
+/**
  * `raw` is what the API returned verbatim. The reference implementation does
  * not strip completions, so leading whitespace after `Output:` is part of the
  * record; `text` is the trimmed form used for display.
@@ -184,10 +225,21 @@ export function extractVariations(backendId, responseJson) {
       .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
     return choices.map((choice) => {
       const raw = typeof choice.text === "string" ? choice.text : "";
-      return { raw, text: raw.trim(), finishReason: choice.finish_reason ?? null };
+      return {
+        raw,
+        text: raw.trim(),
+        finishReason: choice.finish_reason ?? null,
+        ...sequenceProbability(choice.logprobs),
+      };
     });
   }
 
   const raw = extractResponsesText(responseJson);
-  return [{ raw, text: raw.trim(), finishReason: responseJson.status ?? null }];
+  return [{
+    raw,
+    text: raw.trim(),
+    finishReason: responseJson.status ?? null,
+    logprob: null,
+    probability: null,
+  }];
 }

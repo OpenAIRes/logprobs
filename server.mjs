@@ -15,6 +15,7 @@ import {
   DEFAULT_BACKEND,
   getBackend,
   getInstructionForMode,
+  maxLogprobs,
   minMaxTokens,
   planRequests,
   RESAMPLING_INSTRUCTION,
@@ -54,6 +55,7 @@ const PARAM_LIMITS = {
   maxTokens: { min: 1, max: 1000, integer: true, label: "Max tokens" },
   frequencyPenalty: { min: -2, max: 2, integer: false, label: "Frequency penalty" },
   presencePenalty: { min: -2, max: 2, integer: false, label: "Presence penalty" },
+  logprobs: { min: 0, max: 20, integer: true, label: "Logprobs" },
 };
 
 /**
@@ -108,6 +110,15 @@ function normalizeOptions(body) {
     throw new Error(`Max tokens must be at least ${floor} for the ${backend.id} backend.`);
   }
 
+  // The endpoint clamps above its ceiling instead of erroring, so refuse the
+  // request rather than silently returning fewer alternatives than asked for.
+  // A backend that cannot do logprobs at all is left to the unsupported-param
+  // report instead, which says so without pretending a ceiling of 0 is a limit.
+  const ceiling = maxLogprobs(backend.id);
+  if (ceiling > 0 && params.logprobs !== undefined && params.logprobs > ceiling) {
+    throw new Error(`Logprobs must be at most ${ceiling} for the ${backend.id} backend.`);
+  }
+
   return {
     mode,
     instruction,
@@ -144,6 +155,7 @@ async function handleApi(request, response) {
           supported: backend.supported,
           supportsN: backend.supportsN,
           minMaxTokens: minMaxTokens(backend.id),
+          maxLogprobs: maxLogprobs(backend.id),
           caveats: backend.caveats ?? [],
           retiresOn: backend.retiresOn,
         })),
@@ -237,6 +249,8 @@ async function handleApi(request, response) {
             prompt: variation.text,
             rawPrompt: variation.raw,
             finishReason: variation.finishReason,
+            logprob: variation.logprob ?? null,
+            probability: variation.probability ?? null,
             parentPrompt: prompt,
             parentInstruction: options.instruction,
           })),

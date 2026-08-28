@@ -13,7 +13,7 @@ const logTable = document.querySelector("#log-table");
 const logFilterNote = document.querySelector("#log-filter-note");
 const submitButton = form.querySelector("button[type='submit']");
 
-const PARAM_NAMES = ["temperature", "topP", "maxTokens", "frequencyPenalty", "presencePenalty"];
+const PARAM_NAMES = ["temperature", "topP", "maxTokens", "frequencyPenalty", "presencePenalty", "logprobs"];
 
 /** Filled from /api/backends so the server stays the single source of truth. */
 let backends = {};
@@ -213,9 +213,12 @@ function renderResults(variations) {
   results.innerHTML = variations.map((variation, index) => {
     const text = typeof variation === "string" ? variation : variation.text;
     const truncated = typeof variation === "object" && variation.finishReason === "length";
+    const logprob = typeof variation === "object" && typeof variation.logprob === "number"
+      ? ` <span class="score">logprob ${variation.logprob.toFixed(4)} · p=${variation.probability.toExponential(3)}</span>`
+      : "";
     return `
       <article class="result-item">
-        <strong>Variation ${index + 1}${truncated ? ' <span class="truncated">truncated at max_tokens</span>' : ""}</strong>
+        <strong>Variation ${index + 1}${truncated ? ' <span class="truncated">truncated at max_tokens</span>' : ""}${logprob}</strong>
         <div>${escapeHtml(text)}</div>
       </article>
     `;
@@ -250,6 +253,9 @@ function responseSummary(entry) {
 
   if (entry.finishReason) {
     parts.push(entry.finishReason);
+  }
+  if (typeof entry.logprob === "number") {
+    parts.push(`logprob ${entry.logprob.toFixed(2)} · p=${entry.probability.toExponential(2)}`);
   }
   if (entry.variationCount > 1) {
     parts.push(`request of ${entry.variationCount}`);

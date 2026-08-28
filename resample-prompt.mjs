@@ -9,6 +9,7 @@ import {
   DEFAULT_BACKEND,
   extractVariations,
   getBackend,
+  maxLogprobs,
   minMaxTokens,
   PARAM_NAMES,
   planRequests,
@@ -23,6 +24,7 @@ export {
   DEFAULT_BACKEND,
   extractVariations,
   getBackend,
+  maxLogprobs,
   minMaxTokens,
   planRequests,
   resolveBackendParams,
@@ -85,6 +87,10 @@ Options:
   --max-tokens             Token limit per variation ("off" omits it)
   --frequency-penalty      Frequency penalty ("off" omits it)
   --presence-penalty       Presence penalty ("off" omits it)
+  --logprobs               Alternatives per token, 0-20 ("off" omits it).
+                           0 still returns the chosen tokens' probabilities,
+                           which is all P(sequence) needs. completions only —
+                           reasoning models refuse logprobs outright.
   --api-url                Override the backend's endpoint
   --dry-run                Print the prompt and request body without calling the API
   --json                   Print a JSON result
@@ -164,6 +170,9 @@ function parseArgs(argv) {
         break;
       case "--presence-penalty":
         options.overrides.presencePenalty = parseParamValue(arg, next());
+        break;
+      case "--logprobs":
+        options.overrides.logprobs = parseParamValue(arg, next(), { integer: true });
         break;
       case "--api-url":
         options.apiUrl = next();
@@ -326,7 +335,10 @@ async function main() {
   }
 
   variations.forEach((variation, index) => {
-    console.log(`${index + 1}. ${variation.text}`);
+    const score = variation.logprob === null || variation.logprob === undefined
+      ? ""
+      : `  [logprob ${variation.logprob.toFixed(4)}, p=${variation.probability.toExponential(3)}]`;
+    console.log(`${index + 1}. ${variation.text}${score}`);
   });
 }
 

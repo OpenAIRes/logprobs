@@ -284,6 +284,12 @@ input:focus {
   text-transform: none;
 }
 
+.score {
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: none;
+}
+
 pre {
   min-height: 320px;
   margin: 0;

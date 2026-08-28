@@ -28,6 +28,7 @@ viz `CLAUDE.md` §1.
 | `temperature`, `top_p` | 0.9 / 0.9 | **odmitnuto modelem** |
 | `max_tokens` | 50 | `max_output_tokens`, min. 16, model default |
 | `frequency_penalty`, `presence_penalty` | 0.0 / 0.0 | nepodporovano |
+| `logprobs` | 5 (strop 20) | **odmitnuto modelem** |
 | Konec zivota | **2026-09-28** | — |
 
 Na `gpt-5.5` neni `temperature` nastavitelna: jina hodnota nez vychozi 1 vraci
@@ -45,6 +46,34 @@ Prazdne pole = backend default. Hodnota `off` = parametr se neposle vubec.
 
 Log uklada `backend` u kazde udalosti a `rawPrompt` s nestripnutym textem
 z API, protoze referencni implementace completions nestripuje.
+
+## Logprobs
+
+`logprobs` neni z clanku — je to jediny parametr navic, ktery `completions`
+backend posila. Je ciste observacni, nemuze zmenit vygenerovane tokeny, takze
+replika tim netrpi. Pro telo requestu doslova identicke s
+`instruction_induction.yaml` staci `--logprobs off`.
+
+Z `token_logprobs` se scita `logprob` cele sekvence a `probability = exp(logprob)`.
+Oboji se uklada do logu u kazde varianty a zobrazuje u vysledku:
+
+```
+1. enter the opposite of the term.  [logprob -4.5203, p=1.089e-2]
+2. find the opposite of the word.   [logprob -6.1868, p=2.056e-3]
+3. type the opposite of the term.   [logprob -3.7906, p=2.258e-2]
+```
+
+Tri veci, ktere je dobre vedet:
+
+- Logprobs jsou **surove** — nezkreslene `temperature` ani `top_p`. Vraci
+  distribuci modelu, ne toho, co ti nastaveni nasamplovalo.
+- Strop je 20 a endpoint nad nim **tise kappuje**, nehlasi chybu. Server to
+  proto validuje sam.
+- `logprobs: 0` uz vraci `token_logprobs`, tedy presnou `P(sekvence)`, jen bez
+  alternativ na pozici. Nejlevnejsi varianta co do objemu logu.
+
+Reasoning modely logprobs odmitaji ve vsech formach, takze na `responses`
+backendu je to pole neaktivni. Detaily v `CLAUDE.md` §4.
 
 ## Pouziti
 

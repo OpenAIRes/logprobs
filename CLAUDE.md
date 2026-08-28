@@ -345,6 +345,38 @@ linie: base → base, instruct → instruct, proto všech šest `text-*-00X` šl
    `echo=True, max_tokens=0, logprobs=1` — tedy logprob **vstupních** tokenů.
    Moderní API (Chat Completions i Responses) vrací logprobs jen pro tokeny,
    které model **vygeneroval**. Teacher forcing přes vstup nejde nikde.
+
+   **Nezaměňovat s `logprobs` samotným, které živé je.** Ověřeno 28. 8. 2026:
+
+   | | `completions` / `gpt-3.5-turbo-instruct` | `responses` / `gpt-5.5` |
+   |---|---|---|
+   | `echo` + `logprobs` | 400 `Setting 'echo' and 'logprobs' at the same time is not supported for this model.` | ❌ |
+   | `logprobs` samo | ✅ strop **20** | 400 `logprobs are not supported with reasoning models.` |
+
+   Reasoning modely odmítají všechny tři formy — `top_logprobs`,
+   `include: ["message.output_text.logprobs"]` i obojí naráz.
+
+   Nad 20 completions endpoint **tiše kappuje** na 20, nehlásí chybu
+   (`logprobs: 21` → 20 klíčů, HTTP 200). Proto to server validuje sám.
+
+   `logprobs: 0` už vrací `token_logprobs` a `text_offset`, jen bez
+   `top_logprobs`. Na přesnou `P(sekvence)` to stačí a je to nejlevnější
+   varianta co do objemu dat.
+
+   **Logprobs jsou surové, nezkreslené `temperature` ani `top_p`.** Distribuce
+   prvního tokenu je identická na 4 desetinná místa při temp 0 / 0.9 / 1 / 2
+   a top_p 0.1 / 0.9 / 1. Vrací tedy model, ne tvoje nastavení. Kdo chce
+   pravděpodobnost pod samplovacím configem článku, musí si obě transformace
+   dopočítat sám — obojí je deterministická funkce surové distribuce.
+
+   Praktický důsledek: `P(sekvence)` je součet `token_logprobs`, tedy exaktní
+   z jednoho requestu, místo odhadu z opakovaného samplování. Naopak celou
+   distribuci nad instrukcemi to nedá — prostor je kombinatorický a top-20
+   na pozici pokryje jen část masy (u resample promptu ~85 % na prvním tokenu).
+
+   Vedlejší zjištění k duplikátům: `top_p 0.9` po `temperature 0.9` nechá
+   z 20 kandidátů na prvním tokenu jen **10** s nenulovou šancí. To je
+   analytické vysvětlení duplikátů, které jinak vycházejí ze samplování.
 2. **Reverse mód neexistuje.** Insert-trénované modely zmizely v lednu 2024.
    Padá „Reverse Generation 1/2" i celý TruthfulQA experiment.
 

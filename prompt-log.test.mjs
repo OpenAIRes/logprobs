@@ -188,6 +188,8 @@ test("derives prompt table rows from complete log events", async () => {
       prompt: "Generated prompt",
       rawPrompt: "Generated prompt",
       finishReason: null,
+      logprob: null,
+      probability: null,
       parentPrompt: "Parent prompt",
       parentInstruction: "Parent instruction",
     },
