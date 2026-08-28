@@ -116,8 +116,49 @@ Důsledky:
   z článku mohlo rozcházet. Text článku je jediný zdroj pravdy.
 - Neexistuje ani doložený API config pro resample krok. Použití generačního
   configu (`instruction_induction.yaml`: temp 0.9, top_p 0.9, max_tokens 50,
-  penalties 0.0) je **odvození**, ne fakt z repa — resampling je generování
-  kandidátů, takže je to ten správný ze dvou configů, ale nikdo to nenapsal.
+  penalties 0.0) je **odvození**. Jak přesně, viz níže.
+
+#### Jak je ten config odvozený
+
+Fakta z repa. Každý YAML má **tři** bloky `gpt_config` — `generation`,
+`evaluation`, `demo` — ale jen **dvě** různé sady hodnot:
+
+| Sada | Hodnoty | Bloky | Kdo ji volá |
+|---|---|---|---|
+| navrhování | temp 0.9, top_p 0.9, max_tokens 50 | `generation` | `generate.generate_prompts` (`ape.py:143`) |
+| vykonávání | temp 0.7, top_p 1.0, max_tokens 200 | `evaluation`, `demo` | scoring a `demo_function` (`ape.py:157`) |
+
+Odvození: resample krok **vyrábí instrukci**, patří tedy do první sady.
+Tři argumenty, od nejsilnějšího:
+
+1. `ape.py:204` čte `conf['generation']['model']['gpt_config']['max_tokens']`
+   do proměnné pojmenované **`max_prompt_len`**. Autoři tím explicitně říkají,
+   že `generation.max_tokens` znamená „maximální délka vygenerované instrukce".
+   Resamplovaná instrukce je instrukce, takže platí stejná mez.
+2. `max_tokens` 50 vs. 200 — 50 je dimenzované na instrukci, 200 na odpověď.
+3. temp 0.9 + top_p 0.9 vs. 0.7 + top_p 1.0. Resampling je v článku rámovaný
+   jako Monte Carlo *explorace* okolo dobrého kandidáta, chce tedy tu
+   diverzifikovanější sadu.
+
+Co zůstává neznámé:
+
+- **Článek nespecifikuje sampling hyperparametry pro žádný krok**, ani pro
+  původní navrhování. Nemůže tedy nic rozhodnout — proto ty hodnoty pocházejí
+  z YAML, ne z textu.
+- Blok `resample:` v žádném z `default.yaml`, `bandits.yaml`,
+  `instruction_induction.yaml`, `truthful_qa.yaml` ani v `config.py` není.
+  Pokud měl nezveřejněný iterativní kód vlastní config, nezůstala po něm stopa.
+- Tedy: **příslušnost do sady „navrhování" je dobře podložená, konkrétní
+  hodnoty jsou zděděné předpokladem.**
+
+Empiricky (28. 8. 2026, `gpt-3.5-turbo-instruct`, `n=3`): krátká instrukce
+i celý meta-prompt se resamplují bez ořezu, všechny `finish_reason: stop`,
+~13–15 tokenů na variantu. Zděděná mez 50 tedy v praxi nepřekáží; naráželo by
+to teprve u instrukcí blížících se 50 tokenům.
+
+Jediné číslo, které k iterativnímu APE článek uvádí, je v §5.3: kvalita se
+stabilizuje **po třech kolech** resamplingu („we observe diminishing returns
+to further selection rounds"). Počet variant na kolo neuvádí.
 
 Mechanika, kterou má smysl kopírovat z `llm.py:148-169` (`__generate_text`):
 
@@ -206,12 +247,32 @@ s vynuceným `batch_size == 1`.
 |---|---|---|
 | `text-davinci-002` | **hlavní model článku** | mrtvý od 4. 1. 2024 |
 | `code-davinci-002` | base pod ním, insert mód | mrtvý 2023 |
+
 | `gpt-3.5-turbo-instruct` | nástupce InstructGPT řady | **končí 28. 9. 2026** |
 | `davinci-002` | base, analog `davinci` | **končí 28. 9. 2026** |
 | `babbage-002` | base, analog `babbage` | **končí 28. 9. 2026** |
 | `gpt-3.5-turbo-completions` ap. | chat model za completions fasádou | končí 23. 10. 2026 |
 
 Náhrada u všech je `gpt-5.6-terra`, ale ta už není na completions endpointu.
+
+**Co API vrátí na mrtvý model** (ověřeno 28. 8. 2026, resampling prompt
+s configem z článku, `n=30`). `HTTP 404 Not Found`, tělo:
+
+```json
+{
+    "error": {
+        "message": "The model `text-davinci-002` has been deprecated, learn more here: https://platform.openai.com/docs/deprecations",
+        "type": "invalid_request_error",
+        "param": null,
+        "code": "model_not_found"
+    }
+}
+```
+
+Totožné pro `code-davinci-002`. Endpoint tedy request neodmítne kvůli
+parametrům — celý `gpt_config` z článku včetně `n`, `top_p` a obou penalties
+projde validací bez připomínky a padne teprve na neexistujícím modelu.
+Mechanika legacy completions je pořád živá, chybí jen ty váhy.
 
 **Pozor na záměnu:** `davinci-002` ≠ `text-davinci-002`. První je base model
 netrénovaný na following instrukcí (náhrada za `curie`/`davinci`), druhý byl
@@ -241,14 +302,54 @@ linie: base → base, instruct → instruct, proto všech šest `text-*-00X` šl
 | `echo` + `max_tokens: 0` | ✅ | ❌ | ❌ |
 | `suffix` (insert) | endpoint bere, žádný model netrénovaný na FIM | ❌ | ❌ |
 
+**Oprava k řádku `temperature`, `top_p` — ověřeno 28. 8. 2026 na `gpt-5.5`
+přes Responses API.** Reasoning modely ty parametry **neignorují, ale request
+odmítnou**:
+
+```
+temperature: 1     -> 200 OK   (jediná přijatá hodnota = default, tedy no-op)
+temperature: 0.9   -> 400  Unsupported parameter: 'temperature' is not supported with this model.
+temperature: 0     -> 400  Unsupported parameter: 'temperature' is not supported with this model.
+top_p: 0.9         -> 400  Unsupported parameter: 'top_p' is not supported with this model.
+```
+
+Na reasoning modelu tedy z celé tabulky parametrů článku projde jediný:
+`max_output_tokens`. A i ten má dvě pasti:
+
+- minimum je **16**, níž vrací 400;
+- **reasoning tokeny se do něj počítají a berou se první.** Při hodnotě 50
+  z článku spotřebuje uvažování ~39 tokenů a text se uřízne v půli věty; při
+  16 nezbyde nic a vrátí se prázdný string se statusem `incomplete`. Žádná
+  chyba, jen prázdný výsledek — tichá past. Bez limitu to funguje.
+
+Pozor při vlastním testování: `output_text` je pomocné pole SDK. Surový REST
+ho nevrací, text je v `output[]` jako item typu `message`. Kdo si napíše
+vlastní skript proti REST API a čte `output_text`, uvidí `undefined`
+a bude si myslet, že model nic nevrátil.
+
 ### Doporučené cesty
 
 **A. Doslovná replika, do 28. 9. 2026.** Jediný rozumný kandidát je
 `gpt-3.5-turbo-instruct` ve forward módu — jediný zbylý model InstructGPT linie
-na completions endpointu. Ověřit napřed jedním requestem, že `echo` + `logprobs`
-projde. Base modely (`davinci-002`, `babbage-002`) splňují mechaniku, ale ne
-zero-shot following, a článek sám měří, že nesladění scoring a execution modelu
-výkon výrazně sráží — dostaneš validní běh, jen měříš něco jiného.
+na completions endpointu. Base modely (`davinci-002`, `babbage-002`) splňují
+mechaniku, ale ne zero-shot following, a článek sám měří, že nesladění scoring
+a execution modelu výkon výrazně sráží — dostaneš validní běh, jen měříš něco
+jiného.
+
+**Ověřeno na účtu 28. 8. 2026** (130 modelů, `GET /v1/models`):
+
+- Completions endpoint bere `gpt-3.5-turbo-instruct`, `gpt-3.5-turbo-instruct-0914`,
+  `davinci-002`, `babbage-002`. `gpt-3.5-turbo-completions` z tabulky výše na
+  účtu **není**.
+- Na resample promptu (`n=2`, temp 0.9, max_tokens 50) obě instruct varianty
+  vrací čisté parafráze s `finish_reason: stop`. `davinci-002` a `babbage-002`
+  instrukci nenásledují vůbec: odbočí do textu nebo si dogenerují další
+  `Input:/Output:` páry, vždy `finish_reason: length`. `babbage-002` vrátil
+  „write the **synonym** of the word" — tedy obrácený význam.
+- **`echo` + `logprobs` je odmítnuto i na `gpt-3.5-turbo-instruct`:**
+  `HTTP 400 — Setting 'echo' and 'logprobs' at the same time is not supported
+  for this model.` Likelihood scoring tedy na OpenAI nejde nikde, ani do
+  28. 9. Cesta A je doslovná jen pro generační větev, ne pro scoring.
 
 **B. Otevřené váhy přes vLLM (doporučuju).** vLLM podporuje `echo`
 i `prompt_logprobs`, takže původní kód jde replikovat doslova, včetně

@@ -25,10 +25,16 @@ viz `CLAUDE.md` §1.
 | Vychozi model | `gpt-3.5-turbo-instruct` | `gpt-5.5` |
 | Pole s promptem | `prompt` | `input` |
 | `n` variant | jeden request s `n=N` | N requestu |
-| `temperature`, `top_p` | 0.9 / 0.9 | model default |
-| `max_tokens` | 50 | `max_output_tokens`, model default |
+| `temperature`, `top_p` | 0.9 / 0.9 | **odmitnuto modelem** |
+| `max_tokens` | 50 | `max_output_tokens`, min. 16, model default |
 | `frequency_penalty`, `presence_penalty` | 0.0 / 0.0 | nepodporovano |
 | Konec zivota | **2026-09-28** | — |
+
+Na `gpt-5.5` neni `temperature` nastavitelna: jina hodnota nez vychozi 1 vraci
+`400 Unsupported parameter`. Totez `top_p`. Z parametru clanku projde na
+reasoning modelu jen `max_output_tokens` — a reasoning tokeny se do nej pocitaji
+a beru se prvni, takze hodnota 50 z clanku text ureze a 16 vrati prazdny
+vysledek. Nechavej to pole prazdne. Detaily v `CLAUDE.md` §4.
 
 `completions` reprodukuje mechaniku `GPT_Forward.__generate_text` z `llm.py`
 vcetne `n` v jednom requestu a hodnot z `experiments/configs/instruction_induction.yaml`.

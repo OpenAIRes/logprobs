@@ -40,9 +40,18 @@ export const BACKENDS = {
     model: "gpt-5.5",
     promptField: "input",
     defaults: {},
-    supported: ["temperature", "topP", "maxTokens"],
+    // Verified 2026-08-28 against gpt-5.5: temperature and top_p are refused
+    // outright ("Unsupported parameter"), not ignored — only the default
+    // temperature of 1 is accepted, which makes sending it pointless.
+    supported: ["maxTokens"],
     // No `n`; variations need one request each.
     supportsN: false,
+    minMaxTokens: 16,
+    caveats: [
+      "Reasoning tokens count against max_output_tokens and are spent first:"
+      + " 50 leaves about 11 tokens for the text, and 16 leaves none at all"
+      + " (empty result, status incomplete). Leave it empty unless you have a reason.",
+    ],
     retiresOn: null,
   },
 };
@@ -115,6 +124,11 @@ export function planRequests(backendId, count) {
     throw new Error("Count must be a positive integer.");
   }
   return backend.supportsN ? [count] : Array.from({ length: count }, () => 1);
+}
+
+/** Lower bound the endpoint enforces, if any. */
+export function minMaxTokens(backendId) {
+  return getBackend(backendId).minMaxTokens ?? 1;
 }
 
 export function buildOpenAIRequestBody({ backend: backendId = DEFAULT_BACKEND, prompt, model, n = 1, params = {} } = {}) {

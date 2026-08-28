@@ -6,6 +6,7 @@ import {
   buildResamplingPrompt,
   extractVariations,
   getInstructionForMode,
+  minMaxTokens,
   planRequests,
   resolveBackendParams,
   unsupportedParams,
@@ -127,27 +128,27 @@ test("builds a bare Responses request body", () => {
   );
 });
 
-test("Responses backend maps maxTokens and drops the penalties", () => {
+test("Responses backend renames maxTokens to max_output_tokens", () => {
   assert.deepEqual(
     buildOpenAIRequestBody({
       backend: "responses",
       prompt: "Prompt",
       model: "gpt-5.5",
-      params: { temperature: 0.9, maxTokens: 50, frequencyPenalty: 0, presencePenalty: 0 },
+      params: { maxTokens: 200 },
     }),
     {
       model: "gpt-5.5",
       input: "Prompt",
-      temperature: 0.9,
-      max_output_tokens: 50,
+      max_output_tokens: 200,
     },
   );
 });
 
 test("reports which parameters a backend cannot send", () => {
+  // Feeding the paper's own config to the modern backend leaves only max_tokens.
   assert.deepEqual(
     unsupportedParams("responses", resolveBackendParams("completions")),
-    ["frequencyPenalty", "presencePenalty"],
+    ["temperature", "topP", "frequencyPenalty", "presencePenalty"],
   );
   assert.deepEqual(unsupportedParams("completions", resolveBackendParams("completions")), []);
 });
@@ -188,4 +189,27 @@ test("reads a Responses payload from output_text or the output array", () => {
     }),
     [{ raw: "a variation.", text: "a variation.", finishReason: null }],
   );
+});
+
+test("the Responses backend advertises only max_output_tokens", () => {
+  // Verified against gpt-5.5: temperature and top_p return HTTP 400
+  // "Unsupported parameter", so they must not be offered.
+  assert.deepEqual(
+    unsupportedParams("responses", { temperature: 0.9, topP: 0.9, maxTokens: 200 }),
+    ["temperature", "topP"],
+  );
+
+  assert.deepEqual(
+    buildOpenAIRequestBody({
+      backend: "responses",
+      prompt: "Prompt",
+      params: { temperature: 0.9, topP: 0.9, maxTokens: 200 },
+    }),
+    { model: "gpt-5.5", input: "Prompt", max_output_tokens: 200 },
+  );
+});
+
+test("exposes the endpoint's max_output_tokens floor", () => {
+  assert.equal(minMaxTokens("responses"), 16);
+  assert.equal(minMaxTokens("completions"), 1);
 });

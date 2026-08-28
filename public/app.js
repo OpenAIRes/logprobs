@@ -51,6 +51,7 @@ function applyBackend() {
   if (backend.retiresOn) {
     parts.push(`Endpoint retires on ${backend.retiresOn}.`);
   }
+  parts.push(...(backend.caveats ?? []));
   backendNote.textContent = parts.join(" ");
 
   for (const name of PARAM_NAMES) {
@@ -65,7 +66,10 @@ function applyBackend() {
     const fallback = backend.defaults[name];
     input.placeholder = supported
       ? (fallback === undefined ? "API default" : String(fallback))
-      : "not supported";
+      : "rejected by the model";
+    if (!supported) {
+      input.value = "";
+    }
   }
 }
 

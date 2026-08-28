@@ -657,5 +657,543 @@
     },
     "generatedPrompts": [],
     "backend": "responses"
+  },
+  {
+    "id": "9015796a-e7e4-4762-917a-5d46e5472805",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:03.156Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "658f4f54-231d-448d-8c14-61ee38afc99b",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoI6Vu3yEkM7f5V3eyogCTn9Vz4K",
+        "object": "text_completion",
+        "created": 1787913602,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a different version of the given instruction while maintaining its intended meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a different version of the given instruction while maintaining its intended meaning.",
+        "rawPrompt": " Create a different version of the given instruction while maintaining its intended meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "c3872e2a-1811-4587-8094-6e5e6e61ddf6",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:23.137Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "79326b1a-1242-4a71-8e99-aad251d4d20c",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoIRz8WdqhCDG2UaghgNNhHUftG7",
+        "object": "text_completion",
+        "created": 1787913623,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Generate a different version of the instruction without changing its meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 12,
+          "total_tokens": 50
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a different version of the instruction without changing its meaning.",
+        "rawPrompt": " Generate a different version of the instruction without changing its meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "0794c077-45e3-4e1b-b0c3-4c8c5d09e2f6",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:30.138Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "2d952576-bd5a-42ce-9774-ea506a3d4d70",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoIYePfGX0hZ57AwOyoDcadNWp3R",
+        "object": "text_completion",
+        "created": 1787913630,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Generate a different version of the given instruction while maintaining its meaning. ",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a different version of the given instruction while maintaining its meaning.",
+        "rawPrompt": " Generate a different version of the given instruction while maintaining its meaning. ",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "020d06ec-8ebb-46a7-913c-c428ba61c566",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:38.686Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "fa59fed3-5e82-4a83-9dcd-21985d1058b9",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoIg3N4B2aGIcryCKW7XlO8cD0zg",
+        "object": "text_completion",
+        "created": 1787913638,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a modified version of the given instruction while maintaining its intended meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a modified version of the given instruction while maintaining its intended meaning.",
+        "rawPrompt": " Create a modified version of the given instruction while maintaining its intended meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "9233c7ad-2e8e-4562-98f7-fc4cf580d455",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:41:49.611Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "e4aecc35-108d-4047-9370-8ef91ea9ee37",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoJpIDRbC8nH9Dctp0mdnON8wIC7",
+        "object": "text_completion",
+        "created": 1787913709,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a different version of the given instruction while maintaining its semantic meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a different version of the given instruction while maintaining its semantic meaning.",
+        "rawPrompt": " Create a different version of the given instruction while maintaining its semantic meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "db504347-8c24-418c-b9d9-ec03d969944a",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T12:41:00.494Z",
+    "mode": "custom",
+    "backend": "responses",
+    "model": "gpt-5.5",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "be04a0ab-1104-44ce-93c1-7e47cf394c1f",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "responses",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:"
+      },
+      "backend": "responses"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_088676f4fd7d7e03006a9181db3d0487d1866ec0bc14762d09",
+        "object": "response",
+        "created_at": 1787920859,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1787920860,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_088676f4fd7d7e03006a9181dbd5f887d1afa0f7fd455a716b",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqkYHcXH9SJ0b-uGjrBIFDK4eCsHbD1JhGl5R2ibzvH466zsQAhb5KvFPHT1wBUrF4kQGiWxFnVbygkLkLd5_wFdOO35yb2WAIT_3wmQtl1b89t7HAEk3EMwdSLfSzI6GWqnaDnQUANEG89W-n9EQp6VCkr4jxhbmpZKQwofLYLcJxdSBqVFLIy11XYrC3amNNQOdeIwH4220iJXN-EGYm1cfcm_NmJeoNxLV2e5o5rfLkOL94j8NTDsX1EQFcSWrqdmU0yjk0CXaUejDAkn0RiguulrBeBTDEVfR1d-I6sxBWhYLgyBCZPsZ5sU404tJX_6iwwdVdiJ3aM813jWeuXm1_ERwxKpOXMMkentcIbl4OQcDYnyC4BOt7KRz69MWXppj_mtG-hAMi3y6fUExEPbw-d74FgCmGMFMrQ_5Mek1IG6PfbeVMnJUeS443OcZJ4eF5K5STJA5ihi27bvXA7DMqz_ECBOnlJPlk8YnLAm2kz1T0GYkTIUi9yM6BkQUgTKfrUYgP22-1YjDakwRzXHXrmj2hkkw4XpuUWmxsLDWsIWhKfy3yj61uyK_0MXTu9Lun3Yu-pK4RTk2gG_F3J-2ClHqci9At3oWKU3aZk3apgw46AS_QE-ccnDYvonTE0BVaM5Bs25aNXJJyWOKlRI4C-_VLImqC7B-Y6-NzX953b9ED6K977knRPRERzXlrfjQv-TBu5K1rGBsq1XytN1D__1XhaHe1eUaAesq9JHqCeMWc14UOvvt_Rndld6eG0JzcUmQJSXTC4gbyuLKLIbUH3xU-DPzjyylKTt0lAvwfncFDr0VbHUiLzoA-YvyfjvDJqsj-SG6JIsezSwMBwQpTG9FlzIcSYEzX_Y-NOAFXR3V3z3uZR87eAq6EvX0x10Epd2FMPE2GR6O3120wIyJNDMQtF1nkMKaXxeTP539Y_KSr8oO_76Hv8-NgezPT88U0kbJNR1kthE05DAARhPu9oThmwDi960KlDWp0GrpEJkXzt94uRxhMQRM4jTaoAZiNXQKclGhpE_LbW-ei7CRM18hGhjBr5mowJkP3UshqGGJSFfNODWoylKat35u7JPnzkRHM3poiaIbW-KKpMf4TVGhkBN_WDcsO4qjNnOPGMIUrDgQ0tbKG82YdYL2fnmOw0wTrPGblx0I4oHJfibgWp6lF8cXJGQqcwJvlV28iwLOayTVAcsV6W1PnaebFojzwfSxK9J92vMUFeGF-dJsoMiG-n7QYXL8sO_Gmu1GD24lW7Zqg-pRj9P4-Z5QUAWiO91RwGI4KLcNyXv3uavb8mojWu0fvmuhTK5wObwtSm77NxGIex0dTAGsyNLkA5m6WfL5W7QQi0UTSfCQ3kWtOaI6H8SdTTjodQYYyz9BkCxRJTLGyzlVefw7-x0yyVwCN",
+            "summary": []
+          },
+          {
+            "id": "msg_088676f4fd7d7e03006a9181dc4df887d1b35495abfbb7af88",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Provide the opposite meaning of the word."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 31,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 47,
+          "output_tokens_details": {
+            "reasoning_tokens": 33
+          },
+          "total_tokens": 78
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Provide the opposite meaning of the word.",
+        "rawPrompt": "Provide the opposite meaning of the word.",
+        "finishReason": "completed",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      }
+    ]
+  },
+  {
+    "id": "8abf6d42-09aa-43e0-b978-948058b625fa",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T12:41:03.955Z",
+    "mode": "custom",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "d35bfb23-82a1-4407-8d59-01535278142e",
+      "requestedCount": 3,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 3
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "n": 3,
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHqBDDbYmHeJ80uHLWSKdeSUSs8hE",
+        "object": "text_completion",
+        "created": 1787920863,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " record the opposite of the term.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          },
+          {
+            "text": " record the opposite of the term.",
+            "index": 1,
+            "logprobs": null,
+            "finish_reason": "stop"
+          },
+          {
+            "text": " record the opposite of the term.",
+            "index": 2,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 25,
+          "completion_tokens": 21,
+          "total_tokens": 46
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "record the opposite of the term.",
+        "rawPrompt": " record the opposite of the term.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "record the opposite of the term.",
+        "rawPrompt": " record the opposite of the term.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "record the opposite of the term.",
+        "rawPrompt": " record the opposite of the term.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      }
+    ]
   }
 ]

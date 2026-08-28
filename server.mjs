@@ -15,6 +15,7 @@ import {
   DEFAULT_BACKEND,
   getBackend,
   getInstructionForMode,
+  minMaxTokens,
   planRequests,
   RESAMPLING_INSTRUCTION,
   resolveBackendParams,
@@ -102,6 +103,11 @@ function normalizeOptions(body) {
 
   const params = resolveBackendParams(backend.id, overrides);
 
+  const floor = minMaxTokens(backend.id);
+  if (params.maxTokens !== undefined && params.maxTokens < floor) {
+    throw new Error(`Max tokens must be at least ${floor} for the ${backend.id} backend.`);
+  }
+
   return {
     mode,
     instruction,
@@ -137,6 +143,8 @@ async function handleApi(request, response) {
           defaults: backend.defaults,
           supported: backend.supported,
           supportsN: backend.supportsN,
+          minMaxTokens: minMaxTokens(backend.id),
+          caveats: backend.caveats ?? [],
           retiresOn: backend.retiresOn,
         })),
       });
