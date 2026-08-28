@@ -94,6 +94,14 @@
 <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
       <button id="repairBtn" hidden>repair links</button>
+      <label for="modelSelect" style="margin-left:.75rem;font-size:14px;">model:
+        <select id="modelSelect">
+          <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
+          <option value="davinci-002">davinci-002</option>
+          <option value="babbage-002">babbage-002</option>
+        </select>
+      </label>
+      <button id="newTreeBtn">New tree (empty prompt)</button>
     </div>
   </div>
   <div id="tokens" hidden></div>
@@ -152,6 +160,18 @@ const promptsList = document.getElementById('promptsList');
 const statusEl = document.getElementById('status');
 const savedCountEl = document.getElementById('savedCount');
 const repairBtn = document.getElementById('repairBtn');
+const modelSelect = document.getElementById('modelSelect');
+const newTreeBtn = document.getElementById('newTreeBtn');
+
+// Model select: restore last choice, persist on change. getSelectedModel() is
+// the single source of truth used by every API call in the app.
+try{ const savedModel = localStorage.getItem('selected_model'); if(savedModel && modelSelect) modelSelect.value = savedModel; }catch{}
+if (modelSelect) modelSelect.addEventListener('change', ()=>{
+  try{ localStorage.setItem('selected_model', modelSelect.value); }catch{}
+});
+function getSelectedModel(){
+  return (modelSelect && modelSelect.value) || 'gpt-3.5-turbo-instruct';
+}
 
 function escapeToken(tok){return tok.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣');}
 function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);}
@@ -162,6 +182,8 @@ function toPlainTokens(arr){return (arr||[]).map(t=>typeof t==='string'?t:(t&&ty
 async function loadTokens() {
   try {
     await migrateFromLocalStorage();
+    await autoImportHistoryFile();
+    await autoLoadApiKey();
     const res = await fetch('logprobs.json');
     const data = await res.json();
 
@@ -178,6 +200,17 @@ async function loadTokens() {
       safeTokens = allTokens.map(t => t.token);
       currentCompletionId = data.id;
 
+      // data.prompt can be a plain string, an array of strings, or (as served by
+      // logprobs.json here) an array of {content} parts, e.g. [{"content": ""}].
+      // Array.prototype.join() stringifies non-string elements via toString(),
+      // which turned that last shape into a literal "[object Object]" prompt
+      // token — silently corrupting every continuation built on top of it.
+      const promptText = (typeof data.prompt === 'string') ? data.prompt
+        : Array.isArray(data.prompt) ? data.prompt.map(x =>
+            typeof x === 'string' ? x : (x && typeof x.content === 'string' ? x.content : (x && typeof x.text === 'string' ? x.text : ''))
+          ).join('')
+        : '';
+
       firstEntry = {
         id: data.id,
         object: "text_completion",
@@ -185,9 +218,9 @@ async function loadTokens() {
         model: data.model,
         previous_response_id: null,
         prompt: {
-          text: (typeof data.prompt === 'string' ? data.prompt : Array.isArray(data.prompt) ? data.prompt.join('') : ''),
+          text: promptText,
           index: 0,
-          logprobs: { tokens: ((typeof data.prompt === 'string' && data.prompt) ? [data.prompt] : (Array.isArray(data.prompt) && data.prompt.length ? [data.prompt.join('')] : [])), token_logprobs: [], top_logprobs: [] }
+          logprobs: { tokens: promptText ? [promptText] : [], token_logprobs: [], top_logprobs: [] }
         },
         choices: [
           {
@@ -318,6 +351,38 @@ async function idbSearch(term){
   return all.filter(e=>{ try{ return JSON.stringify(e).toLowerCase().includes(q); }catch{ return false; } });
 }
 async function migrateFromLocalStorage(){ try{ const raw=localStorage.getItem('completion_history'); if(!raw) return; const arr=JSON.parse(raw); if(Array.isArray(arr)&&arr.length){ await idbBulkPut(arr); localStorage.removeItem('completion_history'); await updateSavedCount(); showStatus('Migrated history to IndexedDB'); } }catch{} }
+
+// Auto-import completion_history.json (the file the Export button produces) into
+// IndexedDB on every load, so a fresh browser/profile doesn't start with an empty
+// history. put() is keyed by id, so re-importing the same file is a no-op merge.
+// Absence of the file (404) is expected and silently ignored.
+async function autoImportHistoryFile(){
+  try{
+    const res = await fetch('completion_history.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const arr = await res.json();
+    if (Array.isArray(arr) && arr.length) {
+      await idbBulkPut(arr);
+      await updateSavedCount();
+      showStatus(`Historie načtena z completion_history.json (${arr.length})`);
+    }
+  }catch{}
+}
+
+// Auto-load the OpenAI API key from a local, untracked file (local_api_key.json:
+// {"openai_key": "sk-..."}), so ensureApiKey() finds it in localStorage and never
+// has to prompt. This file must stay out of version control (see .gitignore) —
+// it holds a live secret. Absence of the file is expected and silently ignored.
+async function autoLoadApiKey(){
+  try{
+    const res = await fetch('local_api_key.json', { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && typeof data.openai_key === 'string' && data.openai_key) {
+      localStorage.setItem('openai_key', data.openai_key);
+    }
+  }catch{}
+}
 
 
 // --- Storage helpers: robust read + compaction + eviction ---
@@ -627,7 +692,7 @@ async function getCompletionById(id) {
 
 /* Removed stray duplicate block that broke script execution */
 /* ============ CREATE COMPLETION ============ */
-async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
+async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOverride) {
   const prev = await getCompletionById(prevId);
   if (!prev) {
     console.error('[ERROR] Previous completion not found for ID:', prevId);
@@ -635,6 +700,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     return null;
   }
 
+  const model = modelOverride || getSelectedModel();
   const allTokensArr = toPlainTokens(prev.promptTokens.concat(prev.completionTokens));
   const updatedTokens = allTokensArr.slice(0, replaceIdx);
   if (newToken !== undefined && newToken !== null) {
@@ -644,8 +710,29 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
   const plainPromptTokens = toPlainTokens(updatedTokens);
   const promptText = plainPromptTokens.join('');
 
-  const candidates = await idbQueryByPrompt(promptText.trim());
-  const existing = candidates.find(e => JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify(plainPromptTokens) && Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens));
+  // Not idbQueryByPrompt(): its by_prompt_text index is keyed by
+  // extractPromptTextSafe(), which trims when prompt.text is set but NOT when
+  // falling back to joined tokens — so a whitespace-only prompt like "\n" gets
+  // indexed under "\n" but queried under "" (since promptText.trim() === "").
+  // Real matches then silently never surface. Scan everything instead; the
+  // exact-token check below still does all the real matching work.
+  const candidates = await idbGetAll();
+  const existing = candidates.find(e => {
+    const tokMatch = JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify(plainPromptTokens);
+    const maxMatch = Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens);
+    // e.model is the resolved snapshot OpenAI returned (e.g. "...:20230824-v2"), not
+    // the alias we requested, so it never equals `model` directly. Entries created
+    // after the model-select feature record the actually-requested alias in
+    // request.model — gate on that exactly when present. Legacy entries (from before
+    // that feature) have no request.model; leaving them ungated entirely let a
+    // davinci-002 request silently reuse a gpt-3.5-turbo-instruct legacy entry whose
+    // prompt happened to match (real bug: multiple 20-vs-5 alt-count mixups). Fall
+    // back to a startsWith check against e.model instead — every legacy entry here
+    // was generated via the single old hardcoded alias "gpt-3.5-turbo-instruct", so
+    // this still matches that case and correctly rejects every other model.
+    const modelMatch = e?.request?.model ? e.request.model === model : (typeof e?.model === 'string' && e.model.startsWith(model));
+    return tokMatch && maxMatch && modelMatch;
+  });
   if (existing) {
     console.log('[HIT] Found existing completion');
     return { response: { id: existing.id, choices: existing.choices }, prompt: promptText, fromHistory: true };
@@ -656,7 +743,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
   const key = await ensureApiKey();
   if (!key) return null;
 
-  const data = await fetchCompletionAutoFit(promptText, maxTokens, key);
+  const data = await fetchCompletionAutoFit(promptText, maxTokens, key, model);
   if (!data) return null;
 
   const lp = data.choices[0].logprobs;
@@ -684,7 +771,10 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens) {
     max_tokens: Number(data._effective_max_tokens ?? maxTokens),
     temperature: 0,
     seed: 0,
-    meta: { target_max_tokens: Number(maxTokens) }
+    meta: { target_max_tokens: Number(maxTokens) },
+    // exact JSON body sent to /v1/completions for this entry; view it via the
+    // "object" button. Absent on entries created before this field existed.
+    request: data._request_sent
   };
 
   await idbPut(newEntry);
@@ -726,52 +816,56 @@ async function continueFromPromptOnly(maxTokens) {
 }
 
 /* ============ API HELPER ============ */
-async function fetchCompletion(prompt, maxTokens, key){
+async function fetchCompletion(prompt, maxTokens, key, model){
+  model = model || getSelectedModel();
   try{
+    const body = { model, prompt, logprobs:20, max_tokens:maxTokens, temperature:0, seed:0 };
     const res = await fetch('https://api.openai.com/v1/completions',{
       method:'POST',
       headers:{
         'Content-Type':'application/json',
         'Authorization':`Bearer ${key||await ensureApiKey()}`
       },
-      body:JSON.stringify({
-        model:'gpt-3.5-turbo-instruct',
-        prompt,
-        logprobs:20,
-        max_tokens:maxTokens,
-        temperature:0,
-        seed:0
-      })
+      body:JSON.stringify(body)
     });
-    const data = await res.json(); 
+    const data = await res.json();
     if(data.error){
-      statusEl.textContent=`Error: ${data.error.message}`; 
-      statusEl.classList.add('error'); 
+      statusEl.textContent=`Error: ${data.error.message}`;
+      statusEl.classList.add('error');
       return null;
     }
+    data._request_sent = body;
     return data;
   }catch{return null;}
 }
 
 /* ============ AUTO-FIT WRAPPER ============ */
-async function fetchCompletionAutoFit(prompt, maxTokens, key){
+async function fetchCompletionAutoFit(prompt, maxTokens, key, model){
+  model = model || getSelectedModel();
   async function callOnce(effectiveMax){
+    const body = { model, prompt, logprobs:20, max_tokens: effectiveMax, temperature:0, seed:0 };
     const res = await fetch('https://api.openai.com/v1/completions',{
       method:'POST',
       headers:{
         'Content-Type':'application/json',
         'Authorization':`Bearer ${key||await ensureApiKey()}`
       },
-      body:JSON.stringify({
-        model:'gpt-3.5-turbo-instruct',
-        prompt,
-        logprobs:20,
-        max_tokens: effectiveMax,
-        temperature:0,
-        seed:0
-      })
+      body:JSON.stringify(body)
     });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      // A non-JSON body — e.g. an nginx 503 HTML page during an OpenAI outage —
+      // used to throw here and get swallowed by the outer catch below, silently
+      // returning null with no status message at all. Surface it through the
+      // same {error:{message}} shape the rest of this function already handles.
+      data = { error: { message: `OpenAI request failed: HTTP ${res.status} ${res.statusText || ''} (non-JSON response)`.trim() } };
+    }
+    if (data && !data.error && !res.ok) {
+      data = { error: { message: `OpenAI request failed: HTTP ${res.status} ${res.statusText || ''}`.trim() } };
+    }
+    if (data) data._request_sent = body;
     return data;
   }
   try{
@@ -1111,6 +1205,86 @@ window.addEventListener('keydown', (e)=>{
 });
 
 if (objectBtn) objectBtn.addEventListener('click', showCurrentRaw);
+
+// =========== NEW TREE ===========
+// Starts a brand-new, unrelated root: sends an empty prompt to the currently
+// selected model (same as the very first completion this tool ever recorded)
+// and makes its result the current view. Old history/trees are untouched —
+// this only adds a new root entry (previous_response_id: null) to the store.
+async function startNewTree(){
+  const model = getSelectedModel();
+  const maxTokens = 16;
+
+  // Same recipe already exists in history (empty prompt, this model, this
+  // max_tokens)? Load it instead of spending a real API call regenerating an
+  // (almost certainly identical, since temperature/seed are both 0) result.
+  const all = await idbGetAll();
+  const existing = all.find(e => {
+    const tokMatch = JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify([]);
+    const maxMatch = Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens);
+    const modelMatch = e?.request?.model ? e.request.model === model : (typeof e?.model === 'string' && e.model.startsWith(model));
+    return tokMatch && maxMatch && modelMatch;
+  });
+  if (existing) {
+    await openEntryById(existing.id);
+    showStatus(`Načteno z historie (model: ${model})`);
+    return;
+  }
+
+  const ok = confirm(`Založit nový strom (prázdný prompt) pomocí modelu "${model}"?\nTohle zavolá OpenAI API.`);
+  if (!ok) return;
+
+  const key = await ensureApiKey();
+  if (!key) return;
+
+  const data = await fetchCompletionAutoFit('', maxTokens, key, model);
+  if (!data) return;
+
+  const lp = data.choices[0].logprobs;
+  const newTokens = lp.tokens.map((t, i) => {
+    const sorted = Object.entries(lp.top_logprobs[i])
+      .map(([tok, log]) => ({ token: tok, logprob: log }))
+      .sort((a, b) => b.logprob - a.logprob);
+    return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sorted };
+  });
+
+  const newEntry = {
+    id: data.id,
+    object: "text_completion",
+    created: Math.floor(Date.now() / 1000),
+    model: data.model,
+    previous_response_id: null,
+    prompt: {
+      text: "",
+      index: 0,
+      logprobs: { tokens: [], token_logprobs: [], top_logprobs: [] }
+    },
+    choices: [
+      {
+        text: data.choices[0].text,
+        index: 0,
+        logprobs: lp,
+        finish_reason: data.choices[0].finish_reason
+      }
+    ],
+    usage: data.usage,
+    max_tokens: Number(data._effective_max_tokens ?? maxTokens),
+    temperature: 0,
+    seed: 0,
+    meta: { target_max_tokens: Number(maxTokens), new_tree_root: true },
+    request: data._request_sent
+  };
+
+  await idbPut(newEntry);
+  await updateSavedCount();
+
+  allTokens = newTokens;
+  safeTokens = allTokens.map(t => t.token);
+  currentCompletionId = newEntry.id;
+  renderTokens(allTokens);
+  showStatus(`Nový strom založen (model: ${model})`);
+}
+if (newTreeBtn) newTreeBtn.addEventListener('click', startNewTree);
 
 // =========== PROMPTS VIEWER ===========
 function extractPromptText(entry){

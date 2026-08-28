@@ -1,0 +1,268 @@
+From 1c40ce1dc9816021b3b30654aa1117b0e76e5c5f Mon Sep 17 00:00:00 2001
+From: claude <claude@local>
+Date: Tue, 25 Aug 2026 10:29:45 +0000
+Subject: [PATCH] Add legacy-format logprobs reader and offline APE scorer
+
+stream_logprobs.py only looks for the chat-format "content" key, so it
+returns nothing for the 355 saved responses in this repo, which are all
+legacy text_completion objects from gpt-3.5-turbo-instruct.
+
+stream_logprobs2.py detects the format and normalises both to
+{token, logprob, offset, top, source}. Chat responses carry no
+text_offset, so offsets are reconstructed from token lengths.
+
+ape_offline_score.py ports get_token_indices from
+automatic_prompt_engineer/llm.py verbatim and replaces the echo=True API
+call with a lookup into a saved response, so APE-style
+log P(answer | prompt) scoring runs with no network.
+
+Note: text_offset is authoritative for where a completion starts, not
+prompt_text. With no prompt the API substitutes <|endoftext|> (13 chars,
+1 token), leaving prompt_text empty while offsets start at 13.
+---
+ ape_offline_score.py | 109 ++++++++++++++++++++++++++++++++++++++++
+ stream_logprobs2.py  | 116 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 225 insertions(+)
+ create mode 100644 ape_offline_score.py
+ create mode 100644 stream_logprobs2.py
+
+diff --git a/ape_offline_score.py b/ape_offline_score.py
+new file mode 100644
+index 0000000..63a4685
+--- /dev/null
++++ b/ape_offline_score.py
+@@ -0,0 +1,109 @@
++"""APE-style log-likelihood scoring, offline, on saved completion objects.
++
++APE (Zhou et al. 2022) scores a prompt by log P(answer | instruction, input).
++It obtains that with echo=True + logprobs, then slices the returned token
++array down to the character range covering the answer, using text_offset.
++
++get_token_indices below is a verbatim port of the function in
++automatic_prompt_engineer/llm.py. The rest replaces the API call with a
++lookup into a saved response, so the scoring can be exercised with no
++network and no live model.
++"""
++
++import argparse
++import json
++from typing import Dict, List, Sequence, Tuple
++
++
++def get_token_indices(offsets: Sequence[int],
++                      log_prob_range: Tuple[int, int]) -> Tuple[int, int]:
++    """Verbatim from APE: llm.py::GPT_Forward.get_token_indices."""
++    lower_index = 0
++    for i in range(len(offsets)):
++        if offsets[i] <= log_prob_range[0]:
++            lower_index = i
++        else:
++            break
++
++    upper_index = len(offsets)
++    for i in range(len(offsets)):
++        if offsets[i] >= log_prob_range[1]:
++            upper_index = i
++            break
++
++    return lower_index, upper_index
++
++
++def load_choice(record: Dict) -> Dict:
++    """Pull the legacy logprobs arrays out of a saved completion object."""
++    lp = record["choices"][0]["logprobs"]
++    return {
++        "tokens": lp["tokens"],
++        "logprobs": lp["token_logprobs"],
++        "offsets": lp["text_offset"],
++        "text": record["choices"][0]["text"],
++        "prompt_text": record.get("prompt_text", ""),
++    }
++
++
++def score_range(ch: Dict, lo: int, hi: int) -> Dict:
++    """Score the character range [lo, hi) the way APE scores an answer."""
++    li, ui = get_token_indices(ch["offsets"], (lo, hi))
++    toks = ch["tokens"][li:ui]
++    lps = [p for p in ch["logprobs"][li:ui] if p is not None]
++    total = sum(lps)
++    return {
++        "token_span": (li, ui),
++        "tokens": toks,
++        "sum_logprob": total,
++        "mean_logprob": total / len(lps) if lps else float("nan"),
++        "perplexity": pow(2.718281828459045, -total / len(lps)) if lps else float("nan"),
++        "n_tokens": len(lps),
++    }
++
++
++def main() -> None:
++    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    ap.add_argument("file", help="response json or completion_history list")
++    ap.add_argument("--record", type=int, default=0)
++    ap.add_argument("--substring", help="score the span of this substring")
++    ap.add_argument("--range", nargs=2, type=int, metavar=("LO", "HI"))
++    args = ap.parse_args()
++
++    data = json.load(open(args.file, encoding="utf-8"))
++    rec = data[args.record] if isinstance(data, list) else data
++    ch = load_choice(rec)
++
++    # text_offset is authoritative for where the completion starts in the
++    # string the server saw. prompt_text is NOT: when the request carried no
++    # prompt the API substitutes "<|endoftext|>" (13 chars, 1 token), so
++    # prompt_text == "" while offsets[0] == 13. Trusting prompt_text here
++    # shifts every span by 13 characters.
++    base = ch["offsets"][0]
++    if base != len(ch["prompt_text"]):
++        print(f"note: prompt_text is {len(ch['prompt_text'])} chars but the "
++              f"completion starts at offset {base}; using the offset.")
++
++    if args.substring:
++        pos = ch["text"].find(args.substring)
++        if pos < 0:
++            raise SystemExit(f"substring not found in: {ch['text'][:120]!r}")
++        lo, hi = base + pos, base + pos + len(args.substring)
++    elif args.range:
++        lo, hi = args.range
++    else:
++        # default: score the completion, i.e. everything after the prompt
++        lo, hi = ch["offsets"][0], ch["offsets"][-1] + len(ch["tokens"][-1])
++
++    r = score_range(ch, lo, hi)
++    print(f"model      : {rec.get('model')}")
++    print(f"prompt_text: {ch['prompt_text']!r}  (offset base {base})")
++    print(f"range      : [{lo}, {hi})  -> tokens [{r['token_span'][0]}:{r['token_span'][1]}]")
++    print(f"tokens     : {r['tokens']}")
++    print(f"sum logP   : {r['sum_logprob']:.4f}   over {r['n_tokens']} tokens")
++    print(f"mean logP  : {r['mean_logprob']:.4f}")
++    print(f"perplexity : {r['perplexity']:.3f}")
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/stream_logprobs2.py b/stream_logprobs2.py
+new file mode 100644
+index 0000000..eb97657
+--- /dev/null
++++ b/stream_logprobs2.py
+@@ -0,0 +1,116 @@
++"""Stream tokens+logprobs from OpenAI responses, legacy or chat format.
++
++Legacy (`object: text_completion`) stores parallel arrays:
++    choices[0].logprobs = {tokens[], token_logprobs[], top_logprobs[], text_offset[]}
++Chat (`object: chat.completion`) stores a list of objects:
++    choices[0].logprobs.content = [{token, logprob, top_logprobs:[{token,logprob}]}]
++
++Both are normalised to the same record:
++    {token, logprob, offset, top: {tok: logprob}, source}
++
++Usage:
++    python3 stream_logprobs2.py logprobs.json --limit 5
++    python3 stream_logprobs2.py 'completion_history (33).json' --record 3
++    python3 stream_logprobs2.py logprobs.json --format tsv
++"""
++
++import argparse
++import json
++from typing import Dict, Iterator, List, Optional
++
++
++def _norm_legacy(lp: Dict) -> List[Dict]:
++    toks = lp.get("tokens") or []
++    lps = lp.get("token_logprobs") or []
++    tops = lp.get("top_logprobs") or []
++    offs = lp.get("text_offset") or []
++    out = []
++    for i, t in enumerate(toks):
++        out.append({
++            "token": t,
++            "logprob": lps[i] if i < len(lps) else None,
++            "offset": offs[i] if i < len(offs) else None,
++            "top": dict(tops[i]) if i < len(tops) and tops[i] else {},
++            "source": "legacy",
++        })
++    return out
++
++
++def _norm_chat(content: List[Dict]) -> List[Dict]:
++    out = []
++    cursor = 0
++    for c in content:
++        tok = c.get("token", "")
++        out.append({
++            "token": tok,
++            "logprob": c.get("logprob"),
++            # chat format carries no text_offset; reconstruct it
++            "offset": cursor,
++            "top": {d["token"]: d["logprob"] for d in (c.get("top_logprobs") or [])},
++            "source": "chat",
++        })
++        cursor += len(tok)
++    return out
++
++
++def tokens_from_choice(choice: Dict) -> List[Dict]:
++    lp = choice.get("logprobs")
++    if not lp:
++        return []
++    if isinstance(lp, dict) and "content" in lp and lp["content"] is not None:
++        return _norm_chat(lp["content"])
++    if isinstance(lp, dict) and "tokens" in lp:
++        return _norm_legacy(lp)
++    return []
++
++
++def iter_tokens(path: str, record: Optional[int] = None) -> Iterator[Dict]:
++    """Yield normalised token dicts from a response file.
++
++    Handles a single response object or a list of them (completion_history).
++    """
++    with open(path, "r", encoding="utf-8") as f:
++        data = json.load(f)
++
++    records = data if isinstance(data, list) else [data]
++    if record is not None:
++        records = [records[record]]
++
++    for ri, rec in enumerate(records):
++        if not isinstance(rec, dict):
++            continue
++        for choice in rec.get("choices") or []:
++            for tok in tokens_from_choice(choice):
++                tok["record"] = ri if record is None else record
++                tok["id"] = rec.get("id")
++                yield tok
++
++
++def main() -> None:
++    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
++    ap.add_argument("file")
++    ap.add_argument("--limit", type=int, help="print only the first N tokens")
++    ap.add_argument("--record", type=int, help="index into a history list")
++    ap.add_argument("--format", choices=["repr", "tsv", "json"], default="repr")
++    ap.add_argument("--top", type=int, default=0, help="also show N alternatives")
++    args = ap.parse_args()
++
++    for i, tok in enumerate(iter_tokens(args.file, args.record)):
++        if args.format == "json":
++            print(json.dumps(tok, ensure_ascii=False))
++        elif args.format == "tsv":
++            lp = "" if tok["logprob"] is None else f"{tok['logprob']:.4f}"
++            print(f"{tok['offset']}\t{lp}\t{tok['token']!r}")
++        else:
++            lp = "None" if tok["logprob"] is None else f"{tok['logprob']:.3f}"
++            print(f"[{tok['offset']:>5}] {lp:>9}  {tok['token']!r}")
++            if args.top:
++                alts = sorted(tok["top"].items(), key=lambda z: -z[1])[:args.top]
++                for t, v in alts:
++                    print(f"          {v:9.3f}    {t!r}")
++        if args.limit and i + 1 >= args.limit:
++            break
++
++
++if __name__ == "__main__":
++    main()
+-- 
+2.43.0
+
