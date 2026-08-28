@@ -34,6 +34,10 @@ Options:
   --out <path>     Target history file (default: logprobs/completion_history.json)
   --no-merge       Overwrite the target instead of merging into it
   --no-backup      Skip the .bak copy taken before an in-place merge
+  --pretty         Indent the output. Off by default: the viewer's history is
+                   compact single-line JSON, and indenting a 6 MB file doubles
+                   its size and turns any diff into hundreds of thousands of
+                   reformatting lines.
   --dry-run        Report what would be written without touching anything
   --help, -h       Show this help
 
@@ -49,6 +53,7 @@ function parseArgs(argv) {
     outPath: DEFAULT_OUT,
     merge: true,
     backup: true,
+    pretty: false,
     dryRun: false,
   };
 
@@ -74,6 +79,9 @@ function parseArgs(argv) {
         break;
       case "--no-backup":
         options.backup = false;
+        break;
+      case "--pretty":
+        options.pretty = true;
         break;
       case "--dry-run":
         options.dryRun = true;
@@ -213,8 +221,12 @@ async function main() {
     console.log(`Backup:   ${options.outPath}.bak`);
   }
 
-  await writeFile(options.outPath, `${JSON.stringify(entries, null, 2)}\n`, "utf8");
-  console.log(`\nWritten. Serve ${dirname(options.outPath)} and open logprobs.html.`);
+  const json = options.pretty
+    ? `${JSON.stringify(entries, null, 2)}\n`
+    : JSON.stringify(entries);
+  await writeFile(options.outPath, json, "utf8");
+  console.log(`\nWritten (${(json.length / 1e6).toFixed(1)} MB${options.pretty ? ", indented" : ""}).`);
+  console.log(`Serve ${dirname(options.outPath)} and open logprobs.html.`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
