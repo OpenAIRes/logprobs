@@ -74,6 +74,12 @@ data/prompt-log.json
 
 On first run, the log is created with a seed event: the default Resampling Prompt with the `[INSTRUCTION]` placeholder. Each successful OpenAI call is then stored as a complete event with the request body, parsed response JSON, and generated prompt. The UI table is derived from `generatedPrompts` inside those events.
 
+Tabulka `Prompt History` ma sloupce `API Request` a `Response`, oba rozbalitelne
+na cele telo. Souhrn u odpovedi ukazuje HTTP status, tokeny (u reasoning modelu
+i z toho reasoning cast), `finish_reason` a pocet variant, ktere ten jeden
+request vratil. Token usage plati na cely request, takze pri `n>1` maji vsechny
+radky teze cislo — proto ten stitek `request of N`.
+
 Nahled promptu a request body bez API volani:
 
 ```powershell

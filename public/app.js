@@ -223,6 +223,37 @@ function shortText(value) {
   return text.length > 260 ? `${text.slice(0, 260)}...` : text;
 }
 
+/**
+ * One glanceable line per response. Token usage covers the whole request, so
+ * when several variations came back together the line says so.
+ */
+function responseSummary(entry) {
+  const body = entry.response?.body ?? {};
+  const parts = [`HTTP ${entry.response.status}`];
+
+  if (body.error) {
+    parts.push(body.error.code || body.error.type || "error");
+    return parts.join(" · ");
+  }
+
+  const usage = body.usage ?? {};
+  const inTok = usage.prompt_tokens ?? usage.input_tokens;
+  const outTok = usage.completion_tokens ?? usage.output_tokens;
+  if (inTok !== undefined || outTok !== undefined) {
+    const reasoning = usage.output_tokens_details?.reasoning_tokens;
+    parts.push(`${inTok ?? "?"}→${outTok ?? "?"} tok${reasoning ? ` (${reasoning} reasoning)` : ""}`);
+  }
+
+  if (entry.finishReason) {
+    parts.push(entry.finishReason);
+  }
+  if (entry.variationCount > 1) {
+    parts.push(`request of ${entry.variationCount}`);
+  }
+
+  return parts.join(" · ");
+}
+
 function renderLog(entries) {
   logTable.innerHTML = entries.map((entry) => `
     <tr>
@@ -244,6 +275,12 @@ function renderLog(entries) {
           <pre class="table-pre">${escapeHtml(JSON.stringify(entry.request, null, 2))}</pre>
         </details>
       ` : '<span class="muted">No API request</span>'}</td>
+      <td>${entry.response ? `
+        <details>
+          <summary>${escapeHtml(responseSummary(entry))}</summary>
+          <pre class="table-pre">${escapeHtml(JSON.stringify(entry.response, null, 2))}</pre>
+        </details>
+      ` : '<span class="muted">No API response</span>'}</td>
       <td>${entry.backend ? `<span class="mode-chip">${escapeHtml(entry.backend)}</span>` : '<span class="muted">—</span>'}</td>
       <td><span class="mode-chip">${escapeHtml(entry.mode)}</span></td>
       <td>${entry.createdAt === "1970-01-01T00:00:00.000Z" ? '<span class="muted">seed</span>' : escapeHtml(new Date(entry.createdAt).toLocaleString())}</td>
@@ -256,7 +293,7 @@ async function loadLog() {
     const json = await getJson("/api/log");
     renderLog(json.promptRows || json.entries || []);
   } catch (error) {
-    logTable.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`;
+    logTable.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 

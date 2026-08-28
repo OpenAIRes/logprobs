@@ -183,6 +183,8 @@ test("derives prompt table rows from complete log events", async () => {
           input: "Parent prompt",
         },
       },
+      response: null,
+      variationCount: 1,
       prompt: "Generated prompt",
       rawPrompt: "Generated prompt",
       finishReason: null,
@@ -190,6 +192,33 @@ test("derives prompt table rows from complete log events", async () => {
       parentInstruction: "Parent instruction",
     },
   ]);
+});
+
+test("rows carry the response and how many variations shared it", () => {
+  const rows = promptRowsFromEvents([
+    {
+      id: "event-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      mode: "custom",
+      backend: "completions",
+      model: "gpt-3.5-turbo-instruct",
+      request: null,
+      response: {
+        status: 200,
+        body: { usage: { prompt_tokens: 25, completion_tokens: 21, total_tokens: 46 } },
+      },
+      generatedPrompts: [
+        { prompt: "First", finishReason: "stop" },
+        { prompt: "Second", finishReason: "length" },
+      ],
+    },
+  ]);
+
+  assert.equal(rows.length, 2);
+  // Usage is per request, so both rows point at the same response object.
+  assert.equal(rows[0].response.body.usage.completion_tokens, 21);
+  assert.deepEqual(rows.map((r) => r.variationCount), [2, 2]);
+  assert.deepEqual(rows.map((r) => r.finishReason), ["stop", "length"]);
 });
 
 test("row ids stay unique when one completions request returns duplicates", () => {

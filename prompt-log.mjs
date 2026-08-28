@@ -131,6 +131,10 @@ export function promptRowsFromEvents(events) {
     backend: event.backend ?? null,
     model: event.model,
     request: event.request,
+    response: event.response ?? null,
+    // Usage in the response covers the whole request, so a row needs to say
+    // how many variations shared it.
+    variationCount: (event.generatedPrompts ?? []).length,
     prompt: generatedPrompt.prompt,
     rawPrompt: generatedPrompt.rawPrompt ?? generatedPrompt.prompt,
     finishReason: generatedPrompt.finishReason ?? null,
