@@ -13,6 +13,12 @@
 
 export const COMPLETIONS_DEADLINE = "2026-09-28";
 
+/**
+ * Anything at or below this in `token_logprobs` is the endpoint's "no value"
+ * marker, not a probability — a real sampled token is never this unlikely.
+ */
+const SENTINEL_LOGPROB = -9000;
+
 export const BACKENDS = {
   completions: {
     id: "completions",
@@ -31,7 +37,11 @@ export const BACKENDS = {
       // that get generated — and it is what makes P(sequence) exact instead of
       // estimated from repeated sampling. Set it to "off" for a request body
       // literally identical to instruction_induction.yaml.
-      logprobs: 5,
+      //
+      // 20 is the endpoint's ceiling, taken deliberately: the alternatives per
+      // position are what allow the sampling distribution to be reconstructed
+      // instead of sampled. It costs no tokens, only log volume.
+      logprobs: 20,
     },
     supported: ["temperature", "topP", "maxTokens", "frequencyPenalty", "presencePenalty", "logprobs"],
     maxLogprobs: 20,
@@ -205,6 +215,13 @@ function sequenceProbability(logprobs) {
     return { logprob: null, probability: null };
   }
   if (tokenLogprobs.some((value) => typeof value !== "number")) {
+    return { logprob: null, probability: null };
+  }
+  // The endpoint reports -9999 for a sampled token whose probability it will
+  // not give — seen when the token is absent from top_logprobs even at 20.
+  // Summing that yields a confident-looking nonsense figure, so refuse instead:
+  // one unknown factor makes the whole product unknown.
+  if (tokenLogprobs.some((value) => value <= SENTINEL_LOGPROB)) {
     return { logprob: null, probability: null };
   }
 

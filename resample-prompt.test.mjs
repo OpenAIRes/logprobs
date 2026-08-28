@@ -82,7 +82,7 @@ test("explicit values override backend defaults, null forces omission", () => {
       topP: 0.9,
       frequencyPenalty: 0,
       presencePenalty: 0,
-      logprobs: 5,
+      logprobs: 20,
     },
   );
 });
@@ -116,7 +116,7 @@ test("the default body adds only logprobs on top of the paper's config", () => {
     n: 30,
     params: resolveBackendParams("completions"),
   });
-  assert.equal(body.logprobs, 5);
+  assert.equal(body.logprobs, 20);
   // Observational only: it cannot change which tokens get generated.
   assert.equal(body.temperature, 0.9);
   assert.equal(body.top_p, 0.9);
@@ -233,7 +233,7 @@ test("exposes the endpoint's max_output_tokens floor", () => {
 });
 
 test("completions asks for logprobs by default, Responses cannot", () => {
-  assert.equal(resolveBackendParams("completions").logprobs, 5);
+  assert.equal(resolveBackendParams("completions").logprobs, 20);
   assert.equal(resolveBackendParams("responses").logprobs, undefined);
   assert.equal(maxLogprobs("completions"), 20);
   assert.equal(maxLogprobs("responses"), 0);
@@ -290,4 +290,22 @@ test("reports no probability when logprobs were not requested", () => {
     choices: [{ index: 0, text: " x", logprobs: { token_logprobs: [null, -0.5] } }],
   });
   assert.equal(partial.logprob, null);
+});
+
+test("refuses to sum the -9999 sentinel into a probability", () => {
+  // Seen live: a sampled token absent from top_logprobs even at 20 gets -9999.
+  // Summing it produced logprob -10001.56 and p=0, which looks authoritative
+  // and is meaningless.
+  const [variation] = extractVariations("completions", {
+    choices: [{
+      index: 0,
+      text: "provide the antonym of the given word.",
+      finish_reason: "stop",
+      logprobs: { token_logprobs: [-9999, -0.0544, -0.8023, -0.0555] },
+    }],
+  });
+
+  assert.equal(variation.logprob, null);
+  assert.equal(variation.probability, null);
+  assert.equal(variation.text, "provide the antonym of the given word.");
 });

@@ -377,6 +377,32 @@ linie: base → base, instruct → instruct, proto všech šest `text-*-00X` šl
    Vedlejší zjištění k duplikátům: `top_p 0.9` po `temperature 0.9` nechá
    z 20 kandidátů na prvním tokenu jen **10** s nenulovou šancí. To je
    analytické vysvětlení duplikátů, které jinak vycházejí ze samplování.
+
+   **Sentinel `-9999`.** V `token_logprobs` se objevuje hodnota `-9999` pro
+   nasamplovaný token, jehož pravděpodobnost endpoint nedá — viděno i při
+   `logprobs: 20`, když ten token v `top_logprobs` na dané pozici není:
+
+   ```
+   token          token_logprob    v top_logprobs?
+   "provide"              -9999    NE (20 kandidátů, všichni s úvodní mezerou)
+   " the"           -0.05439660    ano
+   " ant"           -0.80227830    ano
+   ```
+
+   Není to malá pravděpodobnost, je to „nevím". Sečtení dá `-10001.56`
+   a `p = 0`, což vypadá autoritativně a je to nesmysl. Jeden neznámý faktor
+   dělá celý součin neznámým, takže `sequenceProbability` v `backends.mjs`
+   celou sekvenci odmítne a vrátí `null`. Práh je `-9000`; skutečný
+   nasamplovaný token nikdy tak nepravděpodobný není.
+
+   Objem dat (n=1, `max_tokens: 50`, přepočet na `n=30` z článku):
+
+   | `logprobs` | odpověď | ~ na request při n=30 |
+   |---|---|---|
+   | vypnuto | 316 B | 9 kB |
+   | 0 | 602 B | 18 kB |
+   | 5 | 1 448 B | 42 kB |
+   | 20 | 3 661 B | **107 kB** |
 2. **Reverse mód neexistuje.** Insert-trénované modely zmizely v lednu 2024.
    Padá „Reverse Generation 1/2" i celý TruthfulQA experiment.
 

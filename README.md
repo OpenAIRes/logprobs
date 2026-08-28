@@ -28,7 +28,7 @@ viz `CLAUDE.md` §1.
 | `temperature`, `top_p` | 0.9 / 0.9 | **odmitnuto modelem** |
 | `max_tokens` | 50 | `max_output_tokens`, min. 16, model default |
 | `frequency_penalty`, `presence_penalty` | 0.0 / 0.0 | nepodporovano |
-| `logprobs` | 5 (strop 20) | **odmitnuto modelem** |
+| `logprobs` | 20 (= strop) | **odmitnuto modelem** |
 | Konec zivota | **2026-09-28** | — |
 
 Na `gpt-5.5` neni `temperature` nastavitelna: jina hodnota nez vychozi 1 vraci
@@ -71,6 +71,22 @@ Tri veci, ktere je dobre vedet:
   proto validuje sam.
 - `logprobs: 0` uz vraci `token_logprobs`, tedy presnou `P(sekvence)`, jen bez
   alternativ na pozici. Nejlevnejsi varianta co do objemu logu.
+- Nekdy je `logprob` u varianty `null`. To neni chyba: endpoint vraci pro
+  nektere nasamplovane tokeny sentinel `-9999` misto pravdepodobnosti, a jeden
+  neznamy faktor dela cely soucin neznamym. UI v takovem pripade skore vynecha.
+
+Vychozich 20 je strop endpointu a plati se objemem logu, ne tokeny:
+
+| `logprobs` | odpoved (n=1) | ~ na request pri n=30 |
+|---|---|---|
+| vypnuto | 316 B | 9 kB |
+| 0 | 602 B | 18 kB |
+| 5 | 1 448 B | 42 kB |
+| 20 | 3 661 B | **107 kB** |
+
+Pri delsim experimentovani s `n=30` roste `data/prompt-log.json` rychle. Kdyz
+alternativy na pozici nepotrebujes, `--logprobs 0` da tez presne `P(sekvence)`
+za sestinu objemu.
 
 Reasoning modely logprobs odmitaji ve vsech formach, takze na `responses`
 backendu je to pole neaktivni. Detaily v `CLAUDE.md` §4.
