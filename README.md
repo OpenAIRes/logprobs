@@ -91,6 +91,39 @@ za sestinu objemu.
 Reasoning modely logprobs odmitaji ve vsech formach, takze na `responses`
 backendu je to pole neaktivni. Detaily v `CLAUDE.md` §4.
 
+### Prohlizeni v Logprobs Vieweru
+
+[OpenAIRes/logprobs](https://github.com/OpenAIRes/logprobs) je HTML prohlizec
+tokenovych logprobs. Uz umi legacy format, tedy presne ten nas tvar
+(`tokens`, `token_logprobs`, `top_logprobs`, `text_offset`).
+
+```bash
+git clone https://github.com/OpenAIRes/logprobs.git logprobs
+```
+
+Prevod nasich behu do jeho formatu:
+
+```powershell
+node .\export-logprobs.mjs --dry-run
+node .\export-logprobs.mjs
+```
+
+Pak naservirovat `logprobs/` a otevrit `logprobs.html`.
+
+Dve veci, ktere prevodnik resi:
+
+- Viewer cte vsude `choices[0]`, takze **jeden request s `n>1` se rozpada na
+  jednu polozku za variantu** (`id` dostane suffix `-index`). Jinak by byla
+  videt jen prvni varianta.
+- Zapis **sluceje podle `id`**, neprepisuje soubor, takze existujici historie
+  vieweru zustava. Pred zapisem se dela `.bak`.
+
+Nase polozky maji v `meta` znacku `ape_source: "resampling-study"` plus
+`ape_event_id`, `ape_mode` a `ape_choice_index`, aby se odlisily od tech, ktere
+si viewer vygeneroval sam.
+
+Slozka `logprobs/` je v `.gitignore` — je to samostatny repozitar.
+
 ## Pouziti
 
 Webove UI:
