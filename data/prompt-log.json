@@ -1,0 +1,661 @@
+[
+  {
+    "id": "seed-resampling-prompt",
+    "type": "seed",
+    "createdAt": "1970-01-01T00:00:00.000Z",
+    "mode": "seed",
+    "backend": null,
+    "model": null,
+    "parentInstruction": null,
+    "parentPrompt": null,
+    "run": {
+      "id": "seed-run",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "request": null,
+    "response": null,
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+        "rawPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+        "finishReason": null,
+        "parentPrompt": null,
+        "parentInstruction": null
+      }
+    ]
+  },
+  {
+    "id": "0edaac3c-484a-42f6-8ea9-65d4ca1d5014",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:35:35.783Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_08facf24b8e543a0006a169ec1b23081a191492489d93ba933",
+        "object": "response",
+        "created_at": 1779867329,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867334,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_08facf24b8e543a0006a169ec2b4dc81a18d38f6afb01ef42d",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_08facf24b8e543a0006a169ec617ec81a19708d76b65006914",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Paraphrase the given instruction while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 203,
+          "output_tokens_details": {
+            "reasoning_tokens": 176
+          },
+          "total_tokens": 247
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Paraphrase the given instruction while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-0edaac3c-484a-42f6-8ea9-65d4ca1d5014",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "ab813d61-c759-4eb7-a730-b3c630394aa1",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:36:49.612Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_088dd0dd284371cb006a169f0bee1881949782c57568b97541",
+        "object": "response",
+        "created_at": 1779867403,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867408,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_088dd0dd284371cb006a169f0d1a808194b6bab2de2d59164d",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_088dd0dd284371cb006a169f0fe8588194a3e954152ebee916",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Rewrite the following instruction using different wording while preserving its original meaning."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 149,
+          "output_tokens_details": {
+            "reasoning_tokens": 130
+          },
+          "total_tokens": 193
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Rewrite the following instruction using different wording while preserving its original meaning.",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-ab813d61-c759-4eb7-a730-b3c630394aa1",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "0da4454f-ba38-452a-a158-b16fb0a299dd",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:37:55.919Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_0d0031f65f70af67006a169f4eb0b08197a16da753f20021b6",
+        "object": "response",
+        "created_at": 1779867470,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867474,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0d0031f65f70af67006a169f4fdb3c81978950ab1ede23610e",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_0d0031f65f70af67006a169f52445c8197aab0bb135ac1a6b5",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Paraphrase the given instruction while preserving its original meaning."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 155,
+          "output_tokens_details": {
+            "reasoning_tokens": 137
+          },
+          "total_tokens": 199
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Paraphrase the given instruction while preserving its original meaning.",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-0da4454f-ba38-452a-a158-b16fb0a299dd",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "0c111397-dec3-4c59-b4bd-a6678227d5cb",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:39:33.519Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_0a303b476cd4699e006a169fb1299c819da1c9a3289d302ac7",
+        "object": "response",
+        "created_at": 1779867569,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867572,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0a303b476cd4699e006a169fb1d254819db20669e36218f234",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_0a303b476cd4699e006a169fb3c644819dab92f042578a5b2f",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Rewrite the following instruction in a different way while preserving its original meaning."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 107,
+          "output_tokens_details": {
+            "reasoning_tokens": 87
+          },
+          "total_tokens": 151
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Rewrite the following instruction in a different way while preserving its original meaning.",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-0c111397-dec3-4c59-b4bd-a6678227d5cb",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "5ce66d95-9d37-43b8-98a1-c9f3bece6631",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:40:21.987Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_0864d1d6b47ac144006a169fe08c7c81a3b8bf95036e708d46",
+        "object": "response",
+        "created_at": 1779867616,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867620,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0864d1d6b47ac144006a169fe195bc81a393191510c61bb235",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_0864d1d6b47ac144006a169fe4217081a3b7c8a7ffda254d21",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Rewrite the following instruction using different wording while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 150,
+          "output_tokens_details": {
+            "reasoning_tokens": 122
+          },
+          "total_tokens": 194
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Rewrite the following instruction using different wording while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-5ce66d95-9d37-43b8-98a1-c9f3bece6631",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "6825a858-6a9c-4244-9444-5b9f5bccd723",
+    "type": "openai_resample_error",
+    "createdAt": "2026-06-22T10:09:47.846Z",
+    "mode": "custom",
+    "model": "gpt-5.5",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "61c08cb4-c58e-4e22-aeb7-3682918729c4",
+      "requestedCount": 5,
+      "index": 1,
+      "total": 5
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "temperature": 0
+      }
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Unsupported parameter: 'temperature' is not supported with this model.",
+          "type": "invalid_request_error",
+          "param": "temperature",
+          "code": null
+        }
+      }
+    },
+    "generatedPrompts": [],
+    "backend": "responses"
+  },
+  {
+    "id": "b2408cf2-872e-4de2-b248-20619531b255",
+    "type": "openai_resample_error",
+    "createdAt": "2026-06-22T10:32:07.873Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "21abb263-bf9c-41f8-aa15-fb0c62387c55",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "max_output_tokens": 1
+      }
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Invalid 'max_output_tokens': integer below minimum value. Expected a value >= 16, but got 1 instead.",
+          "type": "invalid_request_error",
+          "param": "max_output_tokens",
+          "code": "integer_below_min_value"
+        }
+      }
+    },
+    "generatedPrompts": [],
+    "backend": "responses"
+  }
+]

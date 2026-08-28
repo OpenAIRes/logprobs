@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>APE Resampling Prompt</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Automatic Prompt Engineer</p>
+            <h1>Resampling Prompt</h1>
+          </div>
+          <div class="status-pill" id="status">Ready</div>
+        </header>
+
+        <section class="control-grid">
+          <form class="panel editor-panel" id="prompt-form">
+            <div class="panel-heading">
+              <div>
+                <h2>Instruction</h2>
+                <p>The source instruction that should be rewritten without changing its meaning.</p>
+              </div>
+            </div>
+
+            <div class="segmented" role="group" aria-label="Mode">
+              <label>
+                <input type="radio" name="mode" value="custom">
+                <span>Custom</span>
+              </label>
+              <label>
+                <input type="radio" name="mode" value="meta" checked>
+                <span>Meta</span>
+              </label>
+            </div>
+
+            <label class="field-stack" for="instruction">
+              <span>Instruction</span>
+              <textarea id="instruction" name="instruction" rows="8">write the antonym of the word.</textarea>
+            </label>
+
+            <div class="segmented" role="group" aria-label="Backend" id="backend-group">
+              <label>
+                <input type="radio" name="backend" value="completions" checked>
+                <span>Completions</span>
+              </label>
+              <label>
+                <input type="radio" name="backend" value="responses">
+                <span>Responses</span>
+              </label>
+            </div>
+            <p class="backend-note" id="backend-note"></p>
+
+            <div class="settings-grid">
+              <label class="field-stack">
+                <span>Model</span>
+                <input id="model" name="model" autocomplete="off">
+              </label>
+              <label class="field-stack">
+                <span>Count</span>
+                <input id="count" name="count" type="number" min="1" max="20" value="1">
+              </label>
+              <label class="field-stack" data-param="temperature">
+                <span>Temperature</span>
+                <input id="temperature" name="temperature" autocomplete="off">
+              </label>
+              <label class="field-stack" data-param="topP">
+                <span>Top P</span>
+                <input id="top-p" name="topP" autocomplete="off">
+              </label>
+              <label class="field-stack" data-param="maxTokens">
+                <span>Max tokens</span>
+                <input id="max-tokens" name="maxTokens" autocomplete="off">
+              </label>
+              <label class="field-stack" data-param="frequencyPenalty">
+                <span>Frequency penalty</span>
+                <input id="frequency-penalty" name="frequencyPenalty" autocomplete="off">
+              </label>
+              <label class="field-stack" data-param="presencePenalty">
+                <span>Presence penalty</span>
+                <input id="presence-penalty" name="presencePenalty" autocomplete="off">
+              </label>
+            </div>
+            <p class="backend-note">Leave a field empty for the backend default, or type <code>off</code> to send nothing.</p>
+
+            <div class="actions">
+              <button type="button" class="button secondary" id="preview-button">Preview</button>
+              <button type="submit" class="button primary">Generate</button>
+            </div>
+          </form>
+
+          <aside class="panel prompt-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Prompt sent to the API</h2>
+                <p>Meta mode uses the resampling instruction itself as INSTRUCTION.</p>
+              </div>
+            </div>
+            <pre id="prompt-preview">Generate a variation of the following instruction while keeping the semantic meaning.
+
+Input: Generate a variation of the following instruction while keeping the semantic meaning.
+
+Input: [INSTRUCTION]
+Output:
+Output:</pre>
+            <details class="request-details" id="request-details">
+              <summary>Request body</summary>
+              <pre id="request-preview">Press Preview to build the request body.</pre>
+            </details>
+          </aside>
+        </section>
+
+        <section class="results-band">
+          <div class="results-heading">
+            <div>
+              <p class="eyebrow">Output</p>
+              <h2>Instruction Variations</h2>
+            </div>
+            <button type="button" class="icon-button" id="copy-prompt" title="Copy prompt" aria-label="Copy prompt">
+              <span aria-hidden="true">Copy</span>
+            </button>
+          </div>
+          <div class="results-list" id="results">
+            <article class="result-empty">Generated variations will appear here.</article>
+          </div>
+        </section>
+
+        <section class="history-band">
+          <div class="results-heading">
+            <div>
+              <p class="eyebrow">Log</p>
+              <h2>Prompt History</h2>
+            </div>
+            <button type="button" class="icon-button" id="refresh-log" title="Refresh log" aria-label="Refresh log">
+              <span aria-hidden="true">Refresh</span>
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Generated Prompt</th>
+                  <th>Created From</th>
+                  <th>API Request</th>
+                  <th>Backend</th>
+                  <th>Mode</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="log-table">
+                <tr>
+                  <td colspan="6">Loading prompt log...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
