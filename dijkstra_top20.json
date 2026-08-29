@@ -1,0 +1,1276 @@
+{
+  "generated_from": "completion_history.json",
+  "model_filter": null,
+  "chosen_only": false,
+  "source_records": 391,
+  "ranking": "sum_logprob desc (best-first / Dijkstra over token trie)",
+  "count": 20,
+  "entries": [
+    {
+      "rank": 1,
+      "n": 1,
+      "sum_logprob": -2.243145,
+      "mean_logprob": -2.243145,
+      "perplexity": 9.42291981791756,
+      "text": "\n",
+      "tokens": [
+        {
+          "token": "\n",
+          "logprob": -2.243145,
+          "cumulative": -2.243145,
+          "prob": 0.10612421832333892,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "n": 1,
+      "sum_logprob": -2.6312475,
+      "mean_logprob": -2.6312475,
+      "perplexity": 13.891088230143934,
+      "text": "\n\n",
+      "tokens": [
+        {
+          "token": "\n\n",
+          "logprob": -2.6312475,
+          "cumulative": -2.6312475,
+          "prob": 0.07198860042008662,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "n": 1,
+      "sum_logprob": -2.9051552,
+      "mean_logprob": -2.9051552,
+      "perplexity": 18.268078638013208,
+      "text": "package",
+      "tokens": [
+        {
+          "token": "package",
+          "logprob": -2.9051552,
+          "cumulative": -2.9051552,
+          "prob": 0.05474029424852298,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "n": 1,
+      "sum_logprob": -3.171154,
+      "mean_logprob": -3.171154,
+      "perplexity": 23.83497405187956,
+      "text": "1",
+      "tokens": [
+        {
+          "token": "1",
+          "logprob": -3.171154,
+          "cumulative": -3.171154,
+          "prob": 0.04195515370914124,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "n": 1,
+      "sum_logprob": -3.4748487,
+      "mean_logprob": -3.4748487,
+      "perplexity": 32.292942244810384,
+      "text": "The",
+      "tokens": [
+        {
+          "token": "The",
+          "logprob": -3.4748487,
+          "cumulative": -3.4748487,
+          "prob": 0.030966518703036558,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "n": 1,
+      "sum_logprob": -3.4954662,
+      "mean_logprob": -3.4954662,
+      "perplexity": 32.9656529585528,
+      "text": "import",
+      "tokens": [
+        {
+          "token": "import",
+          "logprob": -3.4954662,
+          "cumulative": -3.4954662,
+          "prob": 0.030334603147624113,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "n": 2,
+      "sum_logprob": -3.789028,
+      "mean_logprob": -1.894514,
+      "perplexity": 6.649316051633622,
+      "text": "package com",
+      "tokens": [
+        {
+          "token": "package",
+          "logprob": -2.9051552,
+          "cumulative": -2.9051552,
+          "prob": 0.05474029424852298,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        },
+        {
+          "token": " com",
+          "logprob": -0.8838728,
+          "cumulative": -3.789028,
+          "prob": 0.4131796469868664,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": " com",
+              "logprob": -0.8838728
+            },
+            {
+              "token": " org",
+              "logprob": -3.1148298
+            },
+            {
+              "token": "{",
+              "logprob": -3.2587526
+            },
+            {
+              "token": ":",
+              "logprob": -3.4289854
+            },
+            {
+              "token": ":flutter",
+              "logprob": -3.6582067
+            },
+            {
+              "token": " main",
+              "logprob": -4.118532
+            },
+            {
+              "token": " ru",
+              "logprob": -4.5518513
+            },
+            {
+              "token": " io",
+              "logprob": -4.6093006
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 8,
+      "n": 1,
+      "sum_logprob": -4.023304,
+      "mean_logprob": -4.023304,
+      "perplexity": 55.885446643781975,
+      "text": "﻿using",
+      "tokens": [
+        {
+          "token": "﻿using",
+          "logprob": -4.023304,
+          "cumulative": -4.023304,
+          "prob": 0.0178937462265279,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 9,
+      "n": 1,
+      "sum_logprob": -4.1537867,
+      "mean_logprob": -4.1537867,
+      "perplexity": 63.674661194789365,
+      "text": "I",
+      "tokens": [
+        {
+          "token": "I",
+          "logprob": -4.1537867,
+          "cumulative": -4.1537867,
+          "prob": 0.015704834250171593,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 10,
+      "n": 1,
+      "sum_logprob": -4.188176,
+      "mean_logprob": -4.188176,
+      "perplexity": 65.90247515107359,
+      "text": "<?",
+      "tokens": [
+        {
+          "token": "<?",
+          "logprob": -4.188176,
+          "cumulative": -4.188176,
+          "prob": 0.0151739369076445,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 11,
+      "n": 2,
+      "sum_logprob": -4.249045604,
+      "mean_logprob": -2.124522802,
+      "perplexity": 8.368902911369547,
+      "text": "<?php",
+      "tokens": [
+        {
+          "token": "<?",
+          "logprob": -4.188176,
+          "cumulative": -4.188176,
+          "prob": 0.0151739369076445,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        },
+        {
+          "token": "php",
+          "logprob": -0.060869604,
+          "cumulative": -4.249045604,
+          "prob": 0.940945927361995,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": "php",
+              "logprob": -0.060869604
+            },
+            {
+              "token": " extends",
+              "logprob": -3.5954328
+            },
+            {
+              "token": "xml",
+              "logprob": -4.3996415
+            },
+            {
+              "token": " super",
+              "logprob": -5.7043767
+            },
+            {
+              "token": "\n\n",
+              "logprob": -6.0320935
+            },
+            {
+              "token": "PHP",
+              "logprob": -6.248238
+            },
+            {
+              "token": ">)",
+              "logprob": -6.424315
+            },
+            {
+              "token": " if",
+              "logprob": -7.069321
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 12,
+      "n": 2,
+      "sum_logprob": -4.296070380000001,
+      "mean_logprob": -2.1480351900000003,
+      "perplexity": 8.568007341532953,
+      "text": "﻿using System",
+      "tokens": [
+        {
+          "token": "﻿using",
+          "logprob": -4.023304,
+          "cumulative": -4.023304,
+          "prob": 0.0178937462265279,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        },
+        {
+          "token": " System",
+          "logprob": -0.27276638,
+          "cumulative": -4.296070380000001,
+          "prob": 0.7612706148971746,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": " System",
+              "logprob": -0.27276638
+            },
+            {
+              "token": " UnityEngine",
+              "logprob": -2.8809283
+            },
+            {
+              "token": " Microsoft",
+              "logprob": -3.310013
+            },
+            {
+              "token": "\n",
+              "logprob": -5.2845445
+            },
+            {
+              "token": " Newtonsoft",
+              "logprob": -5.4868665
+            },
+            {
+              "token": " AutoMapper",
+              "logprob": -5.6999345
+            },
+            {
+              "token": " NUnit",
+              "logprob": -5.9805284
+            },
+            {
+              "token": " Fluent",
+              "logprob": -6.104113
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 13,
+      "n": 1,
+      "sum_logprob": -4.491317,
+      "mean_logprob": -4.491317,
+      "perplexity": 89.2388961469061,
+      "text": "#",
+      "tokens": [
+        {
+          "token": "#",
+          "logprob": -4.491317,
+          "cumulative": -4.491317,
+          "prob": 0.011205875948462972,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 14,
+      "n": 1,
+      "sum_logprob": -4.5212574,
+      "mean_logprob": -4.5212574,
+      "perplexity": 91.95114468804718,
+      "text": "A",
+      "tokens": [
+        {
+          "token": "A",
+          "logprob": -4.5212574,
+          "cumulative": -4.5212574,
+          "prob": 0.010875340414658166,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 15,
+      "n": 1,
+      "sum_logprob": -4.613559,
+      "mean_logprob": -4.613559,
+      "perplexity": 100.84240987087462,
+      "text": "#include",
+      "tokens": [
+        {
+          "token": "#include",
+          "logprob": -4.613559,
+          "cumulative": -4.613559,
+          "prob": 0.009916462739044684,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 16,
+      "n": 2,
+      "sum_logprob": -4.679285500000001,
+      "mean_logprob": -2.3396427500000003,
+      "perplexity": 10.37752852835689,
+      "text": "\n   ",
+      "tokens": [
+        {
+          "token": "\n",
+          "logprob": -2.243145,
+          "cumulative": -2.243145,
+          "prob": 0.10612421832333892,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        },
+        {
+          "token": "   ",
+          "logprob": -2.4361405,
+          "cumulative": -4.679285500000001,
+          "prob": 0.08749789876685474,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": "The",
+              "logprob": -3.2711236
+            },
+            {
+              "token": "#include",
+              "logprob": -3.379071
+            },
+            {
+              "token": "import",
+              "logprob": -3.4229877
+            },
+            {
+              "token": "package",
+              "logprob": -3.493943
+            },
+            {
+              "token": "This",
+              "logprob": -3.88881
+            },
+            {
+              "token": "I",
+              "logprob": -3.912483
+            },
+            {
+              "token": "#ifndef",
+              "logprob": -4.2952003
+            },
+            {
+              "token": "//",
+              "logprob": -4.360156
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 17,
+      "n": 1,
+      "sum_logprob": -4.7277584,
+      "mean_logprob": -4.7277584,
+      "perplexity": 113.04188344563678,
+      "text": "//\n",
+      "tokens": [
+        {
+          "token": "//\n",
+          "logprob": -4.7277584,
+          "cumulative": -4.7277584,
+          "prob": 0.008846278649284113,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 18,
+      "n": 1,
+      "sum_logprob": -4.764777,
+      "mean_logprob": -4.764777,
+      "perplexity": 117.30495536581618,
+      "text": "This",
+      "tokens": [
+        {
+          "token": "This",
+          "logprob": -4.764777,
+          "cumulative": -4.764777,
+          "prob": 0.008524789058411848,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 19,
+      "n": 3,
+      "sum_logprob": -4.8902079800000005,
+      "mean_logprob": -1.6300693266666668,
+      "perplexity": 5.104228565423417,
+      "text": "﻿using System;\n",
+      "tokens": [
+        {
+          "token": "﻿using",
+          "logprob": -4.023304,
+          "cumulative": -4.023304,
+          "prob": 0.0178937462265279,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        },
+        {
+          "token": " System",
+          "logprob": -0.27276638,
+          "cumulative": -4.296070380000001,
+          "prob": 0.7612706148971746,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": " System",
+              "logprob": -0.27276638
+            },
+            {
+              "token": " UnityEngine",
+              "logprob": -2.8809283
+            },
+            {
+              "token": " Microsoft",
+              "logprob": -3.310013
+            },
+            {
+              "token": "\n",
+              "logprob": -5.2845445
+            },
+            {
+              "token": " Newtonsoft",
+              "logprob": -5.4868665
+            },
+            {
+              "token": " AutoMapper",
+              "logprob": -5.6999345
+            },
+            {
+              "token": " NUnit",
+              "logprob": -5.9805284
+            },
+            {
+              "token": " Fluent",
+              "logprob": -6.104113
+            }
+          ]
+        },
+        {
+          "token": ";\n",
+          "logprob": -0.5941376,
+          "cumulative": -4.8902079800000005,
+          "prob": 0.5520384385914591,
+          "source": "chosen",
+          "alternatives": [
+            {
+              "token": ";\n",
+              "logprob": -0.5941376
+            },
+            {
+              "token": ".Collections",
+              "logprob": -1.3121266
+            },
+            {
+              "token": ";\n\n",
+              "logprob": -2.790772
+            },
+            {
+              "token": ";\r\n",
+              "logprob": -2.9141145
+            },
+            {
+              "token": ".ComponentModel",
+              "logprob": -4.6334863
+            },
+            {
+              "token": ".Threading",
+              "logprob": -4.8651853
+            },
+            {
+              "token": ".Linq",
+              "logprob": -4.877747
+            },
+            {
+              "token": ";\r\n\r\n",
+              "logprob": -5.085158
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 20,
+      "n": 1,
+      "sum_logprob": -4.8964643,
+      "mean_logprob": -4.8964643,
+      "perplexity": 133.81580971248425,
+      "text": "In",
+      "tokens": [
+        {
+          "token": "In",
+          "logprob": -4.8964643,
+          "cumulative": -4.8964643,
+          "prob": 0.00747295855511089,
+          "source": "alt",
+          "alternatives": [
+            {
+              "token": "\n",
+              "logprob": -2.243145
+            },
+            {
+              "token": "\n\n",
+              "logprob": -2.6312475
+            },
+            {
+              "token": "package",
+              "logprob": -2.9051552
+            },
+            {
+              "token": "1",
+              "logprob": -3.171154
+            },
+            {
+              "token": "The",
+              "logprob": -3.4748487
+            },
+            {
+              "token": "import",
+              "logprob": -3.4954662
+            },
+            {
+              "token": "﻿using",
+              "logprob": -4.023304
+            },
+            {
+              "token": "I",
+              "logprob": -4.1537867
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

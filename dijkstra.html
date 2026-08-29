@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Dijkstra Top 20 — logprob prefixes</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --card: #ffffff;
+    --ink: #1a1a18;
+    --ink-dim: #6b6b66;
+    --ink-faint: #9a9a94;
+    --line: #e5e4e0;
+    --accent: #3d5a80;
+    --good: #2d6a4f;
+    --mid: #b07d2b;
+    --bad: #a63d40;
+    --chip: #f2f1ee;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.03);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --card: #1f1f24;
+      --ink: #e8e8e4;
+      --ink-dim: #a0a09a;
+      --ink-faint: #6e6e68;
+      --line: #2e2e34;
+      --accent: #8ab0d9;
+      --good: #6ec9a0;
+      --mid: #e0b060;
+      --bad: #e08588;
+      --chip: #2a2a30;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.2);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1.25rem 4rem;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+
+  header { margin-bottom: 1.75rem; }
+  h1 { margin: 0 0 .35rem; font-size: 1.5rem; letter-spacing: -.01em; font-weight: 620; }
+  .sub { color: var(--ink-dim); font-size: .875rem; }
+  .sub code { background: var(--chip); padding: .1em .35em; border-radius: 4px; font-size: .92em; }
+
+  .meta {
+    display: flex; flex-wrap: wrap; gap: .5rem 1.5rem;
+    margin-top: 1rem; padding: .75rem 1rem;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; box-shadow: var(--shadow);
+    font-size: .8125rem;
+  }
+  .meta div { color: var(--ink-dim); }
+  .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; align-items: center; gap: 1rem; margin: 1.25rem 0 .5rem; flex-wrap: wrap; }
+  .controls label { font-size: .8125rem; color: var(--ink-dim); display: flex; align-items: center; gap: .4rem; cursor: pointer; }
+  .legend { display: flex; align-items: center; gap: .5rem; margin-left: auto; font-size: .75rem; color: var(--ink-faint); }
+  .legend .ramp { width: 90px; height: 8px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--bad), var(--mid), var(--good)); }
+
+  .row {
+    display: grid; grid-template-columns: 2.5rem 1fr; gap: 1rem;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: .6rem;
+    box-shadow: var(--shadow);
+  }
+  .rank {
+    font: 600 1.0625rem/1 ui-monospace, "SF Mono", Menlo, monospace;
+    color: var(--ink-faint); padding-top: .15rem; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .rank .n1 { display: block; margin-top: .4rem; font-size: .625rem; font-weight: 500;
+    letter-spacing: .04em; color: var(--accent); text-transform: uppercase; }
+
+  .text {
+    font: 14px/1.7 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    word-break: break-word; margin-bottom: .7rem;
+  }
+  .tok {
+    display: inline-block; padding: .05em .28em; margin: 0 1px 2px 0;
+    border-radius: 4px; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: background .1s;
+  }
+  .tok:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .tok.sel { background: var(--accent) !important; color: var(--card); }
+  .tok .ctrl { color: var(--ink-faint); font-size: .85em; }
+  .tok.sel .ctrl { color: var(--card); opacity: .75; }
+  .tok.alt { border-bottom-color: var(--mid); border-bottom-style: dotted; }
+
+  .stats { display: flex; flex-wrap: wrap; gap: .35rem 1.25rem; font-size: .78125rem; color: var(--ink-dim); }
+  .stats span { font-variant-numeric: tabular-nums; }
+  .stats b { color: var(--ink); font-weight: 600; }
+
+  .bar { height: 3px; background: var(--chip); border-radius: 2px; margin: .6rem 0 .55rem; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); opacity: .55; }
+
+  .detail {
+    margin-top: .75rem; padding: .7rem .85rem;
+    background: var(--chip); border-radius: 7px;
+    font-size: .8125rem;
+  }
+  .detail.hide { display: none; }
+  .detail .dh { font-weight: 600; margin-bottom: .45rem; font-family: ui-monospace, Menlo, monospace; }
+  .detail .dh .src { font-family: system-ui, sans-serif; font-weight: 500; font-size: .8125rem;
+    color: var(--ink-dim); margin-left: .5rem; }
+  .detail table { border-collapse: collapse; width: 100%; max-width: 420px; }
+  .detail td { padding: .12rem .5rem .12rem 0; font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, Menlo, monospace; font-size: .78125rem; }
+  .detail td:first-child { color: var(--ink); }
+  .detail td.num { color: var(--ink-dim); text-align: right; }
+  .detail tr.this td { color: var(--accent); font-weight: 600; }
+  .detail .none { color: var(--ink-faint); font-style: italic; }
+
+  #err { color: var(--bad); padding: 1rem; background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Nejlepší prefixy podle součtu logprobs</h1>
+    <div class="sub">
+      Best-first (Dijkstra) prohledávání token-trie. Každý logprob je ≤ 0, takže prodloužení
+      prefixu součet nikdy nezvýší — pořadí vytahování z haldy je proto zaručeně správné.
+      Data: <code>dijkstra_top20.json</code>
+    </div>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <div class="controls">
+    <label><input type="checkbox" id="showDetail" checked> zobrazovat detail po kliknutí na token</label>
+    <div class="legend">
+      <span>nejistý</span><span class="ramp"></span><span>jistý</span>
+    </div>
+  </div>
+
+  <div id="list"></div>
+  <div id="err" style="display:none"></div>
+</div>
+
+<script>
+const listEl = document.getElementById('list');
+const metaEl = document.getElementById('meta');
+const errEl  = document.getElementById('err');
+const showDetailEl = document.getElementById('showDetail');
+
+// Render control characters visibly — otherwise a token that is purely "\n" or
+// " " renders as nothing at all and the row looks empty.
+function escapeToken(t) {
+  const out = [];
+  for (const ch of t) {
+    if (ch === '\n') out.push('<span class="ctrl">⏎</span>');
+    else if (ch === '\t') out.push('<span class="ctrl">⇥</span>');
+    else if (ch === ' ') out.push('<span class="ctrl">␣</span>');
+    else if (ch === '\ufeff') out.push('<span class="ctrl">[BOM]</span>');
+    else out.push(ch.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+  }
+  return out.join('');
+}
+function plain(t) {
+  return t.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣').replace(/\ufeff/g,'[BOM]');
+}
+
+// Colour a token by its probability: near-1 reads as "confident", near-0 as
+// "the model was genuinely choosing". Alpha-only so it works in both themes.
+function tokColor(logprob) {
+  const p = Math.exp(logprob);
+  const a = 0.10 + 0.55 * Math.min(1, p);
+  if (p > 0.6)  return `rgba(45,160,110,${a})`;
+  if (p > 0.15) return `rgba(200,150,50,${a})`;
+  return `rgba(190,70,75,${Math.max(0.12, a)})`;
+}
+
+function fmt(x, d = 4) { return Number(x).toFixed(d); }
+
+// Kept as a named function (rather than inline in the click handler) so the
+// detail rendering can be exercised directly, without a real mouse event.
+function toggleTokenDetail(row, entry, index) {
+  if (!showDetailEl.checked) return;
+  const detailEl = row.querySelector('.detail');
+  const el = row.querySelector(`.tok[data-i="${index}"]`);
+  const t = entry.tokens[index];
+  if (!el || !t) return;
+
+  const wasSel = el.classList.contains('sel');
+  row.querySelectorAll('.tok.sel').forEach(s => s.classList.remove('sel'));
+  if (wasSel) { detailEl.classList.add('hide'); return; }
+  el.classList.add('sel');
+
+  const alts = t.alternatives || [];
+  const rows = alts.length
+    ? `<table>${alts.map(a => `
+        <tr class="${a.token === t.token ? 'this' : ''}">
+          <td>${plain(a.token)}</td>
+          <td class="num">${fmt(a.logprob, 3)}</td>
+          <td class="num">${fmt(Math.exp(a.logprob), 5)}</td>
+        </tr>`).join('')}</table>`
+    : `<div class="none">Pro tuto pozici nejsou v datech uložené alternativy.</div>`;
+
+  detailEl.innerHTML = `
+    <div class="dh">„${plain(t.token)}"
+      <span class="src">logP ${fmt(t.logprob)} · p ${fmt(Math.exp(t.logprob), 5)}
+      · kumulativně ${fmt(t.cumulative)} · zdroj: ${t.source === 'alt' ? 'top_logprobs (alternativa)' : 'vygenerovaný token'}</span>
+    </div>${rows}`;
+  detailEl.classList.remove('hide');
+}
+
+function render(db) {
+  window.__db = db;   // handy for poking at the data from the console
+  metaEl.innerHTML = `
+    <div>záznamů ve zdroji: <b>${db.source_records}</b></div>
+    <div>prefixů: <b>${db.count}</b></div>
+    <div>zdroj: <b>${db.generated_from}</b></div>
+    <div>filtr modelu: <b>${db.model_filter || '—'}</b></div>
+    <div>jen „chosen" tokeny: <b>${db.chosen_only ? 'ano' : 'ne'}</b></div>`;
+
+  const worst = Math.min(...db.entries.map(e => e.sum_logprob));
+
+  db.entries.forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const toks = e.tokens.map((t, i) =>
+      `<span class="tok${t.source === 'alt' ? ' alt' : ''}" data-i="${i}"
+             style="background:${tokColor(t.logprob)}"
+             title="${plain(t.token)}  logP=${fmt(t.logprob)}">${escapeToken(t.token)}</span>`
+    ).join('');
+
+    row.innerHTML = `
+      <div class="rank">${e.rank}${e.n === 1 ? '<span class="n1">1 tok</span>' : ''}</div>
+      <div>
+        <div class="text">${toks}</div>
+        <div class="bar"><i style="width:${(e.sum_logprob / worst * 100).toFixed(1)}%"></i></div>
+        <div class="stats">
+          <span>délka <b>${e.n}</b></span>
+          <span>Σ logP <b>${fmt(e.sum_logprob)}</b></span>
+          <span>⌀ logP <b>${fmt(e.mean_logprob)}</b></span>
+          <span>perplexity <b>${fmt(e.perplexity, 3)}</b></span>
+        </div>
+        <div class="detail hide"></div>
+      </div>`;
+
+    row.querySelectorAll('.tok').forEach(el => {
+      el.addEventListener('click', () => toggleTokenDetail(row, e, +el.dataset.i));
+    });
+
+    listEl.appendChild(row);
+  });
+}
+
+fetch('dijkstra_top20.json', { cache: 'no-store' })
+  .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — soubor nenalezen?`); return r.json(); })
+  .then(render)
+  .catch(err => {
+    errEl.style.display = 'block';
+    errEl.textContent = 'Nepodařilo se načíst dijkstra_top20.json: ' + err.message
+      + '  — vygeneruj ho: py export_dijkstra_top.py completion_history.json';
+  });
+</script>
+</body>
+</html>

@@ -109,17 +109,19 @@ def build_trie(records: List[Dict], model_filter: Optional[str] = None) -> TrieN
 
     # Second pass: fill any child whose token is a known alternative in its
     # parent's top_logprobs table, even though it was never itself "chosen".
-    def fill(node: TrieNode):
+    # Iterative, not recursive: a single 4096-token completion makes the trie
+    # 4096 levels deep, well past Python's default recursion limit.
+    stack = [root]
+    while stack:
+        node = stack.pop()
         if node.top_logprobs:
             for tok, child in node.children.items():
                 if child.logprob is None and tok in node.top_logprobs:
                     child.token = tok
                     child.logprob = node.top_logprobs[tok]
                     child.source = "alt"
-        for child in node.children.values():
-            fill(child)
+        stack.extend(node.children.values())
 
-    fill(root)
     return root
 
 
@@ -149,11 +151,15 @@ def find_best_prefix(root: TrieNode, min_n: int = 1, top: int = 1, allow_gaps: b
         if len(best) > top:
             best.pop()
 
-    def dfs(node: TrieNode, tokens: List[str], cum_sum: float, n: int, gap_count: int):
+    # Iterative DFS with an explicit stack: a single 4096-token completion makes
+    # the trie 4096 levels deep, well past Python's default recursion limit.
+    stack: List[Tuple[TrieNode, List[str], float, int, int]] = [(root, [], 0.0, 0, 0)]
+    while stack:
+        node, tokens, cum_sum, n, gap_count = stack.pop()
         for tok, child in node.children.items():
             if not usable(child):
                 if allow_gaps:
-                    dfs(child, tokens, cum_sum, n, gap_count + 1)
+                    stack.append((child, tokens, cum_sum, n, gap_count + 1))
                 continue
             if gap_count and not allow_gaps:
                 continue
@@ -164,9 +170,8 @@ def find_best_prefix(root: TrieNode, min_n: int = 1, top: int = 1, allow_gaps: b
                 avg = new_sum / new_n
                 if len(best) < top or avg > best[-1]["avg"]:
                     consider(avg, new_n, new_tokens, new_sum, gap_count)
-            dfs(child, new_tokens, new_sum, new_n, gap_count)
+            stack.append((child, new_tokens, new_sum, new_n, gap_count))
 
-    dfs(root, [], 0.0, 0, 0)
     return best
 
 
