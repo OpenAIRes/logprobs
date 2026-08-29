@@ -97,6 +97,9 @@
   .stats { display: flex; flex-wrap: wrap; gap: .35rem 1.25rem; font-size: .78125rem; color: var(--ink-dim); }
   .stats span { font-variant-numeric: tabular-nums; }
   .stats b { color: var(--ink); font-weight: 600; }
+  /* Σ logP je řadicí kritérium — odlišit od ostatních, jen informativních čísel */
+  .stats .key { color: var(--accent); }
+  .stats .key b { color: var(--accent); }
 
   .bar { height: 3px; background: var(--chip); border-radius: 2px; margin: .6rem 0 .55rem; overflow: hidden; }
   .bar i { display: block; height: 100%; background: var(--accent); opacity: .55; }
@@ -215,6 +218,7 @@ function toggleTokenDetail(row, entry, index) {
 function render(db) {
   window.__db = db;   // handy for poking at the data from the console
   metaEl.innerHTML = `
+    <div>řazeno podle: <b>Σ logP (součet), sestupně</b></div>
     <div>záznamů ve zdroji: <b>${db.source_records}</b></div>
     <div>prefixů: <b>${db.count}</b></div>
     <div>zdroj: <b>${db.generated_from}</b></div>
@@ -240,7 +244,7 @@ function render(db) {
         <div class="bar"><i style="width:${(e.sum_logprob / worst * 100).toFixed(1)}%"></i></div>
         <div class="stats">
           <span>délka <b>${e.n}</b></span>
-          <span>Σ logP <b>${fmt(e.sum_logprob)}</b></span>
+          <span class="key">Σ logP <b>${fmt(e.sum_logprob)}</b></span>
           <span>⌀ logP <b>${fmt(e.mean_logprob)}</b></span>
           <span>perplexity <b>${fmt(e.perplexity, 3)}</b></span>
         </div>
