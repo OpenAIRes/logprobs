@@ -68,6 +68,8 @@
   .stat b { font-size: 1.0625rem; font-weight: 620; font-variant-numeric: tabular-nums;
     font-family: ui-monospace, Menlo, monospace; }
   .stat.hi b { color: var(--good); }
+  .stat.warn b { color: var(--mid); }
+  .sealbar.capped { background: rgba(176,125,43,.10); color: var(--mid); }
 
   .note { font-size: .78125rem; color: var(--ink-dim); margin-top: .6rem; line-height: 1.5; }
   .note b { color: var(--ink); }
@@ -192,6 +194,7 @@
       <div class="stat"><span>frontiera</span><b id="sFrontier">0</b></div>
       <div class="stat hi"><span>dokázaný top-K</span><b id="sProven">0</b></div>
       <div class="stat"><span>nejlepší na frontieře</span><b id="sBestF">—</b></div>
+      <div class="stat"><span>strop nevidených</span><b id="sCeiling">—</b></div>
       <div class="stat"><span>tokeny (in/out)</span><b id="sTokens">0 / 0</b></div>
       <div class="stat"><span>odhad ceny</span><b id="sCost">$0.0000</b></div>
       <div class="stat"><span>max hloubka</span><b id="sDepth">0</b></div>
@@ -205,6 +208,15 @@
       <b>Dokázaný top-K</b>: je-li nejlepší kandidát na frontieře se součtem <i>S</i>, pak každý
       objevený prefix se součtem &gt; <i>S</i> už nemůže být ničím přeskočen — jeho pozice je
       finální. Přesně ta vlastnost, která dělá Dijkstru správnou.
+    </div>
+    <div class="note">
+      <b>Strop nevidených</b>: API vrací jen 20 alternativ na pozici z ~100 000 tokenů slovníku,
+      takže každý rozbalený uzel má i děti, které jsme nikdy neviděli a které v žádné frontieře
+      nejsou. Ohraničené ale jsou: mimo top-20 má token logprob ≤ ten dvacátý, takže celý nevidený
+      podstrom pod uzlem <i>N</i> má součet ≤ <i>N.sum + min(top20)</i>. Největší takový odhad je
+      <b>tvrdý strop</b> — pod ním se z top-20 dat nedá dokázat nic, ať zavoláme kolikrát chceme.
+      Dokázaný top-K se proto řídí tím horším z obou limitů; když začne omezovat strop, je to
+      označené <b>⚑</b>.
     </div>
     <h2 style="margin-top:1rem">Log</h2>
     <div id="log"></div>
@@ -304,6 +316,7 @@ function makeNode(token, logprob, parent) {
     parent,
     children: new Map(),
     top: null,          // top_logprobs recorded at THIS node = its children's logprobs
+    minTop: null,       // smallest logprob among those — bounds every UNSEEN child
     expanded: false,    // did some response cover this node's next position?
     queued: false,      // already sitting in the frontier heap
     originId: null,     // id of the response that gave this node its logprob
@@ -318,6 +331,7 @@ class Engine {
     this.root = { token: '', logprob: 0, sum: 0, depth: 0, parent: null,
                   children: new Map(), top: null, expanded: false, queued: false };
     this.frontier = new MaxHeap();
+    this.unseenMax = -Infinity;   // best bound on any never-seen subtree
     this.nodeCount = 0;
     this.calls = 0;
     this.promptTokens = 0;
@@ -344,7 +358,9 @@ class Engine {
     for (const pos of positions) {
       if (pos.top && !node.top) {
         node.top = pos.top;
+        node.minTop = Math.min(...Object.values(pos.top));
         node.expanded = true;
+        this.noteUnseenBound(node);
         // Every alternative is a discoverable prefix with a known logprob —
         // free information, no call spent on it.
         for (const [tok, lp] of Object.entries(pos.top)) {
@@ -397,11 +413,13 @@ class Engine {
      logprob — so sums cannot be accumulated correctly on the way in. */
   recomputeSums() {
     this.frontier = new MaxHeap();
+    this.unseenMax = -Infinity;   // depends on sums, so it must be redone too
     this.maxDepth = 0;
     const stack = [this.root];
     while (stack.length) {
       const n = stack.pop();
       if (n.depth > this.maxDepth) this.maxDepth = n.depth;
+      this.noteUnseenBound(n);
       for (const c of n.children.values()) {
         c.sum = (n.sum == null || c.logprob == null) ? null : n.sum + c.logprob;
         c.queued = false;
@@ -429,6 +447,50 @@ class Engine {
     }
     this.root.expanded = this.root.top != null;
     this.recomputeSums();
+  }
+
+  /* ---- the unseen-token ceiling ----------------------------------------
+     The API returns only the top 20 alternatives per position, out of a
+     ~100k vocabulary. So an expanded node N has ~100k children of which we
+     know 20; the rest are real prefixes we have never seen and that sit in
+     no frontier. Ignoring them makes the "proven" claim too strong.
+
+     They are bounded, though: the API returns the *best* 20, so any token
+     outside them has logprob <= min(top20 at N), hence
+         sum(any unseen descendant of N) <= N.sum + N.minTop
+     which bounds N's whole unseen subtree at once. The largest such bound
+     over all expanded nodes is a hard ceiling: nothing below it can ever be
+     proven from top-20 data alone, however many calls we make.
+
+     The ceiling does not necessarily come from the root. minTop <= log(1/20)
+     ~= -3.0 always, but a shallow node with a flat top-20 can still bound
+     higher than the root does, so it has to be maximised over, not assumed. */
+  noteUnseenBound(node) {
+    if (node.sum == null || node.minTop == null) return;
+    const b = node.sum + node.minTop;
+    if (b > this.unseenMax) this.unseenMax = b;
+  }
+
+  unseenCeiling() {
+    return this.unseenMax === -Infinity ? null : this.unseenMax;
+  }
+
+  /* Where the proof actually runs out: the worse of the two limits. */
+  provenCut() {
+    const f = this.bestFrontierSum();
+    const c = this.unseenCeiling();
+    if (f == null && c == null) return null;
+    if (f == null) return c;
+    if (c == null) return f;
+    return Math.max(f, c);
+  }
+
+  /* True when it is the top-20 limit, not the frontier, that stops the proof —
+     i.e. further calls cannot extend the proven set any further. */
+  ceilingIsBinding() {
+    const f = this.bestFrontierSum();
+    const c = this.unseenCeiling();
+    return f != null && c != null && c >= f;
   }
 
   /* The sealed line: with the best frontier candidate at sum S, every
@@ -773,6 +835,7 @@ const cfgLock = el('cfgLock'), modeNote = el('modeNote');
 let engine = null;
 let running = false;
 let renderQueued = false;
+let ceilingWarned = false;
 // Budget is per "Běž" press, not an absolute cap — otherwise the very first run
 // would exhaust it and further building would need the field edited by hand.
 let runStartCalls = 0;
@@ -874,9 +937,20 @@ function renderAll() {
 
   const includeFrontier = showFrontierEl.checked;
   const all = engine.allPrefixes(includeFrontier);
-  const bestF = engine.bestFrontierSum();
-  const proven = bestF == null ? all.length : all.filter(n => n.sum > bestF).length;
-  el('sProven').textContent = proven;
+  const cut = engine.provenCut();
+  const proven = cut == null ? all.length : all.filter(n => n.sum > cut).length;
+  const capped = engine.ceilingIsBinding();
+  el('sProven').textContent = proven + (capped ? ' ⚑' : '');
+  const ceil = engine.unseenCeiling();
+  el('sCeiling').textContent = ceil == null ? '—' : fmt(ceil);
+  el('sCeiling').parentElement.classList.toggle('warn', capped);
+
+  // Once the ceiling binds, more calls cannot extend the proof — say so once.
+  if (capped && !ceilingWarned) {
+    ceilingWarned = true;
+    log(`strop nevidených tokenů (${fmt(ceil)}) je od teď tím, co omezuje důkaz — `
+      + `další volání dokázaný top-K už nezvýší`, 'err');
+  }
 
   const limitRaw = Number(limitSel.value);
   const limit = limitRaw === 0 ? all.length : Math.min(limitRaw, all.length);
@@ -893,10 +967,13 @@ function renderAll() {
   let sealDrawn = false;
   slice.forEach((n, i) => {
     // Draw the sealed line exactly where the proof runs out.
-    if (!sealDrawn && bestF != null && n.sum <= bestF) {
+    if (!sealDrawn && cut != null && n.sum <= cut) {
       const bar = document.createElement('div');
-      bar.className = 'sealbar';
-      bar.innerHTML = `<span>▲ dokázaný top-${proven} — nic dalšího to už nepřeskočí</span><span class="ln"></span>`;
+      bar.className = 'sealbar' + (capped ? ' capped' : '');
+      bar.innerHTML = capped
+        ? `<span>▲ dokázaný top-${proven} — a dál to nejde: pod strop ${fmt(cut)} `
+          + `vidí jen top-20 alternativ</span><span class="ln"></span>`
+        : `<span>▲ dokázaný top-${proven} — nic dalšího to už nepřeskočí</span><span class="ln"></span>`;
       frag.appendChild(bar);
       sealDrawn = true;
     }
@@ -998,9 +1075,9 @@ async function step(useRunBudget = false) {
 
   const targetK = Number(targetKEl.value) || 0;
   if (targetK > 0) {
-    const bestF = engine.bestFrontierSum();
-    if (bestF != null) {
-      const proven = engine.allPrefixes(true).filter(n => n.sum > bestF).length;
+    const cut = engine.provenCut();
+    if (cut != null) {
+      const proven = engine.allPrefixes(true).filter(n => n.sum > cut).length;
       if (proven >= targetK) { log(`stop: dokázáno top-${proven} (cíl ${targetK})`, 'ok'); return false; }
     }
   }
@@ -1114,6 +1191,7 @@ btnReset.addEventListener('click', async () => {
     + 'Uložené záznamy v úložišti ZŮSTANOU — smaž je zvlášť potvrzením v dalším dialogu.')) return;
   running = false;
   engine = null;
+  ceilingWarned = false;
   if (savedCount > 0 && confirm(`Smazat i ${savedCount} uložených záznamů z úložiště?\n\n`
       + 'POZOR: tohle zahodí data ze skutečných (zaplacených) volání. Nejdřív si je vyexportuj.')) {
     try { await idbClear(); log('úložiště smazáno', 'err'); } catch (e) { log('mazání selhalo: ' + e.message, 'err'); }
