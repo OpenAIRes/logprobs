@@ -794,8 +794,9 @@ async function continueFromPromptOnly(maxTokens) {
     return;
   }
 
-  // Použij pouze původní prompt (bez completionu). Fallback pro chat: když není prompt, použij celé zobrazení.
-  const promptOnlyIdx = prev.promptTokens.length > 0 ? prev.promptTokens.length : 0;
+  // Použij pouze původní prompt (bez completionu). 0 je platná délka (prázdný
+  // prompt, např. kořen stromu) — není to chybějící data, nic se nefallbackuje.
+  const promptOnlyIdx = prev.promptTokens.length;
 
   const result = await createCompletion(prevId, promptOnlyIdx, undefined, maxTokens);
   if (!result) return;
@@ -807,7 +808,7 @@ async function continueFromPromptOnly(maxTokens) {
       .sort((a, b) => b.logprob - a.logprob);
     return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sorted };
   });
-  const promptLen = prev.promptTokens.length > 0 ? prev.promptTokens.length : allTokens.length;
+  const promptLen = prev.promptTokens.length;
   allTokens = allTokens.slice(0, promptLen).concat(newTokens);
   safeTokens = allTokens.map(t => t.token);
   currentCompletionId = result.response.id;
