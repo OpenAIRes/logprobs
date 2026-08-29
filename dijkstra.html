@@ -83,6 +83,15 @@
     gap: .85rem; align-items: center;
     padding: .3rem .9rem;
   }
+  /* only when the source data is a sweep and carries provenance */
+  .has-sweep .thead, .has-sweep .row {
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem;
+  }
+  .c-sweep { font-size: .71875rem; color: var(--ink-faint);
+    font-family: ui-monospace, Menlo, monospace; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .c-sweep .pos { color: var(--accent); font-weight: 600; }
+  .c-sweep .onpath { color: var(--good); }
   .thead {
     position: sticky; top: 0; z-index: 5;
     background: var(--card); border-bottom: 1px solid var(--line);
@@ -180,6 +189,7 @@
       <div class="num key">Σ logP</div>
       <div class="num c-mean">⌀ logP</div>
       <div class="num c-ppl">ppl</div>
+      <div class="c-sweep" id="thSweep" hidden>odbočka</div>
     </div>
     <div id="list"></div>
   </div>
@@ -281,6 +291,9 @@ function buildRow(e) {
     <div class="cell num key">${fmt(e.sum_logprob)}</div>
     <div class="cell num c-mean">${fmt(e.mean_logprob)}</div>
     <div class="cell num c-ppl">${fmt(e.perplexity, 2)}</div>
+    ${e.sweep ? `<div class="c-sweep">${e.sweep.is_greedy
+        ? '<span class="onpath">on-path</span>'
+        : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}</div>` : ''}
     <div class="detail hide"></div>`;
 
   const detailEl = row.querySelector('.detail');
@@ -314,6 +327,10 @@ function renderRows() {
   const frag = document.createDocumentFragment();
   slice.forEach(e => frag.appendChild(buildRow(e)));
   listEl.appendChild(frag);
+
+  const anySweep = slice.some(e => e.sweep);
+  tableEl.classList.toggle('has-sweep', anySweep);
+  document.getElementById('thSweep').hidden = !anySweep;
 
   shownEl.textContent = `zobrazeno ${slice.length} z ${DB.entries.length} v databázi`;
   tableEl.hidden = false;

@@ -98,13 +98,23 @@ def main() -> None:
     data = json.load(open(args.file, encoding="utf-8"))
     records = data if isinstance(data, list) else [data]
 
+    # A sweep export records which (position, alternative) each call deviated at.
+    # Index it by prompt token path so a ranked prefix can be traced back to the
+    # branch it came from — otherwise the viewer shows text with no provenance.
+    sweep_by_prompt = {}
+    for r in records:
+        sw = (r.get("meta") or {}).get("sweep")
+        if sw:
+            key = tuple(((r.get("prompt") or {}).get("logprobs") or {}).get("tokens") or [])
+            sweep_by_prompt[key] = sw
+
     root = build_trie(records, args.model)
     ranked = rank_by_sum(root, args.top, args.min_n, args.chosen_only)
 
     entries = []
     for i, r in enumerate(ranked, 1):
         detail = walk_detail(root, r["tokens"], args.max_alts)
-        entries.append({
+        entry = {
             "rank": i,
             "n": r["n"],
             "sum_logprob": r["sum"],
@@ -112,7 +122,16 @@ def main() -> None:
             "perplexity": math.exp(-r["mean"]),
             "text": "".join(r["tokens"]),
             "tokens": detail,
-        })
+        }
+        # deepest prompt path that is a prefix of this entry and was itself a
+        # sweep call — that is the branch point this prefix descends from
+        toks = tuple(r["tokens"])
+        for cut in range(len(toks), 0, -1):
+            sw = sweep_by_prompt.get(toks[:cut])
+            if sw:
+                entry["sweep"] = sw
+                break
+        entries.append(entry)
 
     db = {
         "generated_from": args.file,
