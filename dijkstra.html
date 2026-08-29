@@ -166,7 +166,7 @@
     <div class="sub">
       Best-first (Dijkstra) prohledávání token-trie. Každý logprob je ≤ 0, takže prodloužení
       prefixu součet nikdy nezvýší — pořadí vytahování z haldy je proto zaručeně správné.
-      Data: <code>dijkstra_top.json</code>
+      Data: <code id="srcName">dijkstra_top.json</code>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -357,6 +357,7 @@ function setupLimitControl() {
 function render(db) {
   DB = db;
   window.__db = db;   // handy for poking at the data from the console
+  document.getElementById('srcName').textContent = DATA_FILE;
 
   metaEl.innerHTML = `
     <div>řazeno podle: <b>Σ logP (součet), sestupně</b></div>
@@ -370,13 +371,16 @@ function render(db) {
   renderRows();
 }
 
-fetch('dijkstra_top.json', { cache: 'no-store' })
+// ?file=… vybira zdroj, aby se dalo prepinat mezi sadami (best-first vs sweep)
+const DATA_FILE = new URLSearchParams(location.search).get('file') || 'dijkstra_top.json';
+
+fetch(DATA_FILE, { cache: 'no-store' })
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — soubor nenalezen?`); return r.json(); })
   .then(render)
   .catch(err => {
     errEl.style.display = 'block';
-    errEl.textContent = 'Nepodařilo se načíst dijkstra_top.json: ' + err.message
-      + '  — vygeneruj ho: py export_dijkstra_top.py completion_history.json --top 500';
+    errEl.textContent = `Nepodařilo se načíst ${DATA_FILE}: ` + err.message
+      + '  — vygeneruj ho: py export_dijkstra_top.py <data>.json --top 500 -o ' + DATA_FILE;
   });
 </script>
 </body>

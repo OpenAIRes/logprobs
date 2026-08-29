@@ -1,3 +1,5 @@
 local_api_key.json
 __pycache__/
 *.pyc
+sweep_history.jsonl
+sweep_log.txt
