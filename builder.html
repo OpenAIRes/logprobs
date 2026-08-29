@@ -830,7 +830,10 @@ function refreshButtons() {
 function scheduleRender() {
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => { renderQueued = false; renderAll(); });
+  // setTimeout, not requestAnimationFrame: rAF does not fire at all in a
+  // background tab, so a long unattended run would leave the stats and table
+  // stuck at their old values while generation actually progressed.
+  setTimeout(() => { renderQueued = false; renderAll(); }, 16);
 }
 
 function renderStats() {
