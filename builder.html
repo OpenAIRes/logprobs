@@ -167,7 +167,7 @@
         <input type="number" id="maxCalls" value="20" min="1" step="10">
       </label>
       <label class="fld"><span>stop: dokázat top-K</span>
-        <input type="number" id="targetK" value="50" min="0" step="10">
+        <input type="number" id="targetK" value="20" min="0" step="10">
       </label>
     </div>
     <div class="note" id="modeNote"></div>
@@ -179,6 +179,7 @@
       <button id="btnStart" class="primary">Založit databázi</button>
       <button id="btnStep" disabled>Krok</button>
       <button id="btnRun" disabled>Běž</button>
+      <button id="btnExport" disabled>Export dat</button>
       <button id="btnReset" class="danger" disabled>Reset</button>
     </div>
   </div>
@@ -194,6 +195,7 @@
       <div class="stat"><span>tokeny (in/out)</span><b id="sTokens">0 / 0</b></div>
       <div class="stat"><span>odhad ceny</span><b id="sCost">$0.0000</b></div>
       <div class="stat"><span>max hloubka</span><b id="sDepth">0</b></div>
+      <div class="stat hi"><span>uloženo záznamů</span><b id="sSaved">0</b></div>
     </div>
     <div class="note">
       <b>Nových volání na běh</b> je rozpočet na jedno stisknutí „Běž", ne absolutní strop —
@@ -304,6 +306,7 @@ function makeNode(token, logprob, parent) {
     top: null,          // top_logprobs recorded at THIS node = its children's logprobs
     expanded: false,    // did some response cover this node's next position?
     queued: false,      // already sitting in the frontier heap
+    originId: null,     // id of the response that gave this node its logprob
   };
 }
 
@@ -336,7 +339,7 @@ class Engine {
      AFTER P+t_0..t_{i-1} — i.e. T_i belongs to the PARENT of t_i. So the node
      we are standing on gets T_i, then we descend into t_i. The final node gets
      no alternatives, which is exactly why it stays on the frontier. */
-  integrate(startNode, positions) {
+  integrate(startNode, positions, responseId) {
     let node = startNode;
     for (const pos of positions) {
       if (pos.top && !node.top) {
@@ -345,31 +348,87 @@ class Engine {
         // Every alternative is a discoverable prefix with a known logprob —
         // free information, no call spent on it.
         for (const [tok, lp] of Object.entries(pos.top)) {
-          this.addChild(node, tok, lp);
+          this.addChild(node, tok, lp, responseId);
         }
       }
-      const child = this.addChild(node, pos.token, pos.logprob);
+      const child = this.addChild(node, pos.token, pos.logprob, responseId);
       node = child;
     }
     return node;
   }
 
-  addChild(parent, token, logprob) {
+  /* Structure-only child, for walking a stored record's prompt path. Its
+     logprob stays unknown until some record's top_logprobs covers it. */
+  ensureChild(parent, token) {
+    let child = parent.children.get(token);
+    if (!child) {
+      child = makeNode(token, null, parent);
+      child.sum = null;
+      parent.children.set(token, child);
+      this.nodeCount++;
+      if (child.depth > this.maxDepth) this.maxDepth = child.depth;
+    }
+    return child;
+  }
+
+  addChild(parent, token, logprob, responseId) {
     let child = parent.children.get(token);
     if (!child) {
       child = makeNode(token, logprob, parent);
+      child.originId = responseId || null;
       parent.children.set(token, child);
       this.nodeCount++;
       if (child.depth > this.maxDepth) this.maxDepth = child.depth;
     } else if (child.logprob == null) {
       child.logprob = logprob;
-      child.sum = parent.sum + logprob;
+      child.sum = (parent.sum == null ? null : parent.sum + logprob);
+      child.originId = responseId || null;
     }
-    if (!child.expanded && !child.queued) {
+    if (child.logprob != null && !child.expanded && !child.queued) {
       child.queued = true;
       this.frontier.push(child);
     }
     return child;
+  }
+
+  /* Recompute every cumulative sum top-down and rebuild the frontier heap.
+     Needed after a rebuild from storage, where a node's structure can appear
+     (from some record's prompt path) before another record supplies its
+     logprob — so sums cannot be accumulated correctly on the way in. */
+  recomputeSums() {
+    this.frontier = new MaxHeap();
+    this.maxDepth = 0;
+    const stack = [this.root];
+    while (stack.length) {
+      const n = stack.pop();
+      if (n.depth > this.maxDepth) this.maxDepth = n.depth;
+      for (const c of n.children.values()) {
+        c.sum = (n.sum == null || c.logprob == null) ? null : n.sum + c.logprob;
+        c.queued = false;
+        if (c.sum != null && !c.expanded) { c.queued = true; this.frontier.push(c); }
+        stack.push(c);
+      }
+    }
+  }
+
+  /* Rebuild the whole tree from persisted records — a reload must not cost a
+     single call. Mirrors what the Python trie builder does: walk each record's
+     prompt path for structure, then integrate its own positions for logprobs. */
+  rebuildFromRecords(records) {
+    const sorted = [...records].sort((a, b) => (a.created || 0) - (b.created || 0));
+    for (const rec of sorted) {
+      const ptoks = rec?.prompt?.logprobs?.tokens || [];
+      let node = this.root;
+      for (const t of ptoks) node = this.ensureChild(node, t);
+      let positions;
+      try { positions = parseCompletionsResponse(rec); } catch { continue; }
+      this.integrate(node, positions, rec.id);
+      this.calls++;
+      this.promptTokens += rec.usage?.prompt_tokens || 0;
+      this.completionTokens += rec.usage?.completion_tokens || 0;
+    }
+    this.root.expanded = this.root.top != null;
+    this.recomputeSums();
   }
 
   /* The sealed line: with the best frontier candidate at sum S, every
@@ -399,7 +458,10 @@ class Engine {
     const stack = [this.root];
     while (stack.length) {
       const n = stack.pop();
-      if (n.parent && n.logprob != null && (includeFrontier || n.expanded)) out.push(n);
+      // sum can be null when an ancestor's logprob is still unknown (a prompt
+      // path walked in from storage that nothing has scored yet) — such a
+      // prefix has no comparable score, so it is not a ranking entry.
+      if (n.parent && n.logprob != null && n.sum != null && (includeFrontier || n.expanded)) out.push(n);
       for (const c of n.children.values()) stack.push(c);
     }
     out.sort((a, b) => b.sum - a.sum || a.depth - b.depth);
@@ -413,16 +475,205 @@ class Engine {
 }
 
 /* ============================================================================
-   THE ONE PLACE THAT TALKS TO OPENAI — deliberately not wired up yet.
-   When it is, it should POST to /v1/completions with
-     { model, prompt, logprobs: 20, max_tokens, temperature: 0, seed: 0 }
-   and return positions as [{token, logprob, top: {tok: lp, ...}}, ...] plus
-   usage, so nothing else in this file needs to change. Remember: a non-JSON
-   body (an nginx 5xx HTML page during an outage) must surface as an error
-   rather than a silent null.
+   PERSISTENCE — its own IndexedDB, deliberately NOT the one logprobs.html uses.
+   Records are written in the same text_completion shape that logprobs.html and
+   the Python scripts already read, so builder output can be exported and used
+   there directly — but a separate database name means a bug here can never
+   corrupt the existing hand-built history.
+
+   Paid data must survive anything: every response is persisted BEFORE it is
+   integrated into the trie, so a crash or a bug in integration cannot lose a
+   call that was already charged for. On load the whole tree is rebuilt from
+   these records, so a reload costs nothing.
    ========================================================================= */
-async function fetchPositionsFromApi(/* prompt, maxTokens, model */) {
-  throw new Error('Volání API zatím není zapojené — použij režim „simulace".');
+const DB_NAME = 'builderDB', DB_VERSION = 1, STORE = 'completions';
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        const s = db.createObjectStore(STORE, { keyPath: 'id' });
+        s.createIndex('by_created', 'created', { unique: false });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function idbWith(mode, fn) {
+  return idbOpen().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, mode);
+    const store = tx.objectStore(STORE);
+    let out;
+    Promise.resolve(fn(store)).then(r => { out = r; }).catch(reject);
+    tx.oncomplete = () => resolve(out);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  }));
+}
+const idbPut    = rec => idbWith('readwrite', s => { s.put(rec); });
+const idbGetAll = ()  => idbWith('readonly',  s => new Promise((res, rej) => {
+  const r = s.getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error);
+}));
+const idbCount  = ()  => idbWith('readonly',  s => new Promise((res, rej) => {
+  const r = s.count(); r.onsuccess = () => res(r.result || 0); r.onerror = () => rej(r.error);
+}));
+const idbClear  = ()  => idbWith('readwrite', s => { s.clear(); });
+
+/* ============================================================================
+   API LAYER. Split into pure pieces (request building, response parsing, error
+   classification) plus one thin networking function, so every part except the
+   actual socket can be exercised without spending anything.
+   ========================================================================= */
+const COMPLETIONS_URL = 'https://api.openai.com/v1/completions';
+
+// Swappable only so the error/retry paths can be tested without a network.
+let apiFetch = (...args) => fetch(...args);
+
+function buildRequestBody(prompt, maxTokens, model) {
+  return {
+    model,
+    prompt,
+    logprobs: 20,          // silently capped at 5 by davinci-002 / babbage-002
+    max_tokens: maxTokens,
+    temperature: 0,
+    seed: 0,
+  };
+}
+
+/* Legacy text_completion -> [{token, logprob, top}]. Throws on any shape we
+   don't recognise rather than returning something half-parsed. */
+function parseCompletionsResponse(json) {
+  const choice = json?.choices?.[0];
+  const lp = choice?.logprobs;
+  if (!lp || !Array.isArray(lp.tokens)) {
+    throw new Error('Odpověď nemá očekávaný tvar (choices[0].logprobs.tokens chybí).');
+  }
+  const toks = lp.tokens, lps = lp.token_logprobs || [], tops = lp.top_logprobs || [];
+  if (lps.length !== toks.length) {
+    throw new Error(`Nesoulad délek: ${toks.length} tokenů vs ${lps.length} logprobs.`);
+  }
+  return toks.map((t, i) => ({
+    token: t,
+    logprob: lps[i],
+    top: (tops[i] && typeof tops[i] === 'object') ? tops[i] : null,
+  }));
+}
+
+class ApiError extends Error {
+  constructor(message, { status = null, retryable = false } = {}) {
+    super(message); this.name = 'ApiError'; this.status = status; this.retryable = retryable;
+  }
+}
+
+/* Turn an HTTP response into parsed JSON or a clearly-typed error. A non-JSON
+   body is the case that already bit us once: during an OpenAI outage the
+   endpoint returned an nginx 503 HTML page, res.json() threw, and the throw was
+   swallowed into a silent null so the UI showed nothing at all. */
+async function readApiResponse(res) {
+  const ctype = res.headers.get('content-type') || '';
+  let json = null, text = null;
+  if (ctype.includes('application/json')) {
+    try { json = await res.json(); } catch (e) { json = null; }
+  } else {
+    try { text = await res.text(); } catch { text = null; }
+  }
+
+  if (json?.error) {
+    const msg = json.error.message || 'neznámá chyba';
+    const retryable = res.status === 429 || res.status >= 500;
+    throw new ApiError(`API chyba (HTTP ${res.status}): ${msg}`, { status: res.status, retryable });
+  }
+  if (!res.ok) {
+    const snippet = text ? ` — ${text.replace(/\s+/g, ' ').slice(0, 120)}` : '';
+    throw new ApiError(`HTTP ${res.status} ${res.statusText || ''}${snippet}`.trim(),
+                       { status: res.status, retryable: res.status === 429 || res.status >= 500 });
+  }
+  if (!json) {
+    throw new ApiError(`HTTP ${res.status}: odpověď není JSON (content-type: ${ctype || 'neuveden'})`,
+                       { status: res.status, retryable: res.status >= 500 });
+  }
+  return json;
+}
+
+/* The API key never reaches the log, the DOM, or a stored record — only the
+   Authorization header of a request to api.openai.com. */
+async function getApiKey() {
+  try { const k = localStorage.getItem('openai_key'); if (k) return k; } catch {}
+  try {
+    const r = await fetch('local_api_key.json', { cache: 'no-store' });
+    if (r.ok) {
+      const d = await r.json();
+      if (typeof d.openai_key === 'string' && d.openai_key) {
+        try { localStorage.setItem('openai_key', d.openai_key); } catch {}
+        return d.openai_key;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+const RETRY_DELAYS_MS = [1000, 4000];   // only for 429 / 5xx
+
+async function fetchPositionsFromApi(prompt, maxTokens, model) {
+  const key = await getApiKey();
+  if (!key) throw new ApiError('Chybí API klíč (localStorage „openai_key" ani local_api_key.json).');
+
+  const body = buildRequestBody(prompt, maxTokens, model);
+  let lastErr = null;
+
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) {
+      const wait = RETRY_DELAYS_MS[attempt - 1];
+      log(`  opakuji za ${wait} ms (pokus ${attempt + 1})`, 'err');
+      await new Promise(r => setTimeout(r, wait));
+    }
+    try {
+      const res = await apiFetch(COMPLETIONS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify(body),
+      });
+      const json = await readApiResponse(res);
+      return {
+        positions: parseCompletionsResponse(json),
+        usage: json.usage || null,
+        raw: json,        // kept verbatim so nothing from a paid call is discarded
+        request: body,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (!(err instanceof ApiError) || !err.retryable) throw err;
+    }
+  }
+  throw lastErr;
+}
+
+/* Build the persisted record. Same shape logprobs.html writes, so the Python
+   scripts (build_trie etc.) read builder output without changes: prompt token
+   path in prompt.logprobs.tokens, the response's own logprobs in choices[0]. */
+function buildRecord({ raw, request, promptTokens, promptText, previousResponseId, maxTokens }) {
+  return {
+    id: raw.id,
+    object: raw.object || 'text_completion',
+    created: raw.created || 0,
+    model: raw.model,
+    previous_response_id: previousResponseId || null,
+    prompt: {
+      text: promptText,
+      index: 0,
+      logprobs: { tokens: promptTokens, token_logprobs: [], top_logprobs: [] },
+    },
+    choices: raw.choices,
+    usage: raw.usage,
+    max_tokens: Number(raw.choices?.[0]?.logprobs?.tokens?.length ?? maxTokens),
+    temperature: 0,
+    seed: 0,
+    meta: { target_max_tokens: Number(maxTokens), source: 'builder' },
+    request,          // exact body sent, so the alias actually requested is recoverable
+  };
 }
 
 /* ============================================================================
@@ -493,7 +744,8 @@ async function simulatePositions(prompt, maxTokens, model) {
 const el = id => document.getElementById(id);
 const modeEl = el('mode'), modelEl = el('model'), maxTokensEl = el('maxTokens');
 const maxCallsEl = el('maxCalls'), targetKEl = el('targetK');
-const btnStart = el('btnStart'), btnStep = el('btnStep'), btnRun = el('btnRun'), btnReset = el('btnReset');
+const btnStart = el('btnStart'), btnStep = el('btnStep'), btnRun = el('btnRun');
+const btnReset = el('btnReset'), btnExport = el('btnExport');
 const listEl = el('list'), logEl = el('log'), shownEl = el('shown');
 const limitSel = el('limitSel'), showFrontierEl = el('showFrontier');
 const cfgLock = el('cfgLock'), modeNote = el('modeNote');
@@ -531,7 +783,8 @@ function fmt(x, d = 4) { return Number(x).toFixed(d); }
 function log(msg, cls) {
   const d = document.createElement('div');
   if (cls) d.className = cls;
-  d.textContent = msg;
+  // Safety net: an API key must never end up in the log, however it got here.
+  d.textContent = String(msg).replace(/sk-[A-Za-z0-9_\-]{8,}/g, 'sk-[REDACTED]');
   logEl.appendChild(d);
   while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
   logEl.scrollTop = logEl.scrollHeight;
@@ -543,9 +796,11 @@ function updateModeNote() {
     ? '<b>Simulace:</b> data se vyrábějí lokálně, deterministicky podle promptu. Nikam se '
       + 'neukládají a nikdy se nesmíchají s reálnou databází — slouží jen k vyzkoušení '
       + 'enginu a UI. Žádné volání API, žádné náklady (odhad ceny níže je hypotetický).'
-    : '<b>API režim zatím není zapojený.</b> Veškerá logika je hotová; chybí jen jedna '
-      + 'funkce (<code>fetchPositionsFromApi</code>), která pošle request na '
-      + '<code>/v1/completions</code> a vrátí pozice. Do té doby použij simulaci.';
+    : '<b>API režim je zapojený a bude účtovat skutečné tokeny.</b> Každá odpověď se ukládá '
+      + 'do vlastní IndexedDB (<code>builderDB</code>, oddělené od dat <code>logprobs.html</code>) '
+      + '<i>před</i> zpracováním, takže zaplacené volání nemůže zmizet; po reloadu se strom '
+      + 'obnoví z úložiště bez jediného volání. Klíč se bere z <code>local_api_key.json</code> '
+      + 'nebo z localStorage a nikdy se nedostane do logu ani do uložených dat.';
   const alts = ALT_COUNT[modelEl.value] || 20;
   if (alts < 20) {
     modeNote.innerHTML += `<br><b>Pozor:</b> ${modelEl.value} vrací jen ${alts} alternativ `
@@ -649,10 +904,60 @@ function renderAll() {
     + (includeFrontier ? '' : ' (jen rozbalené)');
 }
 
+let savedCount = 0;
+let apiSpendConfirmed = false;
+
+async function refreshSavedCount() {
+  try { savedCount = await idbCount(); } catch { /* keep last known */ }
+  el('sSaved').textContent = savedCount;
+  btnExport.disabled = savedCount === 0;
+}
+
 async function getPositions(prompt) {
   const maxTokens = engine.maxTokens;
   if (modeEl.value === 'sim') return simulatePositions(prompt, maxTokens, engine.model);
   return fetchPositionsFromApi(prompt, maxTokens, engine.model);
+}
+
+/* One generation + integration, with persistence ordered so paid data cannot be
+   lost: the raw response is written to storage BEFORE it is integrated. If
+   integration then threw, the record is already safe and a reload rebuilds from
+   it. Simulated data is never persisted, so it can never enter a real database. */
+async function generateInto(targetNode) {
+  const promptTokens = engine.pathTokens(targetNode);
+  const promptText = promptTokens.join('');
+  const res = await getPositions(promptText);
+
+  let responseId = `sim-${engine.calls + 1}`;
+  if (modeEl.value === 'api') {
+    if (!res.raw?.id) throw new Error('Odpověď neobsahuje id — nelze bezpečně uložit.');
+    const rec = buildRecord({
+      raw: res.raw, request: res.request, promptTokens, promptText,
+      previousResponseId: targetNode.originId, maxTokens: engine.maxTokens,
+    });
+    await idbPut(rec);                    // <- persisted before anything else
+    responseId = rec.id;
+    await refreshSavedCount();
+    log(`  uloženo ${rec.id}`, 'ok');
+  }
+
+  engine.integrate(targetNode, res.positions, responseId);
+  targetNode.expanded = true;
+  engine.calls++;
+  engine.promptTokens += res.usage?.prompt_tokens || 0;
+  engine.completionTokens += res.usage?.completion_tokens || 0;
+  return res;
+}
+
+/* Real calls cost money, so the first one in a session asks explicitly. */
+function confirmApiSpend() {
+  if (modeEl.value !== 'api' || apiSpendConfirmed) return true;
+  const n = Number(maxCallsEl.value) || 0;
+  const ok = confirm(
+    `Tohle bude volat OpenAI API modelem ${engine ? engine.model : modelEl.value} `
+    + `a účtovat skutečné tokeny.\n\nRozpočet na běh: ${n} volání.\n\nPokračovat?`);
+  if (ok) apiSpendConfirmed = true;
+  return ok;
 }
 
 /* One expansion: pop the best frontier candidate, generate from it, integrate.
@@ -676,21 +981,21 @@ async function step(useRunBudget = false) {
     }
   }
 
+  if (!confirmApiSpend()) { log('zrušeno uživatelem'); return false; }
+
   const target = engine.nextTarget();
   if (!target) { log('stop: frontiera je prázdná'); return false; }
 
   const prompt = engine.pathText(target);
   try {
-    const res = await getPositions(prompt);
-    engine.integrate(target, res.positions);
-    target.expanded = true;
-    engine.calls++;
-    engine.promptTokens += res.usage?.prompt_tokens || 0;
-    engine.completionTokens += res.usage?.completion_tokens || 0;
+    await generateInto(target);
     log(`#${engine.calls} rozbaleno Σ=${fmt(target.sum)} d=${target.depth} „${plain(prompt).slice(0, 48)}"`);
     scheduleRender();
     return true;
   } catch (err) {
+    // Put the node back: it was popped but never expanded, so without this a
+    // failed call would silently drop a branch from the frontier for good.
+    if (!target.expanded && !target.queued) { target.queued = true; engine.frontier.push(target); }
     log('CHYBA: ' + err.message, 'err');
     return false;
   }
@@ -707,14 +1012,14 @@ async function start() {
   logEl.textContent = '';
   log(`start: model=${engine.model} max_tokens=${maxTokens} režim=${modeEl.value}`);
 
-  const prompt = '';
+  if (!confirmApiSpend()) {
+    log('zrušeno uživatelem — nic se nevolalo');
+    engine = null; setConfigEnabled(true); refreshButtons();
+    return;
+  }
+
   try {
-    const res = await getPositions(prompt);
-    engine.integrate(engine.root, res.positions);
-    engine.root.expanded = true;
-    engine.calls++;
-    engine.promptTokens += res.usage?.prompt_tokens || 0;
-    engine.completionTokens += res.usage?.completion_tokens || 0;
+    const res = await generateInto(engine.root);
     log(`#1 rozbalen prázdný prompt → ${res.positions.length} pozic, `
       + `${engine.nodeCount} prefixů, frontiera ${engine.frontier.size}`, 'ok');
   } catch (err) {
@@ -722,6 +1027,43 @@ async function start() {
   }
   scheduleRender();
   refreshButtons();
+}
+
+/* A reload must not cost anything: rebuild the tree from persisted records. */
+async function resumeFromStore() {
+  let records = [];
+  try { records = await idbGetAll(); } catch (err) { log('nelze číst úložiště: ' + err.message, 'err'); return; }
+  await refreshSavedCount();
+  if (!records.length) return;
+
+  const first = records[0];
+  const model = first.request?.model || first.model || modelEl.value;
+  const maxTokens = Number(first.meta?.target_max_tokens) || Number(maxTokensEl.value) || 20;
+  modeEl.value = 'api';                 // stored records only ever come from real calls
+  modelEl.value = PRICING[model] ? model : modelEl.value;
+  maxTokensEl.value = maxTokens;
+
+  engine = new Engine(modelEl.value, maxTokens);
+  engine.started = true;
+  engine.rebuildFromRecords(records);
+  setConfigEnabled(false);
+  updateModeNote();
+  log(`obnoveno z úložiště: ${records.length} záznamů → ${engine.nodeCount} prefixů, `
+    + `frontiera ${engine.frontier.size} (žádné volání)`, 'ok');
+  scheduleRender();
+  refreshButtons();
+}
+
+/* Export in the same shape logprobs.html and the Python scripts read. */
+async function exportData() {
+  const records = await idbGetAll();
+  if (!records.length) { alert('Úložiště je prázdné.'); return; }
+  const blob = new Blob([JSON.stringify(records)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'builder_history.json'; a.click();
+  URL.revokeObjectURL(url);
+  log(`export: ${records.length} záznamů → builder_history.json`, 'ok');
 }
 
 async function runLoop() {
@@ -742,10 +1084,17 @@ btnRun.addEventListener('click', () => {
   runStartCalls = engine.calls;          // budget counts from this press
   running = true; refreshButtons(); runLoop();
 });
-btnReset.addEventListener('click', () => {
-  if (!confirm('Zahodit rozpracovanou databázi a začít znovu?')) return;
+btnExport.addEventListener('click', () => exportData());
+btnReset.addEventListener('click', async () => {
+  if (!confirm('Zahodit rozpracovaný strom a začít znovu?\n\n'
+    + 'Uložené záznamy v úložišti ZŮSTANOU — smaž je zvlášť potvrzením v dalším dialogu.')) return;
   running = false;
   engine = null;
+  if (savedCount > 0 && confirm(`Smazat i ${savedCount} uložených záznamů z úložiště?\n\n`
+      + 'POZOR: tohle zahodí data ze skutečných (zaplacených) volání. Nejdřív si je vyexportuj.')) {
+    try { await idbClear(); log('úložiště smazáno', 'err'); } catch (e) { log('mazání selhalo: ' + e.message, 'err'); }
+  }
+  await refreshSavedCount();
   setConfigEnabled(true);
   logEl.textContent = '';
   listEl.innerHTML = '<div class="empty">Databáze je prázdná — začni tlačítkem „Založit databázi".</div>';
@@ -763,9 +1112,18 @@ modelEl.addEventListener('change', updateModeNote);
 
 updateModeNote();
 refreshButtons();
+resumeFromStore();
 
-// exposed for inspection from the console
-window.__builder = { get engine() { return engine; }, step, start };
+// exposed for inspection and for offline testing of the API layer
+window.__builder = {
+  get engine() { return engine; },
+  step, start, exportData, resumeFromStore,
+  // pure/testable pieces of the API layer — no network involved
+  buildRequestBody, parseCompletionsResponse, readApiResponse, buildRecord, ApiError,
+  fetchPositionsFromApi,
+  setFetch(fn) { apiFetch = fn; },       // test seam only
+  idb: { put: idbPut, getAll: idbGetAll, count: idbCount, clear: idbClear },
+};
 </script>
 </body>
 </html>
