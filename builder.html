@@ -161,10 +161,10 @@
         </select>
       </label>
       <label class="fld"><span>max_tokens (N)</span>
-        <input type="number" id="maxTokens" value="16" min="1" max="4096" step="1">
+        <input type="number" id="maxTokens" value="20" min="1" max="4096" step="1">
       </label>
-      <label class="fld"><span>stop: max volání</span>
-        <input type="number" id="maxCalls" value="200" min="1" step="10">
+      <label class="fld"><span>nových volání na běh</span>
+        <input type="number" id="maxCalls" value="20" min="1" step="10">
       </label>
       <label class="fld"><span>stop: dokázat top-K</span>
         <input type="number" id="targetK" value="50" min="0" step="10">
@@ -194,6 +194,10 @@
       <div class="stat"><span>tokeny (in/out)</span><b id="sTokens">0 / 0</b></div>
       <div class="stat"><span>odhad ceny</span><b id="sCost">$0.0000</b></div>
       <div class="stat"><span>max hloubka</span><b id="sDepth">0</b></div>
+    </div>
+    <div class="note">
+      <b>Nových volání na běh</b> je rozpočet na jedno stisknutí „Běž", ne absolutní strop —
+      každé další stisknutí přidá dalších N volání. „Krok" rozpočtem omezený není.
     </div>
     <div class="note">
       <b>Dokázaný top-K</b>: je-li nejlepší kandidát na frontieře se součtem <i>S</i>, pak každý
@@ -497,6 +501,9 @@ const cfgLock = el('cfgLock'), modeNote = el('modeNote');
 let engine = null;
 let running = false;
 let renderQueued = false;
+// Budget is per "Běž" press, not an absolute cap — otherwise the very first run
+// would exhaust it and further building would need the field edited by hand.
+let runStartCalls = 0;
 
 function escapeToken(t) {
   const out = [];
@@ -648,12 +655,17 @@ async function getPositions(prompt) {
   return fetchPositionsFromApi(prompt, maxTokens, engine.model);
 }
 
-/* One expansion: pop the best frontier candidate, generate from it, integrate. */
-async function step() {
+/* One expansion: pop the best frontier candidate, generate from it, integrate.
+   `useRunBudget` is on for the auto-run loop and off for a single manual step —
+   one explicit click is one call, so there is nothing to budget there. */
+async function step(useRunBudget = false) {
   if (!engine) return false;
 
-  const maxCalls = Number(maxCallsEl.value) || Infinity;
-  if (engine.calls >= maxCalls) { log(`stop: dosažen limit ${maxCalls} volání`); return false; }
+  if (useRunBudget) {
+    const budget = Number(maxCallsEl.value) || Infinity;
+    const done = engine.calls - runStartCalls;
+    if (done >= budget) { log(`stop: ${done} nových volání v tomto běhu (limit ${budget})`); return false; }
+  }
 
   const targetK = Number(targetKEl.value) || 0;
   if (targetK > 0) {
@@ -714,7 +726,7 @@ async function start() {
 
 async function runLoop() {
   while (running) {
-    const ok = await step();
+    const ok = await step(true);
     if (!ok) break;
     await new Promise(r => setTimeout(r, 0));   // yield so the UI stays responsive
   }
@@ -727,6 +739,7 @@ btnStart.addEventListener('click', () => start());
 btnStep.addEventListener('click', async () => { await step(); refreshButtons(); });
 btnRun.addEventListener('click', () => {
   if (running) { running = false; log('pauza'); refreshButtons(); return; }
+  runStartCalls = engine.calls;          // budget counts from this press
   running = true; refreshButtons(); runLoop();
 });
 btnReset.addEventListener('click', () => {
