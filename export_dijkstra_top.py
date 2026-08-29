@@ -44,9 +44,18 @@ Usage:
 """
 
 import argparse
+import gzip
 import json
 import math
 from typing import Dict, List, Optional
+
+
+def open_text(path):
+    """Transparently read .gz — the raw sweep histories are tens of MB, so they
+    are stored compressed."""
+    if path.endswith('.gz'):
+        return gzip.open(path, 'rt', encoding='utf-8')
+    return open(path, encoding='utf-8')
 
 from best_avg_logprob_path import TrieNode, build_trie
 from best_sum_logprob_list import rank_by_sum
@@ -91,6 +100,7 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
     length effect stays visible.
     """
     entries = []
+    by_text: Dict[str, Dict] = {}
     for rec in records:
         lp = (rec.get("choices") or [{}])[0].get("logprobs") or {}
         own = lp.get("tokens") or []
@@ -105,7 +115,18 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
             continue
         total = detail[-1]["cumulative"]
         n = len(detail)
-        entries.append({
+        text = "".join(tokens)
+        # Different calls routinely produce the identical string: an on-path
+        # deviation at position i yields base[:i] + base[i] + the greedy
+        # continuation, which at temperature 0 is the same path again, so all
+        # on-path sweeps of one base converge — the more so when that base
+        # stopped early. Listing the same string many times is noise, so keep
+        # one entry and count how many calls produced it.
+        prev = by_text.get(text)
+        if prev is not None:
+            prev["n_calls"] += 1
+            continue
+        entry = {
             "n": n,
             "sum_logprob": total,
             "mean_logprob": total / n,
@@ -116,9 +137,12 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
             "generated_len": len(own),
             "finish_reason": (rec.get("choices") or [{}])[0].get("finish_reason"),
             "id": rec.get("id"),
+            "n_calls": 1,
             **({"sweep": (rec.get("meta") or {}).get("sweep")}
                if (rec.get("meta") or {}).get("sweep") else {}),
-        })
+        }
+        by_text[text] = entry
+        entries.append(entry)
 
     entries.sort(key=lambda e: -e["sum_logprob"])
     if args.top:
@@ -130,7 +154,7 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
 
 def write_db(entries, records, args, ranking, view) -> None:
     db = {
-        "generated_from": args.file,
+        "generated_from": ", ".join(args.file) if isinstance(args.file, list) else args.file,
         "model_filter": args.model,
         "chosen_only": args.chosen_only,
         "source_records": len(records),
@@ -150,7 +174,10 @@ def write_db(entries, records, args, ranking, view) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("file", help="completion_history.json (array) or a single response object")
+    ap.add_argument("file", nargs="+",
+                    help="one or more record files. Pass several to combine levels: a "
+                         "level-2 sweep has no empty-prompt record, so on its own the "
+                         "first token has no logprob and the trie comes out headless.")
     ap.add_argument("-o", "--out", default="dijkstra_top.json", help="output database file")
     ap.add_argument("--top", type=int, default=200,
                     help="how many ranked prefixes to export. Export generously: the viewer "
@@ -168,8 +195,17 @@ def main() -> None:
                          "produced (prompt + completion) — ranked by cumulative logprob.")
     args = ap.parse_args()
 
-    data = json.load(open(args.file, encoding="utf-8"))
-    records = data if isinstance(data, list) else [data]
+    records, seen_ids = [], set()
+    for path in args.file:
+        with open_text(path) as fh:
+            data = json.load(fh)
+        for r in (data if isinstance(data, list) else [data]):
+            rid = r.get("id")
+            if rid and rid in seen_ids:      # same record in two files — keep one
+                continue
+            if rid:
+                seen_ids.add(rid)
+            records.append(r)
 
     # A sweep export records which (position, alternative) each call deviated at.
     # Index it by prompt token path so a ranked prefix can be traced back to the

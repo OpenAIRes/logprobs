@@ -93,6 +93,7 @@
   .c-sweep .pos { color: var(--accent); font-weight: 600; }
   .c-sweep .onpath { color: var(--good); }
   .c-sweep .stopped { color: var(--bad); font-weight: 600; }
+  .c-sweep .ncalls { color: var(--mid); }   /* stejny retezec z vice volani */
   .thead {
     position: sticky; top: 0; z-index: 5;
     background: var(--card); border-bottom: 1px solid var(--line);
@@ -177,7 +178,9 @@
       <select id="dataSel">
         <option value="dijkstra_top.json">best-first — prefixy</option>
         <option value="sweep_top.json">sweep — prefixy</option>
-        <option value="sweep_completions.json">sweep — celé completions</option>
+        <option value="sweep_completions.json">sweep L1 — celé completions</option>
+        <option value="sweep2_top.json">sweep L1+L2 — prefixy</option>
+        <option value="sweep2_completions.json">sweep L1+L2 — celé completions</option>
       </select>
     </label>
     <label for="limitSel">položek:
@@ -304,7 +307,8 @@ function buildRow(e) {
         ? '<span class="onpath">on-path</span>'
         : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}${
         e.finish_reason && e.finish_reason !== 'length'
-          ? ` <span class="stopped">·${e.finish_reason}</span>` : ''}</div>` : ''}
+          ? ` <span class="stopped">·${e.finish_reason}</span>` : ''}${
+        e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : ''}</div>` : ''}
     <div class="detail hide"></div>`;
 
   const detailEl = row.querySelector('.detail');

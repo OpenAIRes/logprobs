@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 sweep_history.jsonl
 sweep_log.txt
+sweep2_history.jsonl
+sweep2_history.json
+sweep2_log.txt
