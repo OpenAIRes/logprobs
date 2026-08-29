@@ -617,6 +617,11 @@ async function getApiKey() {
 
 const RETRY_DELAYS_MS = [1000, 4000];   // only for 429 / 5xx
 
+// A stubbed Response in tests may not implement headers.get at all.
+function safeHeader(res, name) {
+  try { return res.headers.get(name) || null; } catch { return null; }
+}
+
 async function fetchPositionsFromApi(prompt, maxTokens, model) {
   const key = await getApiKey();
   if (!key) throw new ApiError('Chybí API klíč (localStorage „openai_key" ani local_api_key.json).');
@@ -631,17 +636,32 @@ async function fetchPositionsFromApi(prompt, maxTokens, model) {
       await new Promise(r => setTimeout(r, wait));
     }
     try {
+      const t0 = Date.now();
       const res = await apiFetch(COMPLETIONS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
         body: JSON.stringify(body),
       });
+      const latency = Date.now() - t0;
       const json = await readApiResponse(res);
       return {
         positions: parseCompletionsResponse(json),
         usage: json.usage || null,
         raw: json,        // kept verbatim so nothing from a paid call is discarded
         request: body,
+        // x-request-id is the only handle OpenAI support can trace a specific
+        // call by, and it exists only on the response — so capture it now or
+        // lose it. CORS limits what a browser may read: the endpoint sends
+        // openai-processing-ms and rate-limit headers, but only X-Request-ID
+        // and CF-Ray are in Access-Control-Expose-Headers, so the rest come
+        // back as null here and are simply not recorded.
+        http: {
+          status: res.status,
+          request_id: safeHeader(res, 'x-request-id'),
+          cf_ray: safeHeader(res, 'cf-ray'),
+          latency_ms: latency,
+          attempts: attempt + 1,
+        },
       };
     } catch (err) {
       lastErr = err;
@@ -654,7 +674,7 @@ async function fetchPositionsFromApi(prompt, maxTokens, model) {
 /* Build the persisted record. Same shape logprobs.html writes, so the Python
    scripts (build_trie etc.) read builder output without changes: prompt token
    path in prompt.logprobs.tokens, the response's own logprobs in choices[0]. */
-function buildRecord({ raw, request, promptTokens, promptText, previousResponseId, maxTokens }) {
+function buildRecord({ raw, request, promptTokens, promptText, previousResponseId, maxTokens, http }) {
   return {
     id: raw.id,
     object: raw.object || 'text_completion',
@@ -671,7 +691,7 @@ function buildRecord({ raw, request, promptTokens, promptText, previousResponseI
     max_tokens: Number(raw.choices?.[0]?.logprobs?.tokens?.length ?? maxTokens),
     temperature: 0,
     seed: 0,
-    meta: { target_max_tokens: Number(maxTokens), source: 'builder' },
+    meta: { target_max_tokens: Number(maxTokens), source: 'builder', http: http || null },
     request,          // exact body sent, so the alias actually requested is recoverable
   };
 }
@@ -937,11 +957,12 @@ async function generateInto(targetNode) {
     const rec = buildRecord({
       raw: res.raw, request: res.request, promptTokens, promptText,
       previousResponseId: targetNode.originId, maxTokens: engine.maxTokens,
+      http: res.http,
     });
     await idbPut(rec);                    // <- persisted before anything else
     responseId = rec.id;
     await refreshSavedCount();
-    log(`  uloženo ${rec.id}`, 'ok');
+    log(`  uloženo ${rec.id}  req=${rec.meta.http?.request_id || '—'}  ${rec.meta.http?.latency_ms}ms`, 'ok');
   }
 
   engine.integrate(targetNode, res.positions, responseId);
@@ -1121,6 +1142,10 @@ resumeFromStore();
 window.__builder = {
   get engine() { return engine; },
   step, start, exportData, resumeFromStore,
+  // Explicit programmatic equivalent of answering the spend dialog. Needed for
+  // unattended runs: a background tab defers confirm() indefinitely, so the
+  // dialog can never be answered there and the run would hang.
+  approveSpend() { apiSpendConfirmed = true; log('útrata schválena programově', 'ok'); },
   // pure/testable pieces of the API layer — no network involved
   buildRequestBody, parseCompletionsResponse, readApiResponse, buildRecord, ApiError,
   fetchPositionsFromApi,
