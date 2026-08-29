@@ -34,9 +34,12 @@ probability mass actually went without re-reading the full history export:
 when its logprob was recovered from the parent's top_logprobs table (a token
 picked as a tooltip replacement, which the app never persisted a logprob for).
 
+The viewer (dijkstra.html) chooses how many of these entries to display, but it
+can only ever show what this file holds — so export a generous pool.
+
 Usage:
     python3 export_dijkstra_top.py completion_history.json
-    python3 export_dijkstra_top.py completion_history.json --top 20 -o dijkstra_top20.json
+    python3 export_dijkstra_top.py completion_history.json --top 500
     python3 export_dijkstra_top.py completion_history.json --model davinci-002
 """
 
@@ -79,8 +82,11 @@ def walk_detail(root: TrieNode, tokens: List[str], max_alts: int = 8) -> List[Di
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("file", help="completion_history.json (array) or a single response object")
-    ap.add_argument("-o", "--out", default="dijkstra_top20.json", help="output database file")
-    ap.add_argument("--top", type=int, default=20, help="how many ranked prefixes to export")
+    ap.add_argument("-o", "--out", default="dijkstra_top.json", help="output database file")
+    ap.add_argument("--top", type=int, default=200,
+                    help="how many ranked prefixes to export. Export generously: the viewer "
+                         "picks how many of these to show, and can only ever show what the "
+                         "file holds, so a bigger pool means no re-export to see further down.")
     ap.add_argument("--min-n", type=int, default=1, help="skip prefixes shorter than this")
     ap.add_argument("--model", help="substring filter on model, e.g. davinci-002")
     ap.add_argument("--chosen-only", action="store_true",
@@ -122,8 +128,10 @@ def main() -> None:
         json.dump(db, f, ensure_ascii=False, indent=2)
 
     print(f"wrote {args.out}: {len(entries)} entries from {len(records)} records")
-    for e in entries:
+    for e in entries[:20]:
         print(f"  #{e['rank']:<3} n={e['n']:<4} sum={e['sum_logprob']:9.4f}  {e['text']!r}")
+    if len(entries) > 20:
+        print(f"  ... and {len(entries) - 20} more (see {args.out})")
 
 
 if __name__ == "__main__":

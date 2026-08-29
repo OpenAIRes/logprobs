@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
 <meta charset="utf-8">
-<title>Dijkstra Top 20 — logprob prefixes</title>
+<title>Dijkstra Top — logprob prefixes</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
   :root {
@@ -12,11 +12,12 @@
     --ink-dim: #6b6b66;
     --ink-faint: #9a9a94;
     --line: #e5e4e0;
+    --line-soft: #efeeeb;
     --accent: #3d5a80;
-    --good: #2d6a4f;
     --mid: #b07d2b;
     --bad: #a63d40;
     --chip: #f2f1ee;
+    --hover: #f7f6f4;
     --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.03);
   }
   @media (prefers-color-scheme: dark) {
@@ -27,11 +28,12 @@
       --ink-dim: #a0a09a;
       --ink-faint: #6e6e68;
       --line: #2e2e34;
+      --line-soft: #26262b;
       --accent: #8ab0d9;
-      --good: #6ec9a0;
       --mid: #e0b060;
       --bad: #e08588;
       --chip: #2a2a30;
+      --hover: #25252b;
       --shadow: 0 1px 2px rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.2);
     }
   }
@@ -41,16 +43,16 @@
     background: var(--bg); color: var(--ink);
     font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
-  .wrap { max-width: 940px; margin: 0 auto; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
 
-  header { margin-bottom: 1.75rem; }
+  header { margin-bottom: 1.5rem; }
   h1 { margin: 0 0 .35rem; font-size: 1.5rem; letter-spacing: -.01em; font-weight: 620; }
   .sub { color: var(--ink-dim); font-size: .875rem; }
   .sub code { background: var(--chip); padding: .1em .35em; border-radius: 4px; font-size: .92em; }
 
   .meta {
-    display: flex; flex-wrap: wrap; gap: .5rem 1.5rem;
-    margin-top: 1rem; padding: .75rem 1rem;
+    display: flex; flex-wrap: wrap; gap: .4rem 1.5rem;
+    margin-top: 1rem; padding: .7rem .9rem;
     background: var(--card); border: 1px solid var(--line);
     border-radius: 8px; box-shadow: var(--shadow);
     font-size: .8125rem;
@@ -58,71 +60,94 @@
   .meta div { color: var(--ink-dim); }
   .meta b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-  .controls { display: flex; align-items: center; gap: 1rem; margin: 1.25rem 0 .5rem; flex-wrap: wrap; }
+  .controls { display: flex; align-items: center; gap: 1rem; margin: 1.25rem 0 .6rem; flex-wrap: wrap; }
   .controls label { font-size: .8125rem; color: var(--ink-dim); display: flex; align-items: center; gap: .4rem; cursor: pointer; }
+  .controls select {
+    font: inherit; font-size: .8125rem; color: var(--ink);
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 5px; padding: .2rem .4rem; cursor: pointer;
+  }
+  .shown { font-size: .78125rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
   .legend { display: flex; align-items: center; gap: .5rem; margin-left: auto; font-size: .75rem; color: var(--ink-faint); }
   .legend .ramp { width: 90px; height: 8px; border-radius: 4px;
-    background: linear-gradient(90deg, var(--bad), var(--mid), var(--good)); }
+    background: linear-gradient(90deg, var(--bad), var(--mid), rgba(45,160,110,.75)); }
 
-  .row {
-    display: grid; grid-template-columns: 2.5rem 1fr; gap: 1rem;
+  /* --- compact one-line-per-entry table --- */
+  .table {
     background: var(--card); border: 1px solid var(--line);
-    border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: .6rem;
-    box-shadow: var(--shadow);
+    border-radius: 9px; box-shadow: var(--shadow); overflow: hidden;
   }
-  .rank {
-    font: 600 1.0625rem/1 ui-monospace, "SF Mono", Menlo, monospace;
-    color: var(--ink-faint); padding-top: .15rem; text-align: right;
-    font-variant-numeric: tabular-nums;
+  .thead, .row {
+    display: grid;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem;
+    gap: .85rem; align-items: center;
+    padding: .3rem .9rem;
   }
-  .rank .n1 { display: block; margin-top: .4rem; font-size: .625rem; font-weight: 500;
-    letter-spacing: .04em; color: var(--accent); text-transform: uppercase; }
+  .thead {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--card); border-bottom: 1px solid var(--line);
+    font-size: .6875rem; text-transform: uppercase; letter-spacing: .045em;
+    color: var(--ink-faint); font-weight: 600; padding-top: .5rem; padding-bottom: .5rem;
+  }
+  .thead .num, .row .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .thead .key { color: var(--accent); }
+
+  .row { border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+  .row:last-child { border-bottom: none; }
+  .row:hover { background: var(--hover); }
+  .row.open { background: var(--hover); }
+
+  .rank { font: 600 .8125rem/1 ui-monospace, Menlo, monospace; color: var(--ink-faint);
+    font-variant-numeric: tabular-nums; }
+  .row.open .rank { color: var(--accent); }
 
   .text {
-    font: 14px/1.7 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    word-break: break-word; margin-bottom: .7rem;
+    font: 13px/1.65 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0;
   }
+  .row.open .text { white-space: normal; overflow: visible; word-break: break-word; padding: .25rem 0; }
+
   .tok {
-    display: inline-block; padding: .05em .28em; margin: 0 1px 2px 0;
-    border-radius: 4px; cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: background .1s;
+    display: inline-block; padding: .02em .24em; margin: 0 1px 1px 0;
+    border-radius: 3px; border-bottom: 2px solid transparent;
   }
-  .tok:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
+  .row.open .tok { cursor: pointer; }
+  .row.open .tok:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
   .tok.sel { background: var(--accent) !important; color: var(--card); }
   .tok .ctrl { color: var(--ink-faint); font-size: .85em; }
   .tok.sel .ctrl { color: var(--card); opacity: .75; }
   .tok.alt { border-bottom-color: var(--mid); border-bottom-style: dotted; }
 
-  .stats { display: flex; flex-wrap: wrap; gap: .35rem 1.25rem; font-size: .78125rem; color: var(--ink-dim); }
-  .stats span { font-variant-numeric: tabular-nums; }
-  .stats b { color: var(--ink); font-weight: 600; }
-  /* Σ logP je řadicí kritérium — odlišit od ostatních, jen informativních čísel */
-  .stats .key { color: var(--accent); }
-  .stats .key b { color: var(--accent); }
-
-  .bar { height: 3px; background: var(--chip); border-radius: 2px; margin: .6rem 0 .55rem; overflow: hidden; }
-  .bar i { display: block; height: 100%; background: var(--accent); opacity: .55; }
+  .cell { font-size: .78125rem; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, Menlo, monospace; }
+  .cell.key { color: var(--accent); font-weight: 600; }
 
   .detail {
-    margin-top: .75rem; padding: .7rem .85rem;
-    background: var(--chip); border-radius: 7px;
-    font-size: .8125rem;
+    grid-column: 1 / -1;
+    margin: .1rem 0 .5rem; padding: .65rem .8rem;
+    background: var(--chip); border-radius: 7px; font-size: .8125rem;
+    cursor: default;
   }
   .detail.hide { display: none; }
-  .detail .dh { font-weight: 600; margin-bottom: .45rem; font-family: ui-monospace, Menlo, monospace; }
+  .detail .dh { font-weight: 600; margin-bottom: .4rem; font-family: ui-monospace, Menlo, monospace; }
   .detail .dh .src { font-family: system-ui, sans-serif; font-weight: 500; font-size: .8125rem;
     color: var(--ink-dim); margin-left: .5rem; }
-  .detail table { border-collapse: collapse; width: 100%; max-width: 420px; }
-  .detail td { padding: .12rem .5rem .12rem 0; font-variant-numeric: tabular-nums;
+  .detail table { border-collapse: collapse; max-width: 420px; }
+  .detail td { padding: .1rem .6rem .1rem 0; font-variant-numeric: tabular-nums;
     font-family: ui-monospace, Menlo, monospace; font-size: .78125rem; }
-  .detail td:first-child { color: var(--ink); }
   .detail td.num { color: var(--ink-dim); text-align: right; }
   .detail tr.this td { color: var(--accent); font-weight: 600; }
-  .detail .none { color: var(--ink-faint); font-style: italic; }
+  .detail .none, .detail .hint { color: var(--ink-faint); font-style: italic; }
 
   #err { color: var(--bad); padding: 1rem; background: var(--card);
     border: 1px solid var(--line); border-radius: 8px; }
+
+  @media (max-width: 720px) {
+    .thead, .row { grid-template-columns: 2.5rem minmax(0,1fr) 5.5rem; }
+    .thead .c-mean, .row .c-mean, .thead .c-ppl, .row .c-ppl,
+    .thead .c-n, .row .c-n { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -132,27 +157,47 @@
     <div class="sub">
       Best-first (Dijkstra) prohledávání token-trie. Každý logprob je ≤ 0, takže prodloužení
       prefixu součet nikdy nezvýší — pořadí vytahování z haldy je proto zaručeně správné.
-      Data: <code>dijkstra_top20.json</code>
+      Data: <code>dijkstra_top.json</code>
     </div>
     <div class="meta" id="meta"></div>
   </header>
 
   <div class="controls">
-    <label><input type="checkbox" id="showDetail" checked> zobrazovat detail po kliknutí na token</label>
+    <label for="limitSel">položek:
+      <select id="limitSel"></select>
+    </label>
+    <span class="shown" id="shown"></span>
     <div class="legend">
       <span>nejistý</span><span class="ramp"></span><span>jistý</span>
     </div>
   </div>
 
-  <div id="list"></div>
+  <div class="table" id="table" hidden>
+    <div class="thead">
+      <div>#</div>
+      <div>prefix</div>
+      <div class="num c-n">délka</div>
+      <div class="num key">Σ logP</div>
+      <div class="num c-mean">⌀ logP</div>
+      <div class="num c-ppl">ppl</div>
+    </div>
+    <div id="list"></div>
+  </div>
   <div id="err" style="display:none"></div>
 </div>
 
 <script>
-const listEl = document.getElementById('list');
-const metaEl = document.getElementById('meta');
-const errEl  = document.getElementById('err');
-const showDetailEl = document.getElementById('showDetail');
+const listEl  = document.getElementById('list');
+const tableEl = document.getElementById('table');
+const metaEl  = document.getElementById('meta');
+const errEl   = document.getElementById('err');
+const limitSel = document.getElementById('limitSel');
+const shownEl  = document.getElementById('shown');
+
+const LIMIT_KEY = 'dijkstra_limit';
+const LIMIT_STEPS = [5, 10, 20, 50, 100, 200, 500, 1000];
+
+let DB = null;
 
 // Render control characters visibly — otherwise a token that is purely "\n" or
 // " " renders as nothing at all and the row looks empty.
@@ -183,10 +228,9 @@ function tokColor(logprob) {
 
 function fmt(x, d = 4) { return Number(x).toFixed(d); }
 
-// Kept as a named function (rather than inline in the click handler) so the
-// detail rendering can be exercised directly, without a real mouse event.
+// Named (rather than inline in the click handler) so the detail rendering can be
+// exercised directly, without a real mouse event.
 function toggleTokenDetail(row, entry, index) {
-  if (!showDetailEl.checked) return;
   const detailEl = row.querySelector('.detail');
   const el = row.querySelector(`.tok[data-i="${index}"]`);
   const t = entry.tokens[index];
@@ -194,7 +238,7 @@ function toggleTokenDetail(row, entry, index) {
 
   const wasSel = el.classList.contains('sel');
   row.querySelectorAll('.tok.sel').forEach(s => s.classList.remove('sel'));
-  if (wasSel) { detailEl.classList.add('hide'); return; }
+  if (wasSel) { renderRowHint(detailEl); return; }
   el.classList.add('sel');
 
   const alts = t.alternatives || [];
@@ -215,57 +259,107 @@ function toggleTokenDetail(row, entry, index) {
   detailEl.classList.remove('hide');
 }
 
+function renderRowHint(detailEl) {
+  detailEl.innerHTML = `<div class="hint">Klikni na token výše a uvidíš jeho logprob a alternativy, které model na té pozici vážil.</div>`;
+  detailEl.classList.remove('hide');
+}
+
+function buildRow(e) {
+  const row = document.createElement('div');
+  row.className = 'row';
+
+  const toks = e.tokens.map((t, i) =>
+    `<span class="tok${t.source === 'alt' ? ' alt' : ''}" data-i="${i}"
+           style="background:${tokColor(t.logprob)}"
+           title="${plain(t.token)}  logP=${fmt(t.logprob)}">${escapeToken(t.token)}</span>`
+  ).join('');
+
+  row.innerHTML = `
+    <div class="rank">${e.rank}</div>
+    <div class="text">${toks}</div>
+    <div class="cell num c-n">${e.n}</div>
+    <div class="cell num key">${fmt(e.sum_logprob)}</div>
+    <div class="cell num c-mean">${fmt(e.mean_logprob)}</div>
+    <div class="cell num c-ppl">${fmt(e.perplexity, 2)}</div>
+    <div class="detail hide"></div>`;
+
+  const detailEl = row.querySelector('.detail');
+
+  // Click the row to expand it (full text + per-token inspection); click a token
+  // inside an expanded row to inspect that position.
+  row.addEventListener('click', ev => {
+    const tokEl = ev.target.closest('.tok');
+    if (tokEl && row.classList.contains('open')) {
+      toggleTokenDetail(row, e, +tokEl.dataset.i);
+      return;
+    }
+    if (ev.target.closest('.detail')) return;   // don't collapse when using the panel
+    const opening = !row.classList.contains('open');
+    row.classList.toggle('open', opening);
+    if (opening) renderRowHint(detailEl);
+    else {
+      detailEl.classList.add('hide');
+      row.querySelectorAll('.tok.sel').forEach(s => s.classList.remove('sel'));
+    }
+  });
+
+  return row;
+}
+
+function renderRows() {
+  const limit = Math.min(Number(limitSel.value) || DB.count, DB.entries.length);
+  const slice = DB.entries.slice(0, limit);
+
+  listEl.textContent = '';
+  const frag = document.createDocumentFragment();
+  slice.forEach(e => frag.appendChild(buildRow(e)));
+  listEl.appendChild(frag);
+
+  shownEl.textContent = `zobrazeno ${slice.length} z ${DB.entries.length} v databázi`;
+  tableEl.hidden = false;
+}
+
+function setupLimitControl() {
+  const total = DB.entries.length;
+  const steps = LIMIT_STEPS.filter(n => n < total);
+  limitSel.innerHTML = steps.map(n => `<option value="${n}">${n}</option>`).join('')
+    + `<option value="${total}">vše (${total})</option>`;
+
+  let saved = Number(localStorage.getItem(LIMIT_KEY));
+  if (!saved || !Array.from(limitSel.options).some(o => Number(o.value) === saved)) {
+    saved = steps.includes(20) ? 20 : total;
+  }
+  limitSel.value = String(saved);
+
+  limitSel.addEventListener('change', () => {
+    try { localStorage.setItem(LIMIT_KEY, limitSel.value); } catch {}
+    renderRows();
+  });
+}
+
 function render(db) {
+  DB = db;
   window.__db = db;   // handy for poking at the data from the console
+
   metaEl.innerHTML = `
     <div>řazeno podle: <b>Σ logP (součet), sestupně</b></div>
     <div>záznamů ve zdroji: <b>${db.source_records}</b></div>
-    <div>prefixů: <b>${db.count}</b></div>
+    <div>prefixů v databázi: <b>${db.entries.length}</b></div>
     <div>zdroj: <b>${db.generated_from}</b></div>
     <div>filtr modelu: <b>${db.model_filter || '—'}</b></div>
     <div>jen „chosen" tokeny: <b>${db.chosen_only ? 'ano' : 'ne'}</b></div>`;
 
-  const worst = Math.min(...db.entries.map(e => e.sum_logprob));
-
-  db.entries.forEach(e => {
-    const row = document.createElement('div');
-    row.className = 'row';
-
-    const toks = e.tokens.map((t, i) =>
-      `<span class="tok${t.source === 'alt' ? ' alt' : ''}" data-i="${i}"
-             style="background:${tokColor(t.logprob)}"
-             title="${plain(t.token)}  logP=${fmt(t.logprob)}">${escapeToken(t.token)}</span>`
-    ).join('');
-
-    row.innerHTML = `
-      <div class="rank">${e.rank}${e.n === 1 ? '<span class="n1">1 tok</span>' : ''}</div>
-      <div>
-        <div class="text">${toks}</div>
-        <div class="bar"><i style="width:${(e.sum_logprob / worst * 100).toFixed(1)}%"></i></div>
-        <div class="stats">
-          <span>délka <b>${e.n}</b></span>
-          <span class="key">Σ logP <b>${fmt(e.sum_logprob)}</b></span>
-          <span>⌀ logP <b>${fmt(e.mean_logprob)}</b></span>
-          <span>perplexity <b>${fmt(e.perplexity, 3)}</b></span>
-        </div>
-        <div class="detail hide"></div>
-      </div>`;
-
-    row.querySelectorAll('.tok').forEach(el => {
-      el.addEventListener('click', () => toggleTokenDetail(row, e, +el.dataset.i));
-    });
-
-    listEl.appendChild(row);
-  });
+  setupLimitControl();
+  renderRows();
 }
 
-fetch('dijkstra_top20.json', { cache: 'no-store' })
+fetch('dijkstra_top.json', { cache: 'no-store' })
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — soubor nenalezen?`); return r.json(); })
   .then(render)
   .catch(err => {
     errEl.style.display = 'block';
-    errEl.textContent = 'Nepodařilo se načíst dijkstra_top20.json: ' + err.message
-      + '  — vygeneruj ho: py export_dijkstra_top.py completion_history.json';
+    errEl.textContent = 'Nepodařilo se načíst dijkstra_top.json: ' + err.message
+      + '  — vygeneruj ho: py export_dijkstra_top.py completion_history.json --top 500';
   });
 </script>
 </body>
