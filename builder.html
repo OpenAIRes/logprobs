@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Builder — postupné generování databáze</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg: #fbfbfa; --card: #ffffff; --ink: #1a1a18; --ink-dim: #6b6b66;
+    --ink-faint: #9a9a94; --line: #e5e4e0; --line-soft: #efeeeb;
+    --accent: #3d5a80; --good: #2d6a4f; --mid: #b07d2b; --bad: #a63d40;
+    --chip: #f2f1ee; --hover: #f7f6f4;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.03);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a; --card: #1f1f24; --ink: #e8e8e4; --ink-dim: #a0a09a;
+      --ink-faint: #6e6e68; --line: #2e2e34; --line-soft: #26262b;
+      --accent: #8ab0d9; --good: #6ec9a0; --mid: #e0b060; --bad: #e08588;
+      --chip: #2a2a30; --hover: #25252b;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.2);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 2rem 1.25rem 4rem; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header { margin-bottom: 1.25rem; }
+  h1 { margin: 0 0 .35rem; font-size: 1.5rem; letter-spacing: -.01em; font-weight: 620; }
+  .sub { color: var(--ink-dim); font-size: .875rem; max-width: 74ch; }
+  .sub code { background: var(--chip); padding: .1em .35em; border-radius: 4px; font-size: .92em; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 9px;
+    box-shadow: var(--shadow); padding: .9rem 1rem; margin-bottom: .8rem; }
+  .panel h2 { margin: 0 0 .7rem; font-size: .6875rem; text-transform: uppercase;
+    letter-spacing: .05em; color: var(--ink-faint); font-weight: 600; }
+
+  .cfg { display: flex; flex-wrap: wrap; gap: .9rem 1.4rem; align-items: flex-end; }
+  .fld { display: flex; flex-direction: column; gap: .25rem; }
+  .fld > span { font-size: .75rem; color: var(--ink-dim); }
+  .fld input, .fld select { font: inherit; font-size: .8125rem; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
+    padding: .3rem .45rem; }
+  .fld input[type=number] { width: 6.5rem; }
+  .fld select { cursor: pointer; }
+  .fld input:disabled, .fld select:disabled { opacity: .55; cursor: not-allowed; }
+
+  .btns { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+  button { font: inherit; font-size: .8125rem; font-weight: 500; cursor: pointer;
+    background: var(--card); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: .4rem .8rem; }
+  button:hover:not(:disabled) { background: var(--hover); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { filter: brightness(1.1); }
+  button.danger { color: var(--bad); }
+
+  .badge { font-size: .6875rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .04em; padding: .2rem .45rem; border-radius: 4px; }
+  .badge.sim { background: rgba(176,125,43,.16); color: var(--mid); }
+  .badge.api { background: rgba(166,61,64,.14); color: var(--bad); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: .1rem 1rem; }
+  .stat { padding: .15rem 0; }
+  .stat span { display: block; font-size: .6875rem; color: var(--ink-faint);
+    text-transform: uppercase; letter-spacing: .04em; }
+  .stat b { font-size: 1.0625rem; font-weight: 620; font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, Menlo, monospace; }
+  .stat.hi b { color: var(--good); }
+
+  .note { font-size: .78125rem; color: var(--ink-dim); margin-top: .6rem; line-height: 1.5; }
+  .note b { color: var(--ink); }
+
+  /* ---- ranked table (same compact one-line layout as dijkstra.html) ---- */
+  .tbl { background: var(--card); border: 1px solid var(--line); border-radius: 9px;
+    box-shadow: var(--shadow); overflow: hidden; }
+  .thead, .row { display: grid;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 4.5rem;
+    gap: .85rem; align-items: center; padding: .3rem .9rem; }
+  .thead { position: sticky; top: 0; z-index: 5; background: var(--card);
+    border-bottom: 1px solid var(--line); font-size: .6875rem; text-transform: uppercase;
+    letter-spacing: .045em; color: var(--ink-faint); font-weight: 600;
+    padding-top: .5rem; padding-bottom: .5rem; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .thead .key { color: var(--accent); }
+  .row { border-bottom: 1px solid var(--line-soft); }
+  .row:last-child { border-bottom: none; }
+  .row:hover { background: var(--hover); }
+  .rank { font: 600 .8125rem/1 ui-monospace, Menlo, monospace; color: var(--ink-faint);
+    font-variant-numeric: tabular-nums; }
+  .text { font: 13px/1.65 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .cell { font-size: .78125rem; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, Menlo, monospace; }
+  .cell.key { color: var(--accent); font-weight: 600; }
+  .tok { display: inline-block; padding: .02em .24em; margin: 0 1px 1px 0;
+    border-radius: 3px; border-bottom: 2px solid transparent; }
+  .tok .ctrl { color: var(--ink-faint); font-size: .85em; }
+  .tok.alt { border-bottom-color: var(--mid); border-bottom-style: dotted; }
+  .flag { font-size: .6875rem; padding: 0 .3rem; border-radius: 3px; }
+  .flag.frontier { background: var(--chip); color: var(--ink-faint); }
+
+  .sealbar { display: flex; align-items: center; gap: .6rem; padding: .3rem .9rem;
+    background: rgba(45,106,79,.09); border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line); font-size: .71875rem; color: var(--good);
+    font-weight: 600; letter-spacing: .02em; }
+  .sealbar .ln { flex: 1; height: 1px; background: currentColor; opacity: .3; }
+
+  .empty { padding: 2rem 1rem; text-align: center; color: var(--ink-faint); font-size: .875rem; }
+
+  #log { font: 12px/1.6 ui-monospace, Menlo, monospace; max-height: 11rem; overflow: auto;
+    background: var(--chip); border-radius: 6px; padding: .5rem .65rem; margin-top: .2rem;
+    color: var(--ink-dim); }
+  #log div { white-space: pre-wrap; word-break: break-word; }
+  #log .err { color: var(--bad); }
+  #log .ok { color: var(--good); }
+
+  .toolbar { display: flex; align-items: center; gap: 1rem; margin: 1.1rem 0 .55rem; flex-wrap: wrap; }
+  .toolbar label { font-size: .8125rem; color: var(--ink-dim); display: flex; align-items: center; gap: .4rem; }
+  .toolbar select { font: inherit; font-size: .8125rem; color: var(--ink); background: var(--card);
+    border: 1px solid var(--line); border-radius: 5px; padding: .2rem .4rem; cursor: pointer; }
+  .shown { font-size: .78125rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .legend { margin-left: auto; display: flex; align-items: center; gap: .5rem;
+    font-size: .75rem; color: var(--ink-faint); }
+  .legend .ramp { width: 80px; height: 8px; border-radius: 4px;
+    background: linear-gradient(90deg, var(--bad), var(--mid), rgba(45,160,110,.75)); }
+
+  @media (max-width: 720px) {
+    .thead, .row { grid-template-columns: 2.5rem minmax(0,1fr) 5.5rem; }
+    .c-n, .c-mean, .c-flag { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Builder — postupné generování databáze</h1>
+    <div class="sub">
+      Rozbaluje vždy <b>nejlepší dosud nevyzkoušený kandidát</b> (best-first / Dijkstra).
+      Každá odpověď dá 20 alternativ na každé pozici, takže logprob každého kandidáta známe
+      <i>ještě před</i> voláním — frontieru lze uspořádat zdarma. Databáze tím roste přesně
+      v pořadí, ve kterém se pak čte.
+    </div>
+  </header>
+
+  <div class="panel">
+    <h2>Nastavení <span id="cfgLock" class="badge" style="display:none"></span></h2>
+    <div class="cfg">
+      <label class="fld"><span>režim</span>
+        <select id="mode">
+          <option value="sim">simulace (bez API)</option>
+          <option value="api">API — zatím nezapojeno</option>
+        </select>
+      </label>
+      <label class="fld"><span>model</span>
+        <select id="model">
+          <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
+          <option value="davinci-002">davinci-002</option>
+          <option value="babbage-002">babbage-002</option>
+        </select>
+      </label>
+      <label class="fld"><span>max_tokens (N)</span>
+        <input type="number" id="maxTokens" value="16" min="1" max="4096" step="1">
+      </label>
+      <label class="fld"><span>stop: max volání</span>
+        <input type="number" id="maxCalls" value="200" min="1" step="10">
+      </label>
+      <label class="fld"><span>stop: dokázat top-K</span>
+        <input type="number" id="targetK" value="50" min="0" step="10">
+      </label>
+    </div>
+    <div class="note" id="modeNote"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Ovládání</h2>
+    <div class="btns">
+      <button id="btnStart" class="primary">Založit databázi</button>
+      <button id="btnStep" disabled>Krok</button>
+      <button id="btnRun" disabled>Běž</button>
+      <button id="btnReset" class="danger" disabled>Reset</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Stav</h2>
+    <div class="stats">
+      <div class="stat"><span>volání</span><b id="sCalls">0</b></div>
+      <div class="stat"><span>uzlů (prefixů)</span><b id="sNodes">0</b></div>
+      <div class="stat"><span>frontiera</span><b id="sFrontier">0</b></div>
+      <div class="stat hi"><span>dokázaný top-K</span><b id="sProven">0</b></div>
+      <div class="stat"><span>nejlepší na frontieře</span><b id="sBestF">—</b></div>
+      <div class="stat"><span>tokeny (in/out)</span><b id="sTokens">0 / 0</b></div>
+      <div class="stat"><span>odhad ceny</span><b id="sCost">$0.0000</b></div>
+      <div class="stat"><span>max hloubka</span><b id="sDepth">0</b></div>
+    </div>
+    <div class="note">
+      <b>Dokázaný top-K</b>: je-li nejlepší kandidát na frontieře se součtem <i>S</i>, pak každý
+      objevený prefix se součtem &gt; <i>S</i> už nemůže být ničím přeskočen — jeho pozice je
+      finální. Přesně ta vlastnost, která dělá Dijkstru správnou.
+    </div>
+    <h2 style="margin-top:1rem">Log</h2>
+    <div id="log"></div>
+  </div>
+
+  <div class="toolbar">
+    <label for="limitSel">položek:
+      <select id="limitSel">
+        <option>20</option><option>50</option><option>100</option>
+        <option>200</option><option value="0">vše</option>
+      </select>
+    </label>
+    <span class="shown" id="shown"></span>
+    <label><input type="checkbox" id="showFrontier" checked> zobrazovat i nerozbalené kandidáty</label>
+    <div class="legend"><span>nejistý</span><span class="ramp"></span><span>jistý</span></div>
+  </div>
+
+  <div class="tbl">
+    <div class="thead">
+      <div>#</div><div>prefix</div>
+      <div class="num c-n">délka</div>
+      <div class="num key">Σ logP</div>
+      <div class="num c-mean">⌀ logP</div>
+      <div class="c-flag"></div>
+    </div>
+    <div id="list"><div class="empty">Databáze je prázdná — začni tlačítkem „Založit databázi".</div></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ============================================================================
+   PRICING — $ per 1M tokens (input, output), verified against OpenAI docs.
+   Used only for the running cost estimate.
+   ========================================================================= */
+const PRICING = {
+  'gpt-3.5-turbo-instruct': [1.50, 2.00],
+  'davinci-002':            [2.00, 2.00],
+  'babbage-002':            [0.40, 0.40],
+};
+// davinci-002 / babbage-002 cap logprobs at 5, not 20 — the frontier grows ~4x
+// slower on those models. Kept here so the simulator mirrors reality.
+const ALT_COUNT = { 'gpt-3.5-turbo-instruct': 20, 'davinci-002': 5, 'babbage-002': 5 };
+
+/* ============================================================================
+   HEAP — max-heap on cumulative sum logprob (closest to zero wins).
+   ========================================================================= */
+class MaxHeap {
+  constructor() { this.a = []; this.seq = 0; }
+  get size() { return this.a.length; }
+  _less(i, j) {                       // i sorts before j?
+    const x = this.a[i], y = this.a[j];
+    if (x.sum !== y.sum) return x.sum > y.sum;
+    return x.seq < y.seq;              // stable tie-break
+  }
+  push(node) {
+    this.a.push({ sum: node.sum, seq: this.seq++, node });
+    let i = this.a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (this._less(i, p)) { [this.a[i], this.a[p]] = [this.a[p], this.a[i]]; i = p; }
+      else break;
+    }
+  }
+  pop() {
+    if (!this.a.length) return null;
+    const top = this.a[0], last = this.a.pop();
+    if (this.a.length) {
+      this.a[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2*i + 1, r = l + 1;
+        let m = i;
+        if (l < this.a.length && this._less(l, m)) m = l;
+        if (r < this.a.length && this._less(r, m)) m = r;
+        if (m === i) break;
+        [this.a[i], this.a[m]] = [this.a[m], this.a[i]];
+        i = m;
+      }
+    }
+    return top.node;
+  }
+  peek() { return this.a.length ? this.a[0].node : null; }
+}
+
+/* ============================================================================
+   TRIE — the whole database. A node IS a prefix; identical token sequences are
+   the same node, so convergent paths dedupe by construction (no separate
+   dedup pass, and no reliance on previous_response_id / repair-links ids).
+   ========================================================================= */
+function makeNode(token, logprob, parent) {
+  return {
+    token, logprob,
+    sum: parent ? parent.sum + logprob : logprob,   // cumulative sum logprob
+    depth: parent ? parent.depth + 1 : 1,
+    parent,
+    children: new Map(),
+    top: null,          // top_logprobs recorded at THIS node = its children's logprobs
+    expanded: false,    // did some response cover this node's next position?
+    queued: false,      // already sitting in the frontier heap
+  };
+}
+
+class Engine {
+  constructor(model, maxTokens) {
+    this.model = model;
+    this.maxTokens = maxTokens;
+    // Root is the empty prompt: not a prefix itself, so sum 0 / depth 0.
+    this.root = { token: '', logprob: 0, sum: 0, depth: 0, parent: null,
+                  children: new Map(), top: null, expanded: false, queued: false };
+    this.frontier = new MaxHeap();
+    this.nodeCount = 0;
+    this.calls = 0;
+    this.promptTokens = 0;
+    this.completionTokens = 0;
+    this.maxDepth = 0;
+    this.started = false;
+  }
+
+  pathTokens(node) {
+    const out = [];
+    for (let n = node; n && n.parent; n = n.parent) out.push(n.token);
+    return out.reverse();
+  }
+  pathText(node) { return this.pathTokens(node).join(''); }
+
+  /* Integrate one API (or simulated) response into the trie.
+     A response for prompt P with N positions gives, at position i, a chosen
+     token t_i plus alternatives T_i. T_i are the alternatives at the position
+     AFTER P+t_0..t_{i-1} — i.e. T_i belongs to the PARENT of t_i. So the node
+     we are standing on gets T_i, then we descend into t_i. The final node gets
+     no alternatives, which is exactly why it stays on the frontier. */
+  integrate(startNode, positions) {
+    let node = startNode;
+    for (const pos of positions) {
+      if (pos.top && !node.top) {
+        node.top = pos.top;
+        node.expanded = true;
+        // Every alternative is a discoverable prefix with a known logprob —
+        // free information, no call spent on it.
+        for (const [tok, lp] of Object.entries(pos.top)) {
+          this.addChild(node, tok, lp);
+        }
+      }
+      const child = this.addChild(node, pos.token, pos.logprob);
+      node = child;
+    }
+    return node;
+  }
+
+  addChild(parent, token, logprob) {
+    let child = parent.children.get(token);
+    if (!child) {
+      child = makeNode(token, logprob, parent);
+      parent.children.set(token, child);
+      this.nodeCount++;
+      if (child.depth > this.maxDepth) this.maxDepth = child.depth;
+    } else if (child.logprob == null) {
+      child.logprob = logprob;
+      child.sum = parent.sum + logprob;
+    }
+    if (!child.expanded && !child.queued) {
+      child.queued = true;
+      this.frontier.push(child);
+    }
+    return child;
+  }
+
+  /* The sealed line: with the best frontier candidate at sum S, every
+     discovered prefix with sum > S is final. */
+  bestFrontierSum() {
+    // Skip stale heap entries (nodes expanded after being queued).
+    for (;;) {
+      const top = this.frontier.peek();
+      if (!top) return null;
+      if (top.expanded) { this.frontier.pop(); continue; }
+      return top.sum;
+    }
+  }
+
+  nextTarget() {
+    for (;;) {
+      const n = this.frontier.pop();
+      if (!n) return null;
+      n.queued = false;
+      if (n.expanded) continue;
+      return n;
+    }
+  }
+
+  allPrefixes(includeFrontier) {
+    const out = [];
+    const stack = [this.root];
+    while (stack.length) {
+      const n = stack.pop();
+      if (n.parent && n.logprob != null && (includeFrontier || n.expanded)) out.push(n);
+      for (const c of n.children.values()) stack.push(c);
+    }
+    out.sort((a, b) => b.sum - a.sum || a.depth - b.depth);
+    return out;
+  }
+
+  cost() {
+    const [pin, pout] = PRICING[this.model] || [0, 0];
+    return this.promptTokens / 1e6 * pin + this.completionTokens / 1e6 * pout;
+  }
+}
+
+/* ============================================================================
+   THE ONE PLACE THAT TALKS TO OPENAI — deliberately not wired up yet.
+   When it is, it should POST to /v1/completions with
+     { model, prompt, logprobs: 20, max_tokens, temperature: 0, seed: 0 }
+   and return positions as [{token, logprob, top: {tok: lp, ...}}, ...] plus
+   usage, so nothing else in this file needs to change. Remember: a non-JSON
+   body (an nginx 5xx HTML page during an outage) must surface as an error
+   rather than a silent null.
+   ========================================================================= */
+async function fetchPositionsFromApi(/* prompt, maxTokens, model */) {
+  throw new Error('Volání API zatím není zapojené — použij režim „simulace".');
+}
+
+/* ============================================================================
+   SIMULATOR — local stand-in so the engine and UI can be exercised with no
+   network and no spend. Deterministic per prompt (mirrors temperature 0 /
+   seed 0), and its data is never persisted or exported anywhere.
+   ========================================================================= */
+const SIM_VOCAB = [
+  '\n', '\n\n', 'The', 'This', 'In', 'We', 'I', 'A', 'It', 'package', 'import',
+  '#include', '#', '<?', 'const', 'public', 'class', 'def', 'function', '//',
+  ' the', ' a', ' of', ' to', ' and', ' is', ' for', ' com', ' System', ' name',
+  ' value', ' data', ' 2019', ' best', ' most', ' first', '1', '2', ';', '{', '}',
+  '()', ' =', ' return', ' if', ' new', 'light', 'ch', ' Business', ' Book',
+];
+function hash32(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+async function simulatePositions(prompt, maxTokens, model) {
+  const nAlts = ALT_COUNT[model] || 20;
+  const rnd = mulberry32(hash32(model + '\u0000' + prompt));
+  const positions = [];
+  for (let i = 0; i < maxTokens; i++) {
+    // Deeper into a continuation the model gets more certain — the pattern the
+    // real 4096-token run showed very clearly.
+    const certainty = Math.min(0.97, 0.18 + 0.62 * (1 - Math.exp(-i / 3)));
+    const pool = [];
+    const used = new Set();
+    while (pool.length < nAlts) {
+      const t = SIM_VOCAB[Math.floor(rnd() * SIM_VOCAB.length)];
+      if (used.has(t)) continue;
+      used.add(t); pool.push(t);
+    }
+    // Geometric decay, then normalise. Built this way so the chosen token is
+    // ALWAYS the argmax: at temperature 0 the API can never return a chosen
+    // token that some alternative outranks, and a simulator that allowed it
+    // would fake a greedy spine that isn't greedy. decayBase * jitter stays
+    // below 1, so the weights are strictly decreasing.
+    const decayBase = Math.max(0.05, 1 - certainty);
+    const raw = [];
+    let w = 1;
+    for (let k = 0; k < pool.length; k++) {
+      raw.push(w);
+      w *= decayBase * (0.85 + 0.3 * rnd());
+    }
+    const total = raw.reduce((s, x) => s + x, 0);
+    const top = {};
+    pool.forEach((t, k) => { top[t] = Math.log(Math.max(raw[k] / total, 1e-9)); });
+    positions.push({ token: pool[0], logprob: top[pool[0]], top });
+  }
+  const promptTokens = Math.max(1, prompt.length ? Math.ceil(prompt.length / 4) : 1);
+  return { positions, usage: { prompt_tokens: promptTokens, completion_tokens: maxTokens } };
+}
+
+/* ============================================================================
+   UI
+   ========================================================================= */
+const el = id => document.getElementById(id);
+const modeEl = el('mode'), modelEl = el('model'), maxTokensEl = el('maxTokens');
+const maxCallsEl = el('maxCalls'), targetKEl = el('targetK');
+const btnStart = el('btnStart'), btnStep = el('btnStep'), btnRun = el('btnRun'), btnReset = el('btnReset');
+const listEl = el('list'), logEl = el('log'), shownEl = el('shown');
+const limitSel = el('limitSel'), showFrontierEl = el('showFrontier');
+const cfgLock = el('cfgLock'), modeNote = el('modeNote');
+
+let engine = null;
+let running = false;
+let renderQueued = false;
+
+function escapeToken(t) {
+  const out = [];
+  for (const ch of t) {
+    if (ch === '\n') out.push('<span class="ctrl">⏎</span>');
+    else if (ch === '\t') out.push('<span class="ctrl">⇥</span>');
+    else if (ch === ' ') out.push('<span class="ctrl">␣</span>');
+    else if (ch === '\ufeff') out.push('<span class="ctrl">[BOM]</span>');
+    else out.push(ch.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'));
+  }
+  return out.join('');
+}
+function plain(t) {
+  return t.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣').replace(/\ufeff/g,'[BOM]');
+}
+function tokColor(logprob) {
+  const p = Math.exp(logprob);
+  const a = 0.10 + 0.55 * Math.min(1, p);
+  if (p > 0.6)  return `rgba(45,160,110,${a})`;
+  if (p > 0.15) return `rgba(200,150,50,${a})`;
+  return `rgba(190,70,75,${Math.max(0.12, a)})`;
+}
+function fmt(x, d = 4) { return Number(x).toFixed(d); }
+
+function log(msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = msg;
+  logEl.appendChild(d);
+  while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function updateModeNote() {
+  const sim = modeEl.value === 'sim';
+  modeNote.innerHTML = sim
+    ? '<b>Simulace:</b> data se vyrábějí lokálně, deterministicky podle promptu. Nikam se '
+      + 'neukládají a nikdy se nesmíchají s reálnou databází — slouží jen k vyzkoušení '
+      + 'enginu a UI. Žádné volání API, žádné náklady (odhad ceny níže je hypotetický).'
+    : '<b>API režim zatím není zapojený.</b> Veškerá logika je hotová; chybí jen jedna '
+      + 'funkce (<code>fetchPositionsFromApi</code>), která pošle request na '
+      + '<code>/v1/completions</code> a vrátí pozice. Do té doby použij simulaci.';
+  const alts = ALT_COUNT[modelEl.value] || 20;
+  if (alts < 20) {
+    modeNote.innerHTML += `<br><b>Pozor:</b> ${modelEl.value} vrací jen ${alts} alternativ `
+      + 'na pozici (ne 20), takže frontiera roste výrazně pomaleji.';
+  }
+}
+
+function setConfigEnabled(on) {
+  [modeEl, modelEl, maxTokensEl].forEach(e => e.disabled = !on);
+  cfgLock.style.display = on ? 'none' : '';
+  if (!on) {
+    cfgLock.className = 'badge ' + (engine && modeEl.value === 'sim' ? 'sim' : 'api');
+    cfgLock.textContent = (modeEl.value === 'sim' ? 'simulace' : 'api') + ' · uzamčeno';
+  }
+}
+
+function refreshButtons() {
+  const has = !!engine;
+  btnStart.disabled = has;
+  btnStep.disabled = !has || running;
+  btnRun.disabled = !has;
+  btnReset.disabled = !has || running;
+  btnRun.textContent = running ? 'Pauza' : 'Běž';
+  btnRun.classList.toggle('primary', running);
+}
+
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; renderAll(); });
+}
+
+function renderStats() {
+  if (!engine) return;
+  const bestF = engine.bestFrontierSum();
+  el('sCalls').textContent = engine.calls;
+  el('sNodes').textContent = engine.nodeCount;
+  el('sFrontier').textContent = engine.frontier.size;
+  el('sBestF').textContent = bestF == null ? '—' : fmt(bestF);
+  el('sTokens').textContent = `${engine.promptTokens} / ${engine.completionTokens}`;
+  el('sCost').textContent = '$' + fmt(engine.cost());
+  el('sDepth').textContent = engine.maxDepth;
+}
+
+function renderAll() {
+  if (!engine) return;
+  renderStats();
+
+  const includeFrontier = showFrontierEl.checked;
+  const all = engine.allPrefixes(includeFrontier);
+  const bestF = engine.bestFrontierSum();
+  const proven = bestF == null ? all.length : all.filter(n => n.sum > bestF).length;
+  el('sProven').textContent = proven;
+
+  const limitRaw = Number(limitSel.value);
+  const limit = limitRaw === 0 ? all.length : Math.min(limitRaw, all.length);
+  const slice = all.slice(0, limit);
+
+  listEl.textContent = '';
+  if (!slice.length) {
+    listEl.innerHTML = '<div class="empty">Zatím žádné prefixy.</div>';
+    shownEl.textContent = '';
+    return;
+  }
+
+  const frag = document.createDocumentFragment();
+  let sealDrawn = false;
+  slice.forEach((n, i) => {
+    // Draw the sealed line exactly where the proof runs out.
+    if (!sealDrawn && bestF != null && n.sum <= bestF) {
+      const bar = document.createElement('div');
+      bar.className = 'sealbar';
+      bar.innerHTML = `<span>▲ dokázaný top-${proven} — nic dalšího to už nepřeskočí</span><span class="ln"></span>`;
+      frag.appendChild(bar);
+      sealDrawn = true;
+    }
+    const toks = engine.pathTokens(n);
+    // Colour each token by its own logprob (walk the chain to get them).
+    const chain = [];
+    for (let p = n; p && p.parent; p = p.parent) chain.push(p);
+    chain.reverse();
+    const html = chain.map(c =>
+      `<span class="tok${c.expanded ? '' : ''}" style="background:${tokColor(c.logprob)}"
+             title="${plain(c.token)} logP=${fmt(c.logprob)}">${escapeToken(c.token)}</span>`
+    ).join('');
+
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div class="rank">${i + 1}</div>
+      <div class="text">${html}</div>
+      <div class="cell num c-n">${n.depth}</div>
+      <div class="cell num key">${fmt(n.sum)}</div>
+      <div class="cell num c-mean">${fmt(n.sum / n.depth)}</div>
+      <div class="c-flag">${n.expanded ? '' : '<span class="flag frontier">frontiera</span>'}</div>`;
+    frag.appendChild(row);
+  });
+  listEl.appendChild(frag);
+
+  shownEl.textContent = `zobrazeno ${slice.length} z ${all.length}`
+    + (includeFrontier ? '' : ' (jen rozbalené)');
+}
+
+async function getPositions(prompt) {
+  const maxTokens = engine.maxTokens;
+  if (modeEl.value === 'sim') return simulatePositions(prompt, maxTokens, engine.model);
+  return fetchPositionsFromApi(prompt, maxTokens, engine.model);
+}
+
+/* One expansion: pop the best frontier candidate, generate from it, integrate. */
+async function step() {
+  if (!engine) return false;
+
+  const maxCalls = Number(maxCallsEl.value) || Infinity;
+  if (engine.calls >= maxCalls) { log(`stop: dosažen limit ${maxCalls} volání`); return false; }
+
+  const targetK = Number(targetKEl.value) || 0;
+  if (targetK > 0) {
+    const bestF = engine.bestFrontierSum();
+    if (bestF != null) {
+      const proven = engine.allPrefixes(true).filter(n => n.sum > bestF).length;
+      if (proven >= targetK) { log(`stop: dokázáno top-${proven} (cíl ${targetK})`, 'ok'); return false; }
+    }
+  }
+
+  const target = engine.nextTarget();
+  if (!target) { log('stop: frontiera je prázdná'); return false; }
+
+  const prompt = engine.pathText(target);
+  try {
+    const res = await getPositions(prompt);
+    engine.integrate(target, res.positions);
+    target.expanded = true;
+    engine.calls++;
+    engine.promptTokens += res.usage?.prompt_tokens || 0;
+    engine.completionTokens += res.usage?.completion_tokens || 0;
+    log(`#${engine.calls} rozbaleno Σ=${fmt(target.sum)} d=${target.depth} „${plain(prompt).slice(0, 48)}"`);
+    scheduleRender();
+    return true;
+  } catch (err) {
+    log('CHYBA: ' + err.message, 'err');
+    return false;
+  }
+}
+
+/* Start: the very first call uses the empty prompt — the root of the tree. */
+async function start() {
+  const maxTokens = Math.max(1, Math.min(4096, Number(maxTokensEl.value) || 16));
+  maxTokensEl.value = maxTokens;
+  engine = new Engine(modelEl.value, maxTokens);
+  engine.started = true;
+  setConfigEnabled(false);
+  refreshButtons();
+  logEl.textContent = '';
+  log(`start: model=${engine.model} max_tokens=${maxTokens} režim=${modeEl.value}`);
+
+  const prompt = '';
+  try {
+    const res = await getPositions(prompt);
+    engine.integrate(engine.root, res.positions);
+    engine.root.expanded = true;
+    engine.calls++;
+    engine.promptTokens += res.usage?.prompt_tokens || 0;
+    engine.completionTokens += res.usage?.completion_tokens || 0;
+    log(`#1 rozbalen prázdný prompt → ${res.positions.length} pozic, `
+      + `${engine.nodeCount} prefixů, frontiera ${engine.frontier.size}`, 'ok');
+  } catch (err) {
+    log('CHYBA: ' + err.message, 'err');
+  }
+  scheduleRender();
+  refreshButtons();
+}
+
+async function runLoop() {
+  while (running) {
+    const ok = await step();
+    if (!ok) break;
+    await new Promise(r => setTimeout(r, 0));   // yield so the UI stays responsive
+  }
+  running = false;
+  refreshButtons();
+  scheduleRender();
+}
+
+btnStart.addEventListener('click', () => start());
+btnStep.addEventListener('click', async () => { await step(); refreshButtons(); });
+btnRun.addEventListener('click', () => {
+  if (running) { running = false; log('pauza'); refreshButtons(); return; }
+  running = true; refreshButtons(); runLoop();
+});
+btnReset.addEventListener('click', () => {
+  if (!confirm('Zahodit rozpracovanou databázi a začít znovu?')) return;
+  running = false;
+  engine = null;
+  setConfigEnabled(true);
+  logEl.textContent = '';
+  listEl.innerHTML = '<div class="empty">Databáze je prázdná — začni tlačítkem „Založit databázi".</div>';
+  shownEl.textContent = '';
+  ['sCalls','sNodes','sFrontier','sProven','sDepth'].forEach(id => el(id).textContent = '0');
+  el('sBestF').textContent = '—';
+  el('sTokens').textContent = '0 / 0';
+  el('sCost').textContent = '$0.0000';
+  refreshButtons();
+});
+limitSel.addEventListener('change', scheduleRender);
+showFrontierEl.addEventListener('change', scheduleRender);
+modeEl.addEventListener('change', updateModeNote);
+modelEl.addEventListener('change', updateModeNote);
+
+updateModeNote();
+refreshButtons();
+
+// exposed for inspection from the console
+window.__builder = { get engine() { return engine; }, step, start };
+</script>
+</body>
+</html>
