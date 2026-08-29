@@ -92,6 +92,7 @@
     overflow: hidden; text-overflow: ellipsis; }
   .c-sweep .pos { color: var(--accent); font-weight: 600; }
   .c-sweep .onpath { color: var(--good); }
+  .c-sweep .stopped { color: var(--bad); font-weight: 600; }
   .thead {
     position: sticky; top: 0; z-index: 5;
     background: var(--card); border-bottom: 1px solid var(--line);
@@ -172,6 +173,13 @@
   </header>
 
   <div class="controls">
+    <label for="dataSel">zobrazit:
+      <select id="dataSel">
+        <option value="dijkstra_top.json">best-first — prefixy</option>
+        <option value="sweep_top.json">sweep — prefixy</option>
+        <option value="sweep_completions.json">sweep — celé completions</option>
+      </select>
+    </label>
     <label for="limitSel">položek:
       <select id="limitSel"></select>
     </label>
@@ -202,6 +210,7 @@ const tableEl = document.getElementById('table');
 const metaEl  = document.getElementById('meta');
 const errEl   = document.getElementById('err');
 const limitSel = document.getElementById('limitSel');
+const dataSel  = document.getElementById('dataSel');
 const shownEl  = document.getElementById('shown');
 
 const LIMIT_KEY = 'dijkstra_limit';
@@ -293,7 +302,9 @@ function buildRow(e) {
     <div class="cell num c-ppl">${fmt(e.perplexity, 2)}</div>
     ${e.sweep ? `<div class="c-sweep">${e.sweep.is_greedy
         ? '<span class="onpath">on-path</span>'
-        : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}</div>` : ''}
+        : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}${
+        e.finish_reason && e.finish_reason !== 'length'
+          ? ` <span class="stopped">·${e.finish_reason}</span>` : ''}</div>` : ''}
     <div class="detail hide"></div>`;
 
   const detailEl = row.querySelector('.detail');
@@ -354,15 +365,27 @@ function setupLimitControl() {
   });
 }
 
+dataSel.addEventListener('change', () => {
+  location.search = '?file=' + encodeURIComponent(dataSel.value);
+});
+
 function render(db) {
   DB = db;
   window.__db = db;   // handy for poking at the data from the console
   document.getElementById('srcName').textContent = DATA_FILE;
+  // pokud je zdroj v nabidce, oznac ho; pokud ne, doplnit ho tam
+  if (!Array.from(dataSel.options).some(o => o.value === DATA_FILE)) {
+    dataSel.add(new Option(DATA_FILE, DATA_FILE));
+  }
+  dataSel.value = DATA_FILE;
 
   metaEl.innerHTML = `
     <div>řazeno podle: <b>Σ logP (součet), sestupně</b></div>
+    <div>pohled: <b>${db.view === 'completions'
+        ? 'celé completions (prompt + vygenerované)' : 'prefixy'}</b></div>
     <div>záznamů ve zdroji: <b>${db.source_records}</b></div>
-    <div>prefixů v databázi: <b>${db.entries.length}</b></div>
+    <div>${db.view === 'completions' ? 'completions' : 'prefixů'} v databázi:
+        <b>${db.entries.length}</b></div>
     <div>zdroj: <b>${db.generated_from}</b></div>
     <div>filtr modelu: <b>${db.model_filter || '—'}</b></div>
     <div>jen „chosen" tokeny: <b>${db.chosen_only ? 'ano' : 'ne'}</b></div>`;

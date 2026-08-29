@@ -79,6 +79,75 @@ def walk_detail(root: TrieNode, tokens: List[str], max_alts: int = 8) -> List[Di
     return out
 
 
+def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]:
+    """One entry per recorded call: the whole string that call produced.
+
+    A "completion" here is prompt + generated tokens, i.e. exactly what the
+    call returned in context — not a prefix of the trie. Note the strings are
+    NOT all the same length: the generated part is max_tokens, but the prompt
+    grows with the deviation position, so a position-0 branch is ~21 tokens
+    and a position-19 branch ~40. Ranking by cumulative logprob therefore
+    favours the shorter ones; mean_logprob is reported alongside so that the
+    length effect stays visible.
+    """
+    entries = []
+    for rec in records:
+        lp = (rec.get("choices") or [{}])[0].get("logprobs") or {}
+        own = lp.get("tokens") or []
+        prompt_tokens = ((rec.get("prompt") or {}).get("logprobs") or {}).get("tokens") or []
+        tokens = list(prompt_tokens) + list(own)
+        if not tokens:
+            continue
+        detail = walk_detail(root, tokens, args.max_alts)
+        if len(detail) != len(tokens):
+            # a token on this path has no known logprob, so the string has no
+            # comparable score — skip rather than report a truncated sum
+            continue
+        total = detail[-1]["cumulative"]
+        n = len(detail)
+        entries.append({
+            "n": n,
+            "sum_logprob": total,
+            "mean_logprob": total / n,
+            "perplexity": math.exp(-total / n),
+            "text": "".join(tokens),
+            "tokens": detail,
+            "prompt_len": len(prompt_tokens),
+            "generated_len": len(own),
+            "finish_reason": (rec.get("choices") or [{}])[0].get("finish_reason"),
+            "id": rec.get("id"),
+            **({"sweep": (rec.get("meta") or {}).get("sweep")}
+               if (rec.get("meta") or {}).get("sweep") else {}),
+        })
+
+    entries.sort(key=lambda e: -e["sum_logprob"])
+    if args.top:
+        entries = entries[:args.top]
+    for i, e in enumerate(entries, 1):
+        e["rank"] = i
+    return entries
+
+
+def write_db(entries, records, args, ranking, view) -> None:
+    db = {
+        "generated_from": args.file,
+        "model_filter": args.model,
+        "chosen_only": args.chosen_only,
+        "source_records": len(records),
+        "ranking": ranking,
+        "view": view,
+        "count": len(entries),
+        "entries": entries,
+    }
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(db, f, ensure_ascii=False, indent=2)
+    print(f"wrote {args.out}: {len(entries)} entries from {len(records)} records [{view}]")
+    for e in entries[:20]:
+        print(f"  #{e['rank']:<3} n={e['n']:<4} sum={e['sum_logprob']:9.4f}  {e['text'][:60]!r}")
+    if len(entries) > 20:
+        print(f"  ... and {len(entries) - 20} more (see {args.out})")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("file", help="completion_history.json (array) or a single response object")
@@ -93,6 +162,10 @@ def main() -> None:
                     help="ignore top_logprobs-recovered alternative tokens")
     ap.add_argument("--max-alts", type=int, default=8,
                     help="how many sibling alternatives to record per token")
+    ap.add_argument("--mode", choices=["prefixes", "completions"], default="prefixes",
+                    help="prefixes: rank every prefix in the trie (best-first order). "
+                         "completions: one entry per recorded call — the whole string it "
+                         "produced (prompt + completion) — ranked by cumulative logprob.")
     args = ap.parse_args()
 
     data = json.load(open(args.file, encoding="utf-8"))
@@ -109,6 +182,14 @@ def main() -> None:
             sweep_by_prompt[key] = sw
 
     root = build_trie(records, args.model)
+
+    if args.mode == "completions":
+        entries = build_completion_entries(root, records, sweep_by_prompt, args)
+        write_db(entries, records, args,
+                 ranking="sum_logprob desc over whole strings (prompt + completion)",
+                 view="completions")
+        return
+
     ranked = rank_by_sum(root, args.top, args.min_n, args.chosen_only)
 
     entries = []
@@ -133,24 +214,9 @@ def main() -> None:
                 break
         entries.append(entry)
 
-    db = {
-        "generated_from": args.file,
-        "model_filter": args.model,
-        "chosen_only": args.chosen_only,
-        "source_records": len(records),
-        "ranking": "sum_logprob desc (best-first / Dijkstra over token trie)",
-        "count": len(entries),
-        "entries": entries,
-    }
-
-    with open(args.out, "w", encoding="utf-8") as f:
-        json.dump(db, f, ensure_ascii=False, indent=2)
-
-    print(f"wrote {args.out}: {len(entries)} entries from {len(records)} records")
-    for e in entries[:20]:
-        print(f"  #{e['rank']:<3} n={e['n']:<4} sum={e['sum_logprob']:9.4f}  {e['text']!r}")
-    if len(entries) > 20:
-        print(f"  ... and {len(entries) - 20} more (see {args.out})")
+    write_db(entries, records, args,
+             ranking="sum_logprob desc (best-first / Dijkstra over token trie)",
+             view="prefixes")
 
 
 if __name__ == "__main__":

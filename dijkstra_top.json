@@ -4,6 +4,7 @@
   "chosen_only": false,
   "source_records": 391,
   "ranking": "sum_logprob desc (best-first / Dijkstra over token trie)",
+  "view": "prefixes",
   "count": 200,
   "entries": [
     {
