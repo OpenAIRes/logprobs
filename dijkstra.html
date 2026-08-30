@@ -68,6 +68,16 @@
     border-radius: 5px; padding: .2rem .4rem; cursor: pointer;
   }
   .shown { font-size: .78125rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  .controls input[type=text] {
+    font: inherit; font-size: .8125rem; font-family: ui-monospace, Menlo, monospace;
+    color: var(--ink); background: var(--card); border: 1px solid var(--line);
+    border-radius: 5px; padding: .2rem .4rem; width: 11rem;
+  }
+  .controls input[type=text]:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
+  #prefixClear { font: inherit; font-size: .875rem; line-height: 1; cursor: pointer;
+    color: var(--ink-dim); background: var(--card); border: 1px solid var(--line);
+    border-radius: 5px; padding: .15rem .4rem; }
+  .shown.filtered { color: var(--accent); font-weight: 600; }
   .legend { display: flex; align-items: center; gap: .5rem; margin-left: auto; font-size: .75rem; color: var(--ink-faint); }
   .legend .ramp { width: 90px; height: 8px; border-radius: 4px;
     background: linear-gradient(90deg, var(--bad), var(--mid), rgba(45,160,110,.75)); }
@@ -181,10 +191,17 @@
         <option value="sweep_completions.json">sweep L1 — celé completions</option>
         <option value="sweep2_top.json">sweep L1+L2 — prefixy</option>
         <option value="sweep2_completions.json">sweep L1+L2 — celé completions</option>
+        <option value="sweep3_top.json">sweep L1+L2+L3 — prefixy</option>
+        <option value="sweep3_completions.json">sweep L1+L2+L3 — celé completions</option>
+        <option value="ihave_completions.json">„I have" — celé completions</option>
       </select>
     </label>
     <label for="limitSel">položek:
       <select id="limitSel"></select>
+    </label>
+    <label for="prefixIn">začíná na:
+      <input type="text" id="prefixIn" placeholder="např. I have" spellcheck="false">
+      <button id="prefixClear" type="button" title="zrušit filtr" hidden>×</button>
     </label>
     <span class="shown" id="shown"></span>
     <div class="legend">
@@ -214,6 +231,21 @@ const metaEl  = document.getElementById('meta');
 const errEl   = document.getElementById('err');
 const limitSel = document.getElementById('limitSel');
 const dataSel  = document.getElementById('dataSel');
+const prefixIn = document.getElementById('prefixIn');
+const prefixClear = document.getElementById('prefixClear');
+
+const PREFIX_KEY = 'dijkstra_prefix';
+
+/* Filtr "zacina na": porovnava se surovy text vcetne bilych znaku, ne to, co
+   je videt v tabulce (tam se \n zobrazuje jako ⏎). Vetsina retezcu zacina
+   newline, takze hledani "I have" by pri striktnim prefixu nenaslo nic —
+   pocatecni bile znaky se proto pri porovnani ignoruji. */
+function matchesPrefix(text, q) {
+  if (!q) return true;
+  return text.startsWith(q) || text.replace(/^\s+/, '').startsWith(q);
+}
+
+function currentPrefix() { return prefixIn.value; }
 const shownEl  = document.getElementById('shown');
 
 const LIMIT_KEY = 'dijkstra_limit';
@@ -335,10 +367,26 @@ function buildRow(e) {
 }
 
 function renderRows() {
-  const limit = Math.min(Number(limitSel.value) || DB.count, DB.entries.length);
-  const slice = DB.entries.slice(0, limit);
+  const q = currentPrefix();
+  // filtrovat PRED limitem, jinak by se hledalo jen v prvnich N polozkach
+  const matching = q ? DB.entries.filter(e => matchesPrefix(e.text, q)) : DB.entries;
+  const limit = Math.min(Number(limitSel.value) || DB.count, matching.length);
+  const slice = matching.slice(0, limit);
+
+  prefixClear.hidden = !q;
 
   listEl.textContent = '';
+  if (!slice.length) {
+    listEl.innerHTML = q
+      ? `<div class="empty">Žádný řetězec nezačíná na <code>${plain(q)
+          .replace(/&/g,'&amp;').replace(/</g,'&lt;')}</code>.</div>`
+      : '<div class="empty">Zatím žádné prefixy.</div>';
+    shownEl.textContent = `0 z ${DB.entries.length}`;
+    shownEl.classList.toggle('filtered', !!q);
+    tableEl.hidden = false;
+    return;
+  }
+
   const frag = document.createDocumentFragment();
   slice.forEach(e => frag.appendChild(buildRow(e)));
   listEl.appendChild(frag);
@@ -347,7 +395,10 @@ function renderRows() {
   tableEl.classList.toggle('has-sweep', anySweep);
   document.getElementById('thSweep').hidden = !anySweep;
 
-  shownEl.textContent = `zobrazeno ${slice.length} z ${DB.entries.length} v databázi`;
+  shownEl.textContent = q
+    ? `zobrazeno ${slice.length} z ${matching.length} odpovídajících (${DB.entries.length} v databázi)`
+    : `zobrazeno ${slice.length} z ${DB.entries.length} v databázi`;
+  shownEl.classList.toggle('filtered', !!q);
   tableEl.hidden = false;
 }
 
@@ -373,6 +424,21 @@ dataSel.addEventListener('change', () => {
   location.search = '?file=' + encodeURIComponent(dataSel.value);
 });
 
+let prefixTimer = null;
+prefixIn.addEventListener('input', () => {
+  clearTimeout(prefixTimer);           // debounce: filtr bezi nad tisici polozkami
+  prefixTimer = setTimeout(() => {
+    try { localStorage.setItem(PREFIX_KEY, prefixIn.value); } catch {}
+    if (DB) renderRows();
+  }, 150);
+});
+prefixClear.addEventListener('click', () => {
+  prefixIn.value = '';
+  try { localStorage.removeItem(PREFIX_KEY); } catch {}
+  if (DB) renderRows();
+  prefixIn.focus();
+});
+
 function render(db) {
   DB = db;
   window.__db = db;   // handy for poking at the data from the console
@@ -392,7 +458,13 @@ function render(db) {
         <b>${db.entries.length}</b></div>
     <div>zdroj: <b>${db.generated_from}</b></div>
     <div>filtr modelu: <b>${db.model_filter || '—'}</b></div>
+    ${db.prefix_filter ? `<div>sada předfiltrovaná na: <b>„${db.prefix_filter}"</b></div>` : ''}
     <div>jen „chosen" tokeny: <b>${db.chosen_only ? 'ano' : 'ne'}</b></div>`;
+
+  // ?prefix= ma prednost pred zapamatovanou hodnotou, aby se dal odkaz poslat
+  const urlPrefix = new URLSearchParams(location.search).get('prefix');
+  if (urlPrefix !== null) prefixIn.value = urlPrefix;
+  else { try { prefixIn.value = localStorage.getItem(PREFIX_KEY) || ''; } catch {} }
 
   setupLimitControl();
   renderRows();

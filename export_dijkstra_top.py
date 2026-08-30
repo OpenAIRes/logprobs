@@ -145,11 +145,21 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
         entries.append(entry)
 
     entries.sort(key=lambda e: -e["sum_logprob"])
+    entries = apply_prefix(entries, args.prefix)
     if args.top:
         entries = entries[:args.top]
     for i, e in enumerate(entries, 1):
         e["rank"] = i
     return entries
+
+
+def apply_prefix(entries: List[Dict], prefix: Optional[str]) -> List[Dict]:
+    """Filter by leading text. Applied before the --top cap, so a subtree that
+    ranks far down the list is still fully represented."""
+    if not prefix:
+        return entries
+    return [e for e in entries
+            if e["text"].startswith(prefix) or e["text"].lstrip().startswith(prefix)]
 
 
 def write_db(entries, records, args, ranking, view) -> None:
@@ -160,6 +170,7 @@ def write_db(entries, records, args, ranking, view) -> None:
         "source_records": len(records),
         "ranking": ranking,
         "view": view,
+        "prefix_filter": args.prefix,
         "count": len(entries),
         "entries": entries,
     }
@@ -189,6 +200,11 @@ def main() -> None:
                     help="ignore top_logprobs-recovered alternative tokens")
     ap.add_argument("--max-alts", type=int, default=8,
                     help="how many sibling alternatives to record per token")
+    ap.add_argument("--prefix",
+                    help="keep only strings starting with this text (leading whitespace is "
+                         "ignored, as most strings begin with a newline). Use it to build a "
+                         "focused dataset for one subtree: the --top cap is applied AFTER "
+                         "filtering, so matches deep in the ranking still come through.")
     ap.add_argument("--mode", choices=["prefixes", "completions"], default="prefixes",
                     help="prefixes: rank every prefix in the trie (best-first order). "
                          "completions: one entry per recorded call — the whole string it "
@@ -249,6 +265,10 @@ def main() -> None:
                 entry["sweep"] = sw
                 break
         entries.append(entry)
+
+    entries = apply_prefix(entries, args.prefix)
+    for i, e in enumerate(entries, 1):
+        e["rank"] = i
 
     write_db(entries, records, args,
              ranking="sum_logprob desc (best-first / Dijkstra over token trie)",

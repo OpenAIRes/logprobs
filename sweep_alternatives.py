@@ -206,6 +206,9 @@ def main():
     ap.add_argument('--base-id', help='sweepovat jen tento konkretni zaznam')
     ap.add_argument('--level2', action='store_true',
                     help='sweepovat kazdou odbocku na pozici 0 (19 zakladu)')
+    ap.add_argument('--level', type=int,
+                    help='cim oznacit vznikle zaznamy v meta.sweep.level; '
+                         'jinak 2 pri --level2, jinak 1')
     ap.add_argument('--out', default='sweep_history.jsonl')
     ap.add_argument('--json-out', default='sweep_history.json')
     ap.add_argument('--log', default='sweep_log.txt')
@@ -302,7 +305,7 @@ def main():
             raw, body, prompt_tokens, prompt_text, job['base']['id'], args.max_tokens, http,
             {'base_id': job['base']['id'], 'position': pos, 'alternative': tok,
              'alternative_logprob': job['val'], 'is_greedy': job['greedy'],
-             'level': 2 if args.level2 else 1},
+             'level': args.level if args.level else (2 if args.level2 else 1)},
         )
         # zapis PRED cimkoli dalsim — zaplacene volani nesmi zmizet
         with write_lock:
