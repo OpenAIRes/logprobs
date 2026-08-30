@@ -1053,11 +1053,13 @@ async function getCompletionById(id) {
       } else if (res.top_logprobs_obj && Object.prototype.hasOwnProperty.call(res.top_logprobs_obj, t)) {
         lpForT = res.top_logprobs_obj[t];
       }
-      return { token: t, logprob: lpForT, top_logprobs: res.top_logprobs_sorted };
+      return { token: t, logprob: lpForT, top_logprobs: res.top_logprobs_sorted, isPrompt: true };
     }
 
     // nic použitelného → prázdné alternativy
-    return { token: t, logprob: null, top_logprobs: [] };
+    // isPrompt i tady: zaznam otevreny z historie musi vypadat stejne jako
+    // hned po vytvoreni, jinak se rozliseni promptu ztrati pri reloadu
+    return { token: t, logprob: null, top_logprobs: [], isPrompt: true };
   });
 
   // ---- Sestavení COMPLETION tokenů (beze změny) ----
