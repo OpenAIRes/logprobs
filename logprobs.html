@@ -16,6 +16,9 @@
 .newline.only-nl:hover::after { background: #ffeaa7; }
     .newline:hover { background: #ffeaa7; }
     .selected   { background: #74b9ff; }
+    /* zadany prompt: nema logprobs, takze neni na co klikat */
+    .token.is-prompt { background: #eef1f5; color: #4a5568; border-bottom: 1px dotted #94a3b8; }
+    .token.is-prompt:hover { background: #e2e8f0; }
 
     #tooltip {
       position: absolute;
@@ -70,6 +73,24 @@
     .newline.only-nl { position: relative; display: inline; width: auto; height: auto; }
     .newline.only-nl::after { content: none; }
       /* Prompts overlay */
+    /* --- dialog pro vychozi prompt noveho stromu --- */
+    #newTreeOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1002; }
+    #newTreeOverlay.hidden { display: none; }
+    #newTreeBox { position: fixed; top: 12%; left: 50%; transform: translateX(-50%);
+      width: min(680px, 92vw); background: #fff; border: 1px solid #ddd;
+      box-shadow: 0 10px 30px #0006; display: flex; flex-direction: column; }
+    #newTreeHeader { display: flex; align-items: center; justify-content: space-between;
+      padding: .5rem .75rem; border-bottom: 1px solid #eee; font-weight: 600; }
+    #newTreeClose { border: none; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
+    #newTreeBody { padding: .75rem; }
+    #newTreeBody .hint { font: 13px/1.5 system-ui, sans-serif; color: #666; margin: 0 0 .6rem; }
+    #newTreePrompt { width: 100%; box-sizing: border-box; font: 13px/1.5 ui-monospace, Menlo, monospace;
+      padding: .5rem; border: 1px solid #ccc; resize: vertical; }
+    #newTreeBody .row2 { display: flex; align-items: center; gap: .75rem; margin-top: .6rem; flex-wrap: wrap; }
+    #newTreeBody .row2 label { font: 13px system-ui, sans-serif; color: #444; }
+    #newTreeMax { width: 6rem; font: inherit; padding: .2rem .3rem; }
+    #newTreeGo.primary { background: #3d5a80; color: #fff; border-color: #3d5a80; }
+
     #promptsOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001; }
     #promptsOverlay.hidden { display: none; }
     #promptsBox { position: fixed; top: 5%; left: 5%; right: 5%; bottom: 5%; background: #fff; box-shadow: 0 10px 30px #0006; display: flex; flex-direction: column; border: 1px solid #ddd; }
@@ -102,7 +123,7 @@
           <option value="babbage-002">babbage-002</option>
         </select>
       </label>
-      <button id="newTreeBtn">New tree (empty prompt)</button>
+      <button id="newTreeBtn">New tree…</button>
     </div>
   </div>
   <div id="tokens" hidden></div>
@@ -119,6 +140,33 @@
         </div>
       </div>
       <textarea id="rawText" spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <div id="newTreeOverlay" class="hidden">
+    <div id="newTreeBox">
+      <div id="newTreeHeader">
+        <span>Nový strom — výchozí prompt</span>
+        <button id="newTreeClose" aria-label="Close">×</button>
+      </div>
+      <div id="newTreeBody">
+        <p class="hint">Nechej prázdné pro nepodmíněný strom (jako dosud). Jinak se strom
+          založí z tohoto textu. Prompt se v zobrazení ukáže jako jeden celek — jeho
+          logprobs neznáme, API je vrací jen pro vygenerované tokeny.</p>
+        <textarea id="newTreePrompt" spellcheck="false" rows="6"
+                  placeholder="(prázdné = nepodmíněný začátek)"></textarea>
+        <div class="row2">
+          <label>max_tokens
+            <input type="number" id="newTreeMax" value="20" min="1" max="4096">
+          </label>
+          <span class="hint" id="newTreeHintMax">20 se shoduje se sweep daty, takže je
+            větší šance na zásah cache místo placeného volání.</span>
+        </div>
+        <div class="row2">
+          <button id="newTreeGo" class="primary">Založit strom</button>
+          <button id="newTreeCancel">Zrušit</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -367,7 +415,7 @@ async function migrateFromLocalStorage(){ try{ const raw=localStorage.getItem('c
    trims when prompt.text is set but not when falling back to joined tokens,
    which is what made whitespace-only prompts silently unfindable before.
    ==================================================================== */
-const SWEEP_DB = 'sweepCacheDB', SWEEP_STORE = 'completions';
+const SWEEP_DB = 'sweepCacheDB', SWEEP_STORE = 'completions', SWEEP_DB_VERSION = 2;
 const SWEEP_FILES = [
   'sweep_history.json',        // level 1, ~4 MB
   'sweep3_ihave.json.gz',      // "I have" branch, ~1 MB gz
@@ -376,12 +424,35 @@ const SWEEP_FILES = [
 
 function sweepOpen(){
   return new Promise((resolve,reject)=>{
-    const req = indexedDB.open(SWEEP_DB, 1);
-    req.onupgradeneeded = () => {
+    const req = indexedDB.open(SWEEP_DB, SWEEP_DB_VERSION);
+    req.onupgradeneeded = (ev) => {
       const db = req.result;
-      if(!db.objectStoreNames.contains(SWEEP_STORE)){
-        const s = db.createObjectStore(SWEEP_STORE, { keyPath:'id' });
-        s.createIndex('by_prompt_key','prompt_key',{unique:false});
+      const store = db.objectStoreNames.contains(SWEEP_STORE)
+        ? req.transaction.objectStore(SWEEP_STORE)
+        : (() => {
+            const s = db.createObjectStore(SWEEP_STORE, { keyPath:'id' });
+            s.createIndex('by_prompt_key','prompt_key',{unique:false});
+            return s;
+          })();
+      // v2: hledani podle textu promptu, ne jen podle pole tokenu. Vlastni
+      // prompt zadany rucne nezname tokenizovany, takze podle tokenu se najit
+      // neda — podle textu ano. Stara data se dopocitaji z prompt_key.
+      if(!store.indexNames.contains('by_prompt_text')){
+        store.createIndex('by_prompt_text','prompt_text',{unique:false});
+        if(ev.oldVersion >= 1){
+          const cur = store.openCursor();
+          cur.onsuccess = e => {
+            const c = e.target.result;
+            if(!c) return;
+            const v = c.value;
+            if(v.prompt_text === undefined){
+              try { v.prompt_text = JSON.parse(v.prompt_key || '[]').join(''); }
+              catch { v.prompt_text = ''; }
+              c.update(v);
+            }
+            c.continue();
+          };
+        }
       }
     };
     req.onsuccess = ()=>resolve(req.result);
@@ -419,6 +490,7 @@ async function sweepPutBatch(recs){
       store.put({
         id: r.id,
         prompt_key: promptKeyOf(toks),
+        prompt_text: toPlainTokens(toks).join(''),
         model: r.model,
         request_model: r?.request?.model || null,
         target_max_tokens: Number(r?.meta?.target_max_tokens ?? r?.max_tokens ?? 0),
@@ -495,6 +567,30 @@ async function sweepLookup(promptTokens, model, maxTokens){
       r.onsuccess = ()=>res(r.result||[]); r.onerror = ()=>rej(r.error);
     }));
   }catch{ return null; }
+  return sweepPick(rows, model, maxTokens);
+}
+
+/* Hledani podle TEXTU promptu. Pro rucne zadany prompt je to jedina cesta:
+   jeho tokenizaci neznáme (API vraci logprobs jen pro vygenerovane tokeny),
+   takze podle pole tokenu ho dohledat nelze. Kdyz se najde, vezme se i jeho
+   skutecne tokenizovane pole — coz je lepsi, nez si prompt drzet jako jeden
+   neprubojny celek. */
+async function sweepLookupByText(promptText, model, maxTokens){
+  let rows;
+  try{
+    rows = await sweepWith('readonly', s => new Promise((res,rej)=>{
+      const r = s.index('by_prompt_text').getAll(IDBKeyRange.only(promptText));
+      r.onsuccess = ()=>res(r.result||[]); r.onerror = ()=>rej(r.error);
+    }));
+  }catch{ return null; }
+  const hit = sweepPick(rows, model, maxTokens);
+  if(!hit) return null;
+  const src = rows.find(r => r.id === hit.id);
+  hit.promptTokens = src ? JSON.parse(src.prompt_key || '[]') : null;
+  return hit;
+}
+
+function sweepPick(rows, model, maxTokens){
   if(!rows || !rows.length) return null;
 
   const modelOk = e => e.request_model ? e.request_model === model
@@ -1132,6 +1228,8 @@ function renderTokens(tokens){
         span.className = 'token';
         span.textContent = t.token;
       }
+      // odlisit zadany prompt od vygenerovaneho textu
+      if (t.isPrompt) span.classList.add('is-prompt');
       span.title=escapeToken(t.token);
       span.addEventListener('click',e=>handleTokenClick(e,tokens));
       frag.appendChild(span);
@@ -1384,19 +1482,27 @@ if (objectBtn) objectBtn.addEventListener('click', showCurrentRaw);
 // selected model (same as the very first completion this tool ever recorded)
 // and makes its result the current view. Old history/trees are untouched —
 // this only adds a new root entry (previous_response_id: null) to the store.
-async function startNewTree(){
+/* promptText '' = korenovy strom jako dosud; cokoli jineho zalozi strom z
+   vlastniho zadaneho promptu. */
+async function startNewTree(promptText = '', maxTokens = 16){
   const model = getSelectedModel();
-  const maxTokens = 16;
+  promptText = String(promptText ?? '');
 
-  // Same recipe already exists in history (empty prompt, this model, this
-  // max_tokens)? Load it instead of spending a real API call regenerating an
-  // (almost certainly identical, since temperature/seed are both 0) result.
+  // Tokenizaci vlastniho promptu neznáme — API vraci logprobs jen pro
+  // vygenerovane tokeny a echo uz tyhle modely nepodporuji. Prompt se proto
+  // drzi jako JEDEN neprubojny token: join() ho vrati presne zpet, takze
+  // vsechny cesty, ktere prompt rekonstruuji z tokenu, funguji dal. Kdyz ho
+  // ale najdeme ve sweep datech, pouzijeme jeho skutecne pole tokenu.
+  let promptTokens = promptText === '' ? [] : [promptText];
+
+  // Uz to mame? Nejprve vlastni historie (podle textu promptu, aby se naslo
+  // i to, co je tokenizovane jinak), pak sweep cache, teprve pak API.
   const all = await idbGetAll();
   const existing = all.find(e => {
-    const tokMatch = JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify([]);
+    const textMatch = (e?.prompt?.text ?? '') === promptText;
     const maxMatch = Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens);
     const modelMatch = e?.request?.model ? e.request.model === model : (typeof e?.model === 'string' && e.model.startsWith(model));
-    return tokMatch && maxMatch && modelMatch;
+    return textMatch && maxMatch && modelMatch;
   });
   if (existing) {
     await openEntryById(existing.id);
@@ -1404,60 +1510,119 @@ async function startNewTree(){
     return;
   }
 
-  const ok = confirm(`Založit nový strom (prázdný prompt) pomocí modelu "${model}"?\nTohle zavolá OpenAI API.`);
+  const swept = await sweepLookupByText(promptText, model, maxTokens);
+  if (swept) {
+    if (Array.isArray(swept.promptTokens) && swept.promptTokens.length) {
+      promptTokens = swept.promptTokens;
+    }
+    await saveTreeRoot({
+      id: swept.id, model, promptText, promptTokens, maxTokens,
+      choice: swept.choices[0], usage: null, request: null, fromSweep: true,
+    });
+    showStatus(swept.truncatedFrom
+      ? `Načteno ze sweep DB (zkráceno z ${swept.truncatedFrom})`
+      : 'Načteno ze sweep DB');
+    return;
+  }
+
+  const label = promptText === '' ? 'prázdný prompt' : `prompt „${promptText.slice(0, 60)}"`;
+  const ok = confirm(`Založit nový strom (${label}) pomocí modelu "${model}"?\nTohle zavolá OpenAI API.`);
   if (!ok) return;
 
   const key = await ensureApiKey();
   if (!key) return;
 
-  const data = await fetchCompletionAutoFit('', maxTokens, key, model);
+  const data = await fetchCompletionAutoFit(promptText, maxTokens, key, model);
   if (!data) return;
 
-  const lp = data.choices[0].logprobs;
-  const newTokens = lp.tokens.map((t, i) => {
-    const sorted = Object.entries(lp.top_logprobs[i])
-      .map(([tok, log]) => ({ token: tok, logprob: log }))
-      .sort((a, b) => b.logprob - a.logprob);
-    return { token: t, logprob: lp.token_logprobs[i], top_logprobs: sorted };
+  await saveTreeRoot({
+    id: data.id, model: data.model, promptText, promptTokens, maxTokens,
+    choice: data.choices[0], usage: data.usage, request: data._request_sent,
+    effectiveMax: data._effective_max_tokens,
   });
+}
 
+/* Zapis korene stromu + prepnuti zobrazeni na nej. Sdilene mezi cestou
+   "nalezeno ve sweepu" a "zavolano API", aby nemohly rozjet dva rozdilne
+   tvary zaznamu. */
+async function saveTreeRoot({ id, model, promptText, promptTokens, maxTokens,
+                             choice, usage, request, effectiveMax, fromSweep }){
+  const lp = choice.logprobs;
   const newEntry = {
-    id: data.id,
+    id,
     object: "text_completion",
     created: Math.floor(Date.now() / 1000),
-    model: data.model,
+    model,
     previous_response_id: null,
     prompt: {
-      text: "",
+      text: promptText,
       index: 0,
-      logprobs: { tokens: [], token_logprobs: [], top_logprobs: [] }
+      logprobs: { tokens: promptTokens, token_logprobs: [], top_logprobs: [] }
     },
     choices: [
-      {
-        text: data.choices[0].text,
-        index: 0,
-        logprobs: lp,
-        finish_reason: data.choices[0].finish_reason
-      }
+      { text: choice.text, index: 0, logprobs: lp, finish_reason: choice.finish_reason }
     ],
-    usage: data.usage,
-    max_tokens: Number(data._effective_max_tokens ?? maxTokens),
+    usage,
+    max_tokens: Number(effectiveMax ?? (lp.tokens ? lp.tokens.length : maxTokens)),
     temperature: 0,
     seed: 0,
-    meta: { target_max_tokens: Number(maxTokens), new_tree_root: true },
-    request: data._request_sent
+    meta: {
+      target_max_tokens: Number(maxTokens),
+      new_tree_root: true,
+      ...(promptText !== '' ? { custom_prompt: true } : {}),
+      ...(fromSweep ? { from_sweep: true } : {}),
+    },
+    request
   };
 
   await idbPut(newEntry);
   await updateSavedCount();
 
-  allTokens = newTokens;
+  // Prompt sam nema logprobs (nezname je), takze se vykresli bez alternativ
+  // a je oznaceny, aby bylo videt, kde konci zadani a zacina generovani.
+  const promptUI = toPlainTokens(promptTokens).map(t => (
+    { token: t, logprob: null, top_logprobs: [], isPrompt: true }
+  ));
+  const genUI = (lp.tokens || []).map((t, i) => {
+    const sorted = Object.entries(lp.top_logprobs?.[i] || {})
+      .map(([tok, log]) => ({ token: tok, logprob: log }))
+      .sort((a, b) => b.logprob - a.logprob);
+    return { token: t, logprob: lp.token_logprobs?.[i], top_logprobs: sorted };
+  });
+
+  allTokens = promptUI.concat(genUI);
   safeTokens = allTokens.map(t => t.token);
   currentCompletionId = newEntry.id;
   renderTokens(allTokens);
   showStatus(`Nový strom založen (model: ${model})`);
 }
-if (newTreeBtn) newTreeBtn.addEventListener('click', startNewTree);
+/* ---- dialog pro vychozi prompt ---- */
+const newTreeOverlay = document.getElementById('newTreeOverlay');
+const newTreePrompt  = document.getElementById('newTreePrompt');
+const newTreeMax     = document.getElementById('newTreeMax');
+const NEWTREE_KEY = 'newtree_prompt';
+
+function openNewTreeDialog(){
+  try { newTreePrompt.value = localStorage.getItem(NEWTREE_KEY) || ''; } catch {}
+  newTreeOverlay.classList.remove('hidden');
+  newTreePrompt.focus();
+}
+function closeNewTreeDialog(){ newTreeOverlay.classList.add('hidden'); }
+
+if (newTreeBtn) newTreeBtn.addEventListener('click', openNewTreeDialog);
+document.getElementById('newTreeClose').addEventListener('click', closeNewTreeDialog);
+document.getElementById('newTreeCancel').addEventListener('click', closeNewTreeDialog);
+newTreeOverlay.addEventListener('click', e => { if (e.target === newTreeOverlay) closeNewTreeDialog(); });
+document.getElementById('newTreeGo').addEventListener('click', async () => {
+  const p = newTreePrompt.value;
+  const m = Math.max(1, Math.min(4096, Number(newTreeMax.value) || 20));
+  try { localStorage.setItem(NEWTREE_KEY, p); } catch {}
+  closeNewTreeDialog();
+  await startNewTree(p, m);
+});
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !newTreeOverlay.classList.contains('hidden')) closeNewTreeDialog();
+});
 
 // =========== PROMPTS VIEWER ===========
 function extractPromptText(entry){
