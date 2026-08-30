@@ -94,6 +94,7 @@
 <button id="exportBtn" hidden>Export (<span id="savedCount">0</span>)</button>
       <button id="clearBtn" hidden>Clear</button>
       <button id="repairBtn" hidden>repair links</button>
+      <button id="sweepBtn" title="načíst/použít sweep databázi jako cache">sweep DB (<span id="sweepCount">0</span>)</button>
       <label for="modelSelect" style="margin-left:.75rem;font-size:14px;">model:
         <select id="modelSelect">
           <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
@@ -351,6 +352,169 @@ async function idbSearch(term){
   return all.filter(e=>{ try{ return JSON.stringify(e).toLowerCase().includes(q); }catch{ return false; } });
 }
 async function migrateFromLocalStorage(){ try{ const raw=localStorage.getItem('completion_history'); if(!raw) return; const arr=JSON.parse(raw); if(Array.isArray(arr)&&arr.length){ await idbBulkPut(arr); localStorage.removeItem('completion_history'); await updateSavedCount(); showStatus('Migrated history to IndexedDB'); } }catch{} }
+
+/* ============ SWEEP CACHE ============================================
+   The sweep datasets (sweep_alternatives.py output) already hold completions
+   for tens of thousands of prompts. Consulting them turns a click that would
+   cost an API call into a free lookup.
+
+   They live in their OWN database, not the store above. Two reasons: a bug
+   here can then never damage the hand-built history, and the sweep data is
+   regenerable bulk that should be droppable in one go without touching it.
+
+   Lookup is keyed on the exact JSON of the prompt token array. The store's
+   own by_prompt_text index is not usable for this — extractPromptTextSafe
+   trims when prompt.text is set but not when falling back to joined tokens,
+   which is what made whitespace-only prompts silently unfindable before.
+   ==================================================================== */
+const SWEEP_DB = 'sweepCacheDB', SWEEP_STORE = 'completions';
+const SWEEP_FILES = [
+  'sweep_history.json',        // level 1, ~4 MB
+  'sweep3_ihave.json.gz',      // "I have" branch, ~1 MB gz
+  'sweep2_history.json.gz',    // level 2, ~24 MB gz / 75 MB raw — the big one
+];
+
+function sweepOpen(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(SWEEP_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(SWEEP_STORE)){
+        const s = db.createObjectStore(SWEEP_STORE, { keyPath:'id' });
+        s.createIndex('by_prompt_key','prompt_key',{unique:false});
+      }
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+function sweepWith(mode, fn){
+  return sweepOpen().then(db=> new Promise((resolve,reject)=>{
+    const tx = db.transaction(SWEEP_STORE, mode);
+    const store = tx.objectStore(SWEEP_STORE);
+    let out;
+    Promise.resolve(fn(store)).then(r=>{ out=r; }).catch(reject);
+    tx.oncomplete = ()=>resolve(out);
+    tx.onerror = ()=>reject(tx.error);
+    tx.onabort = ()=>reject(tx.error);
+  }));
+}
+const promptKeyOf = toks => JSON.stringify(toPlainTokens(toks||[]));
+
+async function sweepCount(){
+  try{ return await sweepWith('readonly', s=> new Promise((res,rej)=>{
+    const r=s.count(); r.onsuccess=()=>res(r.result||0); r.onerror=()=>rej(r.error); })); }
+  catch{ return 0; }
+}
+async function sweepUpdateCount(){
+  const n = await sweepCount();
+  const el = document.getElementById('sweepCount');
+  if (el) el.textContent = n;
+  return n;
+}
+async function sweepPutBatch(recs){
+  return sweepWith('readwrite', store => {
+    for(const r of recs){
+      const toks = r?.prompt?.logprobs?.tokens || [];
+      store.put({
+        id: r.id,
+        prompt_key: promptKeyOf(toks),
+        model: r.model,
+        request_model: r?.request?.model || null,
+        target_max_tokens: Number(r?.meta?.target_max_tokens ?? r?.max_tokens ?? 0),
+        choices: r.choices,
+      });
+    }
+  });
+}
+
+async function sweepFetchRecords(url){
+  const res = await fetch(url, { cache:'no-store' });
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  if(url.endsWith('.gz')){
+    // http.server neposila Content-Encoding, takze rozbalit musime sami
+    const text = await new Response(res.body.pipeThrough(new DecompressionStream('gzip'))).text();
+    return JSON.parse(text);
+  }
+  return res.json();
+}
+
+async function sweepImport(){
+  let total = 0;
+  for(const f of SWEEP_FILES){
+    try{
+      showStatus(`sweep DB: načítám ${f}…`);
+      const arr = await sweepFetchRecords(f);
+      // po davech, aby jedna transakce nedrzela desitky MB
+      for(let i=0;i<arr.length;i+=500){
+        await sweepPutBatch(arr.slice(i, i+500));
+      }
+      total += arr.length;
+      showStatus(`sweep DB: ${f} → ${arr.length} záznamů`);
+      await sweepUpdateCount();
+    }catch(err){
+      showStatus(`sweep DB: ${f} selhalo — ${err.message}`);
+      statusEl.classList.add('error');
+    }
+  }
+  const n = await sweepUpdateCount();
+  showStatus(`sweep DB: hotovo, ${n} záznamů v cache`);
+  return total;
+}
+
+/* A sweep record generated with max_tokens=20 also answers a request for 16:
+   with temperature 0 the first 16 tokens are the same ones, which we verified
+   directly (a 16-token and a 4096-token call on the same prompt matched over
+   their whole overlap). So accept target_max_tokens >= requested and cut the
+   arrays down, rather than missing the hit entirely — logprobs.html asks for
+   16 by default while the sweeps were all run at 20. */
+function truncateChoice(choice, n){
+  const lp = choice?.logprobs; if(!lp) return choice;
+  const cut = a => Array.isArray(a) ? a.slice(0, n) : a;
+  const toks = cut(lp.tokens) || [];
+  return {
+    ...choice,
+    text: toks.join(''),
+    logprobs: {
+      ...lp,
+      tokens: toks,
+      token_logprobs: cut(lp.token_logprobs),
+      top_logprobs: cut(lp.top_logprobs),
+      text_offset: cut(lp.text_offset),
+    },
+    finish_reason: toks.length < (lp.tokens||[]).length ? 'length' : choice.finish_reason,
+  };
+}
+
+async function sweepLookup(promptTokens, model, maxTokens){
+  let rows;
+  try{
+    const key = promptKeyOf(promptTokens);
+    rows = await sweepWith('readonly', s => new Promise((res,rej)=>{
+      const r = s.index('by_prompt_key').getAll(IDBKeyRange.only(key));
+      r.onsuccess = ()=>res(r.result||[]); r.onerror = ()=>rej(r.error);
+    }));
+  }catch{ return null; }
+  if(!rows || !rows.length) return null;
+
+  const modelOk = e => e.request_model ? e.request_model === model
+                     : (typeof e.model === 'string' && e.model.startsWith(model));
+  const usable = rows.filter(e => modelOk(e)
+                   && Number(e.target_max_tokens) >= Number(maxTokens)
+                   && Array.isArray(e?.choices?.[0]?.logprobs?.tokens));
+  if(!usable.length) return null;
+
+  // nejtesnejsi shoda, aby se zbytecne nezahazovalo
+  usable.sort((a,b)=> a.target_max_tokens - b.target_max_tokens);
+  const hit = usable[0];
+  const have = hit.choices[0].logprobs.tokens.length;
+  const want = Number(maxTokens);
+  return {
+    id: hit.id,
+    choices: [ have > want ? truncateChoice(hit.choices[0], want) : hit.choices[0] ],
+    truncatedFrom: have > want ? have : null,
+  };
+}
 
 // Auto-import completion_history.json (the file the Export button produces) into
 // IndexedDB on every load, so a fresh browser/profile doesn't start with an empty
@@ -738,6 +902,14 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
     return { response: { id: existing.id, choices: existing.choices }, prompt: promptText, fromHistory: true };
   }
 
+  // Vlastni historie nic nema — zkus sweep databazi, nez zaplatis volani.
+  const swept = await sweepLookup(plainPromptTokens, model, maxTokens);
+  if (swept) {
+    console.log('[SWEEP HIT]', swept.id, swept.truncatedFrom ? `(zkraceno z ${swept.truncatedFrom})` : '');
+    return { response: { id: swept.id, choices: swept.choices }, prompt: promptText,
+             fromHistory: true, fromSweep: true, truncatedFrom: swept.truncatedFrom };
+  }
+
   console.log('[MISS] Calling API for prompt:', promptText);
 
   const key = await ensureApiKey();
@@ -813,7 +985,7 @@ async function continueFromPromptOnly(maxTokens) {
   safeTokens = allTokens.map(t => t.token);
   currentCompletionId = result.response.id;
   renderTokens(allTokens);
-  showStatus(result.fromHistory ? 'Načteno!' : 'Pokračování (z promptu) nahrazeno!');
+  showStatus(hitLabel(result, 'Pokračování (z promptu) nahrazeno!'));
 }
 
 /* ============ API HELPER ============ */
@@ -1025,7 +1197,7 @@ async function completion(e){
   const result=await createCompletion(currentCompletionId,idx,altToken,16);
   if(!result) return;
   applyCompletion(result.response,idx,altToken);
-  showStatus(result.fromHistory ? 'Načteno!' : 'Uloženo!');
+  showStatus(hitLabel(result, 'Uloženo!'));
 }
 
 async function ensureApiKey(){
@@ -1447,6 +1619,26 @@ async function repairLinks() {
   showStatus('Repair: doplněna ids podle nových prefix pravidel');
 }
 if (repairBtn) repairBtn.addEventListener('click', repairLinks);
+
+/* Rozlisit, odkud shoda prisla — jinak "Načteno!" zakryva, ze data pochazi
+   ze sweep cache a byla pripadne zkracena na pozadovanou delku. */
+function hitLabel(result, missMsg){
+  if (!result.fromHistory) return missMsg;
+  if (!result.fromSweep) return 'Načteno!';
+  return result.truncatedFrom
+    ? `Načteno ze sweep DB (zkráceno z ${result.truncatedFrom})`
+    : 'Načteno ze sweep DB';
+}
+
+const sweepBtn = document.getElementById('sweepBtn');
+if (sweepBtn) sweepBtn.addEventListener('click', async () => {
+  const n = await sweepCount();
+  if (n > 0 && !confirm(`sweep DB uz ma ${n} zaznamu. Naimportovat soubory znovu?\n\n`
+      + '(Prepise se podle id, duplicity nevzniknou.)')) return;
+  sweepBtn.disabled = true;
+  try { await sweepImport(); } finally { sweepBtn.disabled = false; }
+});
+sweepUpdateCount();
 
 </script>
 </body>
