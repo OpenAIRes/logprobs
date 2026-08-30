@@ -1739,18 +1739,14 @@ async function saveTreeRoot({ id, model, promptText, promptTokens, maxTokens,
 /* ---- napoveda ---- */
 const helpBtn = document.getElementById('helpBtn');
 const helpPanel = document.getElementById('helpPanel');
-const HELP_KEY = 'logprobs_help_open';
 function setHelp(open){
   helpPanel.hidden = !open;
   helpBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
-  try { localStorage.setItem(HELP_KEY, open ? '1' : '0'); } catch {}
 }
 if (helpBtn) helpBtn.addEventListener('click', () => setHelp(helpPanel.hidden));
-// prvni navsteva: nechat otevrene, at je videt, co program umi
-try {
-  const saved = localStorage.getItem(HELP_KEY);
-  setHelp(saved === null ? true : saved === '1');
-} catch { setHelp(false); }
+// Zavrena, dokud si o ni uzivatel nerekne — jinak zabira misto nad textem,
+// ktery je tu to hlavni. Stav se nepamatuje, aby se neotevirala sama.
+setHelp(false);
 
 /* ---- dialog pro vychozi prompt ---- */
 const newTreeOverlay = document.getElementById('newTreeOverlay');
