@@ -71,6 +71,14 @@ def walk_detail(root: TrieNode, tokens: List[str], max_alts: int = 8) -> List[Di
         child = node.children.get(tok)
         if child is None:  # shouldn't happen: the path came from this same trie
             break
+        if child.logprob is None:
+            # build_trie fills a node's logprob only from a generated token or
+            # from its parent's top_logprobs, so a prompt token that no call ever
+            # generated stays unscored. Stop here: the caller compares len(detail)
+            # against len(tokens) and skips a string it cannot score. rank_by_sum
+            # already refuses these via _usable(); this path did not, and a record
+            # with a custom prompt (the APE meta prompt) made it raise TypeError.
+            break
         cumulative += child.logprob
         alts = []
         if parent.top_logprobs:
@@ -153,6 +161,75 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
     return entries
 
 
+def load_records(paths: List[str]) -> List[Dict]:
+    """Read one or more record files, keeping the first copy of each id.
+
+    Extracted from main() so a long-lived store can hold the same records the
+    exporter would have read, rather than re-deriving them a second way.
+    """
+    records: List[Dict] = []
+    seen_ids = set()
+    for path in paths:
+        with open_text(path) as fh:
+            data = json.load(fh)
+        for r in (data if isinstance(data, list) else [data]):
+            rid = r.get("id")
+            if rid and rid in seen_ids:      # same record in two files — keep one
+                continue
+            if rid:
+                seen_ids.add(rid)
+            records.append(r)
+    return records
+
+
+def index_sweeps(records: List[Dict]) -> Dict[tuple, Dict]:
+    """Which (position, alternative) each call deviated at, keyed by prompt path,
+    so a ranked prefix can be traced back to the branch it came from."""
+    sweep_by_prompt: Dict[tuple, Dict] = {}
+    for r in records:
+        sw = (r.get("meta") or {}).get("sweep")
+        if sw:
+            key = tuple(((r.get("prompt") or {}).get("logprobs") or {}).get("tokens") or [])
+            sweep_by_prompt[key] = sw
+    return sweep_by_prompt
+
+
+def build_prefix_entries(root, sweep_by_prompt, args) -> List[Dict]:
+    """Best-first ranking over the trie, one entry per prefix.
+
+    Extracted from main() unchanged so the exporter and the store cannot drift:
+    both call this, so a ranking served live is the ranking a file would hold.
+    """
+    ranked = rank_by_sum(root, args.top, args.min_n, args.chosen_only)
+
+    entries = []
+    for i, r in enumerate(ranked, 1):
+        detail = walk_detail(root, r["tokens"], args.max_alts)
+        entry = {
+            "rank": i,
+            "n": r["n"],
+            "sum_logprob": r["sum"],
+            "mean_logprob": r["mean"],
+            "perplexity": math.exp(-r["mean"]),
+            "text": "".join(r["tokens"]),
+            "tokens": detail,
+        }
+        # deepest prompt path that is a prefix of this entry and was itself a
+        # sweep call — that is the branch point this prefix descends from
+        toks = tuple(r["tokens"])
+        for cut in range(len(toks), 0, -1):
+            sw = sweep_by_prompt.get(toks[:cut])
+            if sw:
+                entry["sweep"] = sw
+                break
+        entries.append(entry)
+
+    entries = apply_prefix(entries, args.prefix)
+    for i, e in enumerate(entries, 1):
+        e["rank"] = i
+    return entries
+
+
 def apply_prefix(entries: List[Dict], prefix: Optional[str]) -> List[Dict]:
     """Filter by leading text. Applied before the --top cap, so a subtree that
     ranks far down the list is still fully represented."""
@@ -171,6 +248,9 @@ def write_db(entries, records, args, ranking, view) -> None:
         "ranking": ranking,
         "view": view,
         "prefix_filter": args.prefix,
+        # Recorded because it changes every entry's token detail: without it,
+        # reproducing an export means guessing the width from its own contents.
+        "max_alts": args.max_alts,
         "count": len(entries),
         "entries": entries,
     }
@@ -211,28 +291,8 @@ def main() -> None:
                          "produced (prompt + completion) — ranked by cumulative logprob.")
     args = ap.parse_args()
 
-    records, seen_ids = [], set()
-    for path in args.file:
-        with open_text(path) as fh:
-            data = json.load(fh)
-        for r in (data if isinstance(data, list) else [data]):
-            rid = r.get("id")
-            if rid and rid in seen_ids:      # same record in two files — keep one
-                continue
-            if rid:
-                seen_ids.add(rid)
-            records.append(r)
-
-    # A sweep export records which (position, alternative) each call deviated at.
-    # Index it by prompt token path so a ranked prefix can be traced back to the
-    # branch it came from — otherwise the viewer shows text with no provenance.
-    sweep_by_prompt = {}
-    for r in records:
-        sw = (r.get("meta") or {}).get("sweep")
-        if sw:
-            key = tuple(((r.get("prompt") or {}).get("logprobs") or {}).get("tokens") or [])
-            sweep_by_prompt[key] = sw
-
+    records = load_records(args.file)
+    sweep_by_prompt = index_sweeps(records)
     root = build_trie(records, args.model)
 
     if args.mode == "completions":
@@ -242,33 +302,7 @@ def main() -> None:
                  view="completions")
         return
 
-    ranked = rank_by_sum(root, args.top, args.min_n, args.chosen_only)
-
-    entries = []
-    for i, r in enumerate(ranked, 1):
-        detail = walk_detail(root, r["tokens"], args.max_alts)
-        entry = {
-            "rank": i,
-            "n": r["n"],
-            "sum_logprob": r["sum"],
-            "mean_logprob": r["mean"],
-            "perplexity": math.exp(-r["mean"]),
-            "text": "".join(r["tokens"]),
-            "tokens": detail,
-        }
-        # deepest prompt path that is a prefix of this entry and was itself a
-        # sweep call — that is the branch point this prefix descends from
-        toks = tuple(r["tokens"])
-        for cut in range(len(toks), 0, -1):
-            sw = sweep_by_prompt.get(toks[:cut])
-            if sw:
-                entry["sweep"] = sw
-                break
-        entries.append(entry)
-
-    entries = apply_prefix(entries, args.prefix)
-    for i, e in enumerate(entries, 1):
-        e["rank"] = i
+    entries = build_prefix_entries(root, sweep_by_prompt, args)
 
     write_db(entries, records, args,
              ranking="sum_logprob desc (best-first / Dijkstra over token trie)",

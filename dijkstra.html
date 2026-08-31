@@ -184,16 +184,13 @@
   </header>
 
   <div class="controls">
+    <!-- Drive z osmi datasetu na dva pohledy: ty tri "L1 / L1+L2 / L1+L2+L3"
+         se lisily jen tim, kolik dat tehdy existovalo, a server vidi vsechna.
+         Filtrovana sada („I have") je ted jen text v poli "zacina na". -->
     <label for="dataSel">zobrazit:
       <select id="dataSel">
-        <option value="dijkstra_top.json">best-first — prefixy</option>
-        <option value="sweep_top.json">sweep — prefixy</option>
-        <option value="sweep_completions.json">sweep L1 — celé completions</option>
-        <option value="sweep2_top.json">sweep L1+L2 — prefixy</option>
-        <option value="sweep2_completions.json">sweep L1+L2 — celé completions</option>
-        <option value="sweep3_top.json">sweep L1+L2+L3 — prefixy</option>
-        <option value="sweep3_completions.json">sweep L1+L2+L3 — celé completions</option>
-        <option value="ihave_completions.json">„I have" — celé completions</option>
+        <option value="prefixes">best-first — prefixy</option>
+        <option value="completions">celé completions</option>
       </select>
     </label>
     <label for="limitSel">položek:
@@ -249,7 +246,6 @@ function currentPrefix() { return prefixIn.value; }
 const shownEl  = document.getElementById('shown');
 
 const LIMIT_KEY = 'dijkstra_limit';
-const LIMIT_STEPS = [5, 10, 20, 50, 100, 200, 500, 1000];
 
 let DB = null;
 
@@ -368,10 +364,13 @@ function buildRow(e) {
 
 function renderRows() {
   const q = currentPrefix();
-  // filtrovat PRED limitem, jinak by se hledalo jen v prvnich N polozkach
+  // Server uz filtruje pred limitem (proto existoval samostatny soubor pro
+  // „I have"), takze tohle je jen okamzita odezva, nez dorazi novy dotaz.
   const matching = q ? DB.entries.filter(e => matchesPrefix(e.text, q)) : DB.entries;
-  const limit = Math.min(Number(limitSel.value) || DB.count, matching.length);
-  const slice = matching.slice(0, limit);
+  // V rezimu ?file= server nefiltruje ani neomezuje, takze limit plati tady.
+  const slice = LEGACY_FILE
+    ? matching.slice(0, Number(limitSel.value) || matching.length)
+    : matching;
 
   prefixClear.hidden = !q;
 
@@ -381,7 +380,7 @@ function renderRows() {
       ? `<div class="empty">Žádný řetězec nezačíná na <code>${plain(q)
           .replace(/&/g,'&amp;').replace(/</g,'&lt;')}</code>.</div>`
       : '<div class="empty">Zatím žádné prefixy.</div>';
-    shownEl.textContent = `0 z ${DB.entries.length}`;
+    shownEl.textContent = `0 položek · ${DB.source_records} záznamů ve zdroji`;
     shownEl.classList.toggle('filtered', !!q);
     tableEl.hidden = false;
     return;
@@ -395,59 +394,60 @@ function renderRows() {
   tableEl.classList.toggle('has-sweep', anySweep);
   document.getElementById('thSweep').hidden = !anySweep;
 
+  // Polozky nejsou zaznamy: 500 prefixu muze vzejit ze 401 volani, takze
+  // "500 z 401" by bylo matouci — obe cisla proto rikaji, co jsou.
   shownEl.textContent = q
-    ? `zobrazeno ${slice.length} z ${matching.length} odpovídajících (${DB.entries.length} v databázi)`
-    : `zobrazeno ${slice.length} z ${DB.entries.length} v databázi`;
+    ? `${slice.length} položek odpovídá „${plain(q)}" · ${DB.source_records} záznamů ve zdroji`
+    : `${slice.length} položek · ${DB.source_records} záznamů ve zdroji`;
   shownEl.classList.toggle('filtered', !!q);
   tableEl.hidden = false;
 }
 
+/* Limit uz neurcuje, kolik z nactenych polozek se vykresli — je to `top`
+   dotazu, tedy kolik jich server vubec spocita. Kroky jsou proto fixni, ne
+   odvozene z toho, co je prave nactene. Strop 2000: completions nesou detail
+   kazdeho tokenu, takze 600 polozek je ~7,5 MB a 5000 uz 72 MB. */
+const POOL_STEPS = [20, 50, 100, 200, 500, 1000, 2000];
+
 function setupLimitControl() {
-  const total = DB.entries.length;
-  const steps = LIMIT_STEPS.filter(n => n < total);
-  limitSel.innerHTML = steps.map(n => `<option value="${n}">${n}</option>`).join('')
-    + `<option value="${total}">vše (${total})</option>`;
-
+  if (limitSel.options.length) return;          // jen jednou, ne pri kazdem dotazu
+  limitSel.innerHTML = POOL_STEPS.map(n => `<option value="${n}">${n}</option>`).join('');
   let saved = Number(localStorage.getItem(LIMIT_KEY));
-  if (!saved || !Array.from(limitSel.options).some(o => Number(o.value) === saved)) {
-    saved = steps.includes(20) ? 20 : total;
-  }
-  limitSel.value = String(saved);
-
+  limitSel.value = String(POOL_STEPS.includes(saved) ? saved : 200);
   limitSel.addEventListener('change', () => {
     try { localStorage.setItem(LIMIT_KEY, limitSel.value); } catch {}
-    renderRows();
+    load();
   });
 }
 
 dataSel.addEventListener('change', () => {
-  location.search = '?file=' + encodeURIComponent(dataSel.value);
+  VIEW = dataSel.value;
+  load();
 });
 
 let prefixTimer = null;
 prefixIn.addEventListener('input', () => {
-  clearTimeout(prefixTimer);           // debounce: filtr bezi nad tisici polozkami
+  clearTimeout(prefixTimer);
+  if (DB) renderRows();                // okamzita odezva nad tim, co je nactene
+  // ...a pak dotaz na server, ktery filtruje pred limitem, takze projdou i
+  // shody hluboko v zebricku, na ktere by lokalni filtr nikdy nedosahl.
   prefixTimer = setTimeout(() => {
     try { localStorage.setItem(PREFIX_KEY, prefixIn.value); } catch {}
-    if (DB) renderRows();
-  }, 150);
+    load();
+  }, 350);
 });
 prefixClear.addEventListener('click', () => {
   prefixIn.value = '';
   try { localStorage.removeItem(PREFIX_KEY); } catch {}
-  if (DB) renderRows();
+  load();
   prefixIn.focus();
 });
 
 function render(db) {
   DB = db;
   window.__db = db;   // handy for poking at the data from the console
-  document.getElementById('srcName').textContent = DATA_FILE;
-  // pokud je zdroj v nabidce, oznac ho; pokud ne, doplnit ho tam
-  if (!Array.from(dataSel.options).some(o => o.value === DATA_FILE)) {
-    dataSel.add(new Option(DATA_FILE, DATA_FILE));
-  }
-  dataSel.value = DATA_FILE;
+  document.getElementById('srcName').textContent = SOURCE_LABEL;
+  dataSel.value = db.view;
 
   metaEl.innerHTML = `
     <div>řazeno podle: <b>Σ logP (součet), sestupně</b></div>
@@ -461,26 +461,72 @@ function render(db) {
     ${db.prefix_filter ? `<div>sada předfiltrovaná na: <b>„${db.prefix_filter}"</b></div>` : ''}
     <div>jen „chosen" tokeny: <b>${db.chosen_only ? 'ano' : 'ne'}</b></div>`;
 
-  // ?prefix= ma prednost pred zapamatovanou hodnotou, aby se dal odkaz poslat
-  const urlPrefix = new URLSearchParams(location.search).get('prefix');
-  if (urlPrefix !== null) prefixIn.value = urlPrefix;
-  else { try { prefixIn.value = localStorage.getItem(PREFIX_KEY) || ''; } catch {} }
-
   setupLimitControl();
   renderRows();
 }
 
-// ?file=… vybira zdroj, aby se dalo prepinat mezi sadami (best-first vs sweep)
-const DATA_FILE = new URLSearchParams(location.search).get('file') || 'dijkstra_top.json';
+/* Zdroj dat.
 
-fetch(DATA_FILE, { cache: 'no-store' })
-  .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} — soubor nenalezen?`); return r.json(); })
-  .then(render)
-  .catch(err => {
-    errEl.style.display = 'block';
-    errEl.textContent = `Nepodařilo se načíst ${DATA_FILE}: ` + err.message
-      + '  — vygeneruj ho: py export_dijkstra_top.py <data>.json --top 500 -o ' + DATA_FILE;
-  });
+   Doted to byl zamrzly export: dijkstra_top.json byl postaveny ze 391 zaznamu,
+   kdyz jich existovalo 8492, a nevidel ani jeden sweep. Ted se stejny dotaz
+   posila do storu, ktery drzi vsechny zaznamy, takze zebricek nemuze zestarnout.
+
+   ?file=… porad funguje — kdyz server neni store.py, nebo kdyz chce clovek
+   videt konkretni historicky rez. */
+const PARAMS = new URLSearchParams(location.search);
+const LEGACY_FILE = PARAMS.get('file');
+let VIEW = PARAMS.get('view') || 'prefixes';
+let SOURCE_LABEL = LEGACY_FILE || '/api/query';
+
+// ?prefix= ma prednost pred zapamatovanou hodnotou, aby se dal odkaz poslat
+const urlPrefix = PARAMS.get('prefix');
+if (urlPrefix !== null) prefixIn.value = urlPrefix;
+else { try { prefixIn.value = localStorage.getItem(PREFIX_KEY) || ''; } catch {} }
+setupLimitControl();
+
+function queryUrl() {
+  const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });
+  if (prefixIn.value) p.set('prefix', prefixIn.value);
+  return '/api/query?' + p.toString();
+}
+
+function showError(what, err, hint) {
+  errEl.style.display = 'block';
+  errEl.textContent = `Nepodařilo se načíst ${what}: ${err.message}` + (hint ? '  — ' + hint : '');
+}
+
+let inflight = 0;
+async function load() {
+  const seq = ++inflight;
+  const url = LEGACY_FILE || queryUrl();
+  shownEl.textContent = 'načítám…';
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const db = await r.json();
+    if (seq !== inflight) return;      // rychlejsi psani v filtru nez odpovedi
+    errEl.style.display = 'none';
+    // Odkaz ma byt sdilitelny, ale prepinani pohledu nema pretezovat stranku.
+    if (!LEGACY_FILE) {
+      const p = new URLSearchParams({ view: VIEW });
+      if (prefixIn.value) p.set('prefix', prefixIn.value);
+      history.replaceState(null, '', '?' + p.toString());
+    }
+    render(db);
+  } catch (err) {
+    if (seq !== inflight) return;
+    if (LEGACY_FILE) {
+      showError(LEGACY_FILE, err,
+        'vygeneruj ho: py export_dijkstra_top.py <data>.json --top 500 -o ' + LEGACY_FILE);
+    } else {
+      showError('/api/query', err,
+        'bezi server.py? spust: py server.py   (staticky server API nema — pak jde jen ?file=…)');
+    }
+    shownEl.textContent = '';
+  }
+}
+
+load();
 </script>
 </body>
 </html>
