@@ -147,6 +147,15 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({'error': 'no record with that id'}, 404)
                 return self.send_json(rec)
 
+            if route == '/api/walk':
+                return self.send_json(self.store.walk(
+                    base_id=one('base_id') or None,
+                    steps=min(_int(one('steps'), 20) or 20, 200),
+                    extend=min(_int(one('extend'), 20) or 20, 200),
+                    model=one('model', 'gpt-3.5-turbo-instruct'),
+                    forward_only=_bool(one('forward_only')),
+                ))
+
             if route == '/api/sweep':
                 base_id = one('base_id') or ''
                 if not base_id:

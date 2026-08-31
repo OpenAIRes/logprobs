@@ -164,6 +164,37 @@
   #err { color: var(--bad); padding: 1rem; background: var(--card);
     border: 1px solid var(--line); border-radius: 8px; }
 
+  /* --- mrizka sweepu a chuze --- */
+  #special { background: var(--card); border: 1px solid var(--line);
+    border-radius: 9px; box-shadow: var(--shadow); overflow: hidden; }
+  .prow { display: grid; grid-template-columns: 2.5rem 7rem minmax(0,1fr);
+    gap: .7rem; align-items: baseline; padding: .35rem .9rem;
+    border-bottom: 1px solid var(--line-soft); }
+  .prow:last-child { border-bottom: none; }
+  .prow .pi { font: 600 .75rem/1.6 ui-monospace, Menlo, monospace; color: var(--ink-faint); }
+  .prow .base { font: 13px/1.6 ui-monospace, Menlo, monospace; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alts { display: flex; flex-wrap: wrap; gap: .25rem; min-width: 0; }
+  .alt-chip { font: 12px/1.5 ui-monospace, Menlo, monospace; padding: .05em .35em;
+    border-radius: 3px; background: var(--chip); border: 1px solid transparent;
+    cursor: default; white-space: nowrap; }
+  /* Greedy alternativa je ten token, ktery model skutecne vybral — musi byt
+     poznat od 19 ostatnich, jinak mrizka nerika, od ceho se odchyluje. */
+  .alt-chip.greedy { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .alt-chip .lp { color: var(--ink-faint); margin-left: .3em; }
+
+  .wrow { display: grid; grid-template-columns: 2.5rem 3rem 9rem 5rem 3.5rem 6rem;
+    gap: .7rem; align-items: baseline; padding: .35rem .9rem .1rem;
+    font-size: .78125rem; color: var(--ink-dim);
+    font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .wtext { padding: 0 .9rem .4rem 5.9rem; border-bottom: 1px solid var(--line-soft);
+    font: 13px/1.6 ui-monospace, Menlo, monospace; color: var(--ink);
+    white-space: pre-wrap; word-break: break-word; }
+  .wrow .cost { color: var(--accent); font-weight: 600; }
+  .needs { padding: .6rem .9rem; background: rgba(176,125,43,.10); color: var(--mid);
+    font-size: .78125rem; line-height: 1.5; }
+  .needs b { font-family: ui-monospace, Menlo, monospace; }
+
   @media (max-width: 720px) {
     .thead, .row { grid-template-columns: 2.5rem minmax(0,1fr) 5.5rem; }
     .thead .c-mean, .row .c-mean, .thead .c-ppl, .row .c-ppl,
@@ -174,11 +205,10 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Nejlepší prefixy podle součtu logprobs</h1>
+    <h1 id="title">Logprobs — pohledy na databázi</h1>
     <div class="sub">
-      Best-first (Dijkstra) prohledávání token-trie. Každý logprob je ≤ 0, takže prodloužení
-      prefixu součet nikdy nezvýší — pořadí vytahování z haldy je proto zaručeně správné.
-      Data: <code id="srcName">dijkstra_top.json</code>
+      <span id="blurb"></span>
+      Data: <code id="srcName">/api/query</code>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -191,12 +221,21 @@
       <select id="dataSel">
         <option value="prefixes">best-first — prefixy</option>
         <option value="completions">celé completions</option>
+        <option value="sweep">mřížka sweepu</option>
+        <option value="walk">chůze nejlevnějších odchylek</option>
       </select>
     </label>
-    <label for="limitSel">položek:
+    <label for="limitSel" id="limitWrap">položek:
       <select id="limitSel"></select>
     </label>
-    <label for="prefixIn">začíná na:
+    <label for="baseSel" id="baseWrap" hidden>base:
+      <select id="baseSel"></select>
+    </label>
+    <label for="stepsIn" id="stepsWrap" hidden>kroků:
+      <input type="number" id="stepsIn" value="20" min="1" max="200" step="1" style="width:4.5rem">
+    </label>
+    <label id="fwdWrap" hidden><input type="checkbox" id="fwdIn"> jen dopředu</label>
+    <label for="prefixIn" id="prefixWrap">začíná na:
       <input type="text" id="prefixIn" placeholder="např. I have" spellcheck="false">
       <button id="prefixClear" type="button" title="zrušit filtr" hidden>×</button>
     </label>
@@ -218,6 +257,9 @@
     </div>
     <div id="list"></div>
   </div>
+  <!-- Mrizka a chuze maji jinou strukturu nez zebricek, tak si nesou vlastni
+       kontejner misto toho, aby se cpaly do gridu se sesti sloupci. -->
+  <div id="special" hidden></div>
   <div id="err" style="display:none"></div>
 </div>
 
@@ -230,6 +272,9 @@ const limitSel = document.getElementById('limitSel');
 const dataSel  = document.getElementById('dataSel');
 const prefixIn = document.getElementById('prefixIn');
 const prefixClear = document.getElementById('prefixClear');
+const baseSel  = document.getElementById('baseSel');
+const stepsIn  = document.getElementById('stepsIn');
+const fwdIn    = document.getElementById('fwdIn');
 
 const PREFIX_KEY = 'dijkstra_prefix';
 
@@ -277,6 +322,12 @@ function tokColor(logprob) {
 }
 
 function fmt(x, d = 4) { return Number(x).toFixed(d); }
+
+/* Text alternativy jde do title="", takze staci uvozovky a ampersand; plain()
+   uz zviditelnil bile znaky, tedy zadne surove newline se sem nedostane. */
+function escapeAttr(t) {
+  return plain(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
 
 // Named (rather than inline in the click handler) so the detail rendering can be
 // exercised directly, without a real mouse event.
@@ -420,10 +471,15 @@ function setupLimitControl() {
   });
 }
 
-dataSel.addEventListener('change', () => {
+dataSel.addEventListener('change', async () => {
   VIEW = dataSel.value;
+  applyViewControls();
+  if (VIEW === 'sweep' || VIEW === 'walk') await ensureBases();
   load();
 });
+baseSel.addEventListener('change', load);
+stepsIn.addEventListener('change', load);
+fwdIn.addEventListener('change', load);
 
 let prefixTimer = null;
 prefixIn.addEventListener('input', () => {
@@ -443,11 +499,139 @@ prefixClear.addEventListener('click', () => {
   prefixIn.focus();
 });
 
+const RANKED = v => v === 'prefixes' || v === 'completions';
+const specialEl = document.getElementById('special');
+
+/* Nadpis dela ctvrtinu vysvetleni, tak se meni s pohledem — "Nejlepsi prefixy
+   podle souctu logprobs" nad mrizkou sweepu by rovnou lhal. */
+const BLURBS = {
+  prefixes: ['Nejlepší prefixy podle součtu logprobs',
+    'Best-first (Dijkstra) prohledávání token-trie. Každý logprob je ≤ 0, takže prodloužení '
+    + 'prefixu součet nikdy nezvýší — pořadí vytahování z haldy je proto zaručeně správné.'],
+  completions: ['Celé completions podle součtu logprobs',
+    'Jedna položka za každé volání: prompt i vygenerovaná část. Řetězce nejsou stejně dlouhé '
+    + '(prompt roste s pozicí odchylky), takže součet zvýhodňuje kratší — ⌀ logP je vedle.'],
+  sweep: ['Mřížka sweepu',
+    'Pro každou pozici základního řetězce všech 20 alternativ, jak je model nabídl. '
+    + 'Rámovaná je ta, kterou skutečně vybral; ostatní jsou odchylky, které jsme zaplatili.'],
+  walk: ['Chůze nejlevnějších odchylek',
+    'V každém kroku se udělá ta jednotokenová změna, která stojí nejméně logprobs, a dogeneruje '
+    + 'se pokračování. Počítá se jen z uložených dat — kde by bylo potřeba volání, tam se zastaví.'],
+};
+
+function applyBlurb() {
+  const [title, blurb] = BLURBS[VIEW] || BLURBS.prefixes;
+  document.getElementById('title').textContent = title;
+  document.getElementById('blurb').textContent = blurb;
+}
+
+/* Toolbar sleduje pohled: filtr prefixu nema smysl u mrizky, vyber base nema
+   smysl u zebricku. Skryte ovladaci prvky se do dotazu nepromitaji. */
+function applyViewControls() {
+  applyBlurb();
+  const ranked = RANKED(VIEW);
+  document.getElementById('limitWrap').hidden = !ranked;
+  document.getElementById('prefixWrap').hidden = !ranked;
+  document.getElementById('baseWrap').hidden = ranked;   // base plati pro mrizku i chuzi
+  document.getElementById('stepsWrap').hidden = VIEW !== 'walk';
+  document.getElementById('fwdWrap').hidden = VIEW !== 'walk';
+}
+
+/* Nabidka base se plni z /api/bases, ne z natvrdo zapsaneho seznamu id — po
+   kazdem novem sweepu tam pribude sam. */
+let basesLoaded = false;
+async function ensureBases() {
+  if (basesLoaded) return;
+  try {
+    const res = await fetch('/api/bases', { cache: 'no-store' });
+    const { bases } = await res.json();
+    baseSel.innerHTML = bases.map(b =>
+      `<option value="${b.base_id}">${b.calls}× — ${plain((b.text || b.base_id).slice(0, 40))
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')}</option>`).join('');
+    basesLoaded = true;
+  } catch { baseSel.innerHTML = '<option value="">(nelze načíst)</option>'; }
+}
+
+function renderSweep(db) {
+  tableEl.hidden = true;
+  specialEl.hidden = false;
+  metaEl.innerHTML = `
+    <div>pohled: <b>mřížka sweepu</b></div>
+    <div>base: <b>${db.base_found ? 'nalezen' : 'CHYBÍ'}</b></div>
+    <div>tokenů v base: <b>${db.base_tokens.length}</b></div>
+    <div>pozic: <b>${db.positions.length}</b></div>
+    <div>volání v mřížce: <b>${db.cells}</b></div>`;
+
+  if (!db.positions.length) {
+    specialEl.innerHTML = '<div class="empty">Pro tento base nejsou v databázi žádné odchylky.</div>';
+    shownEl.textContent = '';
+    return;
+  }
+
+  specialEl.innerHTML = db.positions.map(p => {
+    const chips = p.alternatives.map(a => {
+      const lp = a.alternative_logprob;
+      return `<span class="alt-chip${a.is_greedy ? ' greedy' : ''}" title="${
+        escapeAttr((a.text || '').slice(0, 160))}">${plain(a.alternative)
+        }<span class="lp">${lp == null ? '' : fmt(lp, 2)}</span></span>`;
+    }).join('');
+    return `<div class="prow">
+      <div class="pi">${p.position}</div>
+      <div class="base">${plain(db.base_tokens[p.position] ?? '')}</div>
+      <div class="alts">${chips}</div>
+    </div>`;
+  }).join('');
+  shownEl.textContent = `${db.positions.length} pozic · ${db.cells} volání`;
+}
+
+function renderWalk(db) {
+  tableEl.hidden = true;
+  specialEl.hidden = false;
+  metaEl.innerHTML = `
+    <div>pohled: <b>chůze nejlevnějších odchylek</b></div>
+    <div>kroků z cache: <b>${db.steps.length}</b></div>
+    <div>base Σ: <b>${db.base ? fmt(db.base.sum) : '—'}</b></div>
+    <div>tokenů po odchylce: <b>${db.extend}</b></div>
+    <div>pozice: <b>${db.forward_only ? 'jen dopředu' : 'volně'}</b></div>`;
+
+  const rows = [`<div class="wrow"><div>0</div><div>—</div><div>base</div><div>—</div>
+      <div>${db.base.n}</div><div>${fmt(db.base.sum)}</div></div>
+    <div class="wtext">${plain(db.base.text)}</div>`];
+
+  for (const s of db.steps) {
+    rows.push(`<div class="wrow">
+      <div>${s.step}</div><div>${s.position}</div>
+      <div>${plain(s.original)} → ${plain(s.alternative)}</div>
+      <div class="cost">${fmt(s.cost)}</div>
+      <div>${s.n}</div><div>${fmt(s.sum)}</div>
+    </div><div class="wtext">${plain(s.text)}</div>`);
+  }
+
+  // Kde by chuze pokracovala az za zaplacene volani. Rikame to nahlas, at se
+  // "8 kroku" necte jako "tady to konci".
+  if (db.needs_call) {
+    const nc = db.needs_call;
+    rows.push(`<div class="needs">Další krok by potřeboval <b>1 volání API</b>:
+      pozice ${nc.position}, <b>${plain(nc.original)} → ${plain(nc.alternative)}</b>,
+      cena odchylky <b>${fmt(nc.cost)}</b>. Prompt není v databázi, takže se tady zastavuje.</div>`);
+  } else if (!db.steps.length) {
+    rows.push('<div class="empty">Žádný krok nelze udělat z uložených dat.</div>');
+  }
+
+  specialEl.innerHTML = rows.join('');
+  shownEl.textContent = `${db.steps.length} kroků z cache`
+    + (db.needs_call ? ' · další chce volání' : '');
+}
+
 function render(db) {
   DB = db;
   window.__db = db;   // handy for poking at the data from the console
   document.getElementById('srcName').textContent = SOURCE_LABEL;
-  dataSel.value = db.view;
+  dataSel.value = VIEW;
+
+  if (VIEW === 'sweep') return renderSweep(db);
+  if (VIEW === 'walk')  return renderWalk(db);
+  specialEl.hidden = true;
 
   metaEl.innerHTML = `
     <div>řazeno podle: <b>Σ logP (součet), sestupně</b></div>
@@ -483,8 +667,21 @@ const urlPrefix = PARAMS.get('prefix');
 if (urlPrefix !== null) prefixIn.value = urlPrefix;
 else { try { prefixIn.value = localStorage.getItem(PREFIX_KEY) || ''; } catch {} }
 setupLimitControl();
+if (PARAMS.get('forward_only') === '1') fwdIn.checked = true;
 
 function queryUrl() {
+  if (VIEW === 'sweep') {
+    const p = new URLSearchParams();
+    if (baseSel.value) p.set('base_id', baseSel.value);
+    return '/api/sweep?' + p.toString();
+  }
+  if (VIEW === 'walk') {
+    return '/api/walk?' + new URLSearchParams({
+      steps: stepsIn.value || '20',
+      forward_only: fwdIn.checked ? '1' : '0',
+      ...(baseSel.value ? { base_id: baseSel.value } : {}),
+    }).toString();
+  }
   const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });
   if (prefixIn.value) p.set('prefix', prefixIn.value);
   return '/api/query?' + p.toString();
@@ -509,7 +706,9 @@ async function load() {
     // Odkaz ma byt sdilitelny, ale prepinani pohledu nema pretezovat stranku.
     if (!LEGACY_FILE) {
       const p = new URLSearchParams({ view: VIEW });
-      if (prefixIn.value) p.set('prefix', prefixIn.value);
+      if (RANKED(VIEW) && prefixIn.value) p.set('prefix', prefixIn.value);
+      if (VIEW === 'walk' && fwdIn.checked) p.set('forward_only', '1');
+      if ((VIEW === 'sweep' || VIEW === 'walk') && baseSel.value) p.set('base_id', baseSel.value);
       history.replaceState(null, '', '?' + p.toString());
     }
     render(db);
@@ -526,7 +725,15 @@ async function load() {
   }
 }
 
-load();
+(async () => {
+  applyViewControls();
+  if (VIEW === 'sweep' || VIEW === 'walk') {
+    await ensureBases();
+    const wanted = PARAMS.get('base_id');
+    if (wanted && [...baseSel.options].some(o => o.value === wanted)) baseSel.value = wanted;
+  }
+  load();
+})();
 </script>
 </body>
 </html>

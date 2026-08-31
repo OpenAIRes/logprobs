@@ -204,12 +204,127 @@ class RecordStore:
         if base:
             base_tokens = ((base.get('choices') or [{}])[0].get('logprobs') or {}).get('tokens') or []
         return {
+            'view': 'sweep',
             'base_id': base_id,
             'base_found': base is not None,
             'base_tokens': list(base_tokens),
             'positions': [{'position': p, 'alternatives': cells[p]} for p in sorted(cells)],
             'cells': sum(len(v) for v in cells.values()),
         }
+
+    def walk(self, base_id: Optional[str] = None, steps: int = 20, extend: int = 20,
+             model: str = 'gpt-3.5-turbo-instruct', forward_only: bool = False) -> Dict:
+        """Greedy walk: repeatedly apply the cheapest single-token deviation.
+
+        Cost of deviating at position i is logprob(chosen_i) - logprob(alt). At
+        temperature 0 the chosen token is the argmax, so the cost is >= 0 and the
+        cheapest available deviation is well defined -- and it is free to compute,
+        because one call already returns the top-20 alternatives at every
+        position. Only the regeneration afterwards needs a call.
+
+        Two guards, without which the naive version cannot work:
+
+          * the position just deviated is frozen. Otherwise the very next
+            cheapest move at that position is to restore the original argmax,
+            whose cost is NEGATIVE -- it always wins, and the walk oscillates on
+            step one.
+          * prompts already walked are never revisited. Deviating at an earlier
+            position unfreezes the later ones, so a longer cycle is reachable.
+
+        forward_only additionally refuses positions before the last deviation,
+        which keeps each string an extension of the previous one at the price of
+        dearer steps.
+
+        Calls nothing. When the next regeneration is not in the store, the walk
+        stops and reports the prompt it would have to pay for.
+        """
+        if base_id is None:
+            found = self.bases()
+            base_id = found[0]['base_id'] if found else None
+        base = self.by_id.get(base_id or '')
+        if base is None:
+            return {'view': 'walk', 'base_id': base_id, 'base_found': False,
+                    'steps': [], 'needs_call': None}
+
+        def node_of(prefix_tokens, prefix_logprobs, prefix_tops, record):
+            lp = (record.get('choices') or [{}])[0].get('logprobs') or {}
+            cut = lambda a: list(a or [])[:extend]
+            return {
+                'tokens': prefix_tokens + cut(lp.get('tokens')),
+                'logprobs': prefix_logprobs + cut(lp.get('token_logprobs')),
+                'tops': prefix_tops + [dict(t or {}) for t in cut(lp.get('top_logprobs'))],
+            }
+
+        def text_of(node):
+            return ''.join(node['tokens'])
+
+        node = node_of([], [], [], base)
+        frozen: set = set()
+        visited = {text_of({'tokens': []})}   # the base's own prompt
+        visited.add((base.get('request') or {}).get('prompt') or '')
+        out = {
+            'view': 'walk',
+            'base_id': base_id,
+            'base_found': True,
+            'model': model,
+            'extend': extend,
+            'forward_only': forward_only,
+            'base': {'text': text_of(node), 'n': len(node['tokens']),
+                     'sum': sum(v for v in node['logprobs'] if isinstance(v, (int, float)))},
+            'steps': [],
+            'needs_call': None,
+        }
+
+        last_pos = -1
+        for _ in range(max(0, steps)):
+            moves = []
+            for i, tok in enumerate(node['tokens']):
+                if i in frozen or (forward_only and i < last_pos):
+                    continue
+                chosen = node['logprobs'][i]
+                if not isinstance(chosen, (int, float)):
+                    continue
+                for alt, alt_lp in (node['tops'][i] or {}).items():
+                    if alt == tok or not isinstance(alt_lp, (int, float)):
+                        continue
+                    moves.append((chosen - alt_lp, i, alt, alt_lp))
+            moves.sort(key=lambda m: (m[0], m[1], m[2]))
+
+            picked = None
+            for cost, i, alt, alt_lp in moves:
+                if ''.join(node['tokens'][:i]) + alt not in visited:
+                    picked = (cost, i, alt, alt_lp)
+                    break
+            if picked is None:
+                break
+
+            cost, i, alt, alt_lp = picked
+            prompt = ''.join(node['tokens'][:i]) + alt
+            rec = self.lookup(prompt, model=model, max_tokens=extend)
+            if rec is None:
+                out['needs_call'] = {'position': i, 'original': node['tokens'][i],
+                                     'alternative': alt, 'cost': cost, 'prompt': prompt}
+                break
+
+            visited.add(prompt)
+            replaced = node['tokens'][i]   # capture before the node is rebuilt
+            node = node_of(node['tokens'][:i] + [alt],
+                           node['logprobs'][:i] + [alt_lp],
+                           node['tops'][:i] + [node['tops'][i]], rec)
+            frozen = {p for p in frozen if p < i} | {i}
+            last_pos = i
+            out['steps'].append({
+                'step': len(out['steps']) + 1,
+                'position': i,
+                'original': replaced,
+                'alternative': alt,
+                'cost': cost,
+                'id': rec.get('id'),
+                'n': len(node['tokens']),
+                'sum': sum(v for v in node['logprobs'] if isinstance(v, (int, float))),
+                'text': text_of(node),
+            })
+        return out
 
     def bases(self) -> List[Dict]:
         """Every record some sweep used as its base, busiest first."""
