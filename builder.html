@@ -171,6 +171,12 @@
       <label class="fld"><span>stop: dokázat top-K</span>
         <input type="number" id="targetK" value="20" min="0" step="10">
       </label>
+      <label class="fld"><span>store (server.py)</span>
+        <select id="useStore">
+          <option value="1">ptát se před voláním</option>
+          <option value="0">nepoužívat (jako dřív)</option>
+        </select>
+      </label>
     </div>
     <div class="note" id="modeNote"></div>
   </div>
@@ -199,6 +205,7 @@
       <div class="stat"><span>odhad ceny</span><b id="sCost">$0.0000</b></div>
       <div class="stat"><span>max hloubka</span><b id="sDepth">0</b></div>
       <div class="stat hi"><span>uloženo záznamů</span><b id="sSaved">0</b></div>
+      <div class="stat"><span>ze storu (zdarma)</span><b id="sStore">0</b></div>
     </div>
     <div class="note">
       <b>Nových volání na běh</b> je rozpočet na jedno stisknutí „Běž", ne absolutní strop —
@@ -825,6 +832,22 @@ async function simulatePositions(prompt, maxTokens, model) {
    ========================================================================= */
 const el = id => document.getElementById(id);
 const modeEl = el('mode'), modelEl = el('model'), maxTokensEl = el('maxTokens');
+
+/* Deklarovano tady, ne u storeLookup(): let/const nejsou hoistovane, a obsluha
+   selectoru nize se spousti okamzite — nizsi deklarace by dala ReferenceError. */
+const STORE_KEY = 'builder_use_store';
+let USE_STORE = (() => { try { return localStorage.getItem(STORE_KEY) !== '0'; } catch { return true; } })();
+
+const useStoreEl = el('useStore');
+if (useStoreEl) {
+  useStoreEl.value = USE_STORE ? '1' : '0';
+  useStoreEl.addEventListener('change', () => {
+    USE_STORE = useStoreEl.value === '1';
+    try { localStorage.setItem(STORE_KEY, USE_STORE ? '1' : '0'); } catch {}
+    log(USE_STORE ? 'store zapnut — pred kazdym volanim se zepta serveru'
+                  : 'store vypnut — chova se jako driv');
+  });
+}
 const maxCallsEl = el('maxCalls'), targetKEl = el('targetK');
 const btnStart = el('btnStart'), btnStep = el('btnStep'), btnRun = el('btnRun');
 const btnReset = el('btnReset'), btnExport = el('btnExport');
@@ -929,6 +952,7 @@ function renderStats() {
   el('sTokens').textContent = `${engine.promptTokens} / ${engine.completionTokens}`;
   el('sCost').textContent = '$' + fmt(engine.cost());
   el('sDepth').textContent = engine.maxDepth;
+  el('sStore').textContent = storeHits;
 }
 
 function renderAll() {
@@ -1006,6 +1030,7 @@ function renderAll() {
 
 let savedCount = 0;
 let apiSpendConfirmed = false;
+let storeHits = 0;      // rozbaleni, ktera prisla ze storu, tedy zdarma
 
 async function refreshSavedCount() {
   try { savedCount = await idbCount(); } catch { /* keep last known */ }
@@ -1013,9 +1038,48 @@ async function refreshSavedCount() {
   btnExport.disabled = savedCount === 0;
 }
 
+/* Store (server.py) drzi vsech ~8500 zaznamu z celeho projektu, tedy i takove,
+   ktere tato builderova databaze nikdy nevidela. Ptame se ho tesne pred
+   zaplacenim volani.
+
+   Kazda chyba tady vraci null, takze pri vypnutem nebo nedostupnem serveru se
+   builder chova presne jako predtim: zavola API. */
+async function storeLookup(prompt, maxTokens, model) {
+  if (!USE_STORE) return null;
+  try {
+    // POST, ne GET: prompt roste s hloubkou stromu a v query stringu by narazil
+    // na limit delky pozadavku — a falesny miss tady stoji penize.
+    const res = await fetch('/api/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, model, max_tokens: Number(maxTokens), temperature: 0 }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.hit || !data.record?.id) return null;
+
+    // parseCompletionsResponse bere presne tvar odpovedi /v1/completions, a
+    // zaznam ve storu ten tvar ma — je to ulozena odpoved.
+    const positions = parseCompletionsResponse(data.record).slice(0, Number(maxTokens));
+    if (!positions.length) return null;
+    return {
+      positions,
+      usage: null,          // nic se nezaplatilo, takze se nic nepricita
+      raw: data.record,
+      request: buildRequestBody(prompt, maxTokens, model),
+      http: null,
+      fromStore: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getPositions(prompt) {
   const maxTokens = engine.maxTokens;
   if (modeEl.value === 'sim') return simulatePositions(prompt, maxTokens, engine.model);
+  const stored = await storeLookup(prompt, maxTokens, engine.model);
+  if (stored) return stored;
   return fetchPositionsFromApi(prompt, maxTokens, engine.model);
 }
 
@@ -1039,7 +1103,14 @@ async function generateInto(targetNode) {
     await idbPut(rec);                    // <- persisted before anything else
     responseId = rec.id;
     await refreshSavedCount();
-    log(`  uloženo ${rec.id}  req=${rec.meta.http?.request_id || '—'}  ${rec.meta.http?.latency_ms}ms`, 'ok');
+    // Ulozit i zasah ze storu: drzi to invariant, ze reload strom prestavi z
+    // ulozenych zaznamu. Je to tentyz zaznam pod tymtez id, takze pri nacitani
+    // do storu se dedupem slouci a nic se nezdvoji.
+    if (res.fromStore) storeHits++;
+    log(res.fromStore
+      ? `  ze storu ${rec.id} — nezaplaceno`
+      : `  uloženo ${rec.id}  req=${rec.meta.http?.request_id || '—'}  ${rec.meta.http?.latency_ms}ms`,
+      'ok');
   }
 
   engine.integrate(targetNode, res.positions, responseId);

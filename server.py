@@ -79,6 +79,38 @@ class Handler(SimpleHTTPRequestHandler):
 
     # -- routing --------------------------------------------------------------
 
+    def do_POST(self):
+        """POST /api/lookup, because a prompt can be 4096 tokens.
+
+        The GET form is fine for poking at by hand, but a long prompt in a query
+        string runs into the request-line limit, and this is the one call that
+        must never fail for a reason unrelated to the data -- a false miss costs
+        real money.
+        """
+        route = posixpath.normpath(urllib.parse.urlparse(self.path).path)
+        if route != '/api/lookup':
+            return self.send_json({'error': f'unknown route {route}'}, 404)
+        try:
+            length = _int(self.headers.get('Content-Length'), 0) or 0
+            body = json.loads(self.rfile.read(length) or b'{}')
+            if 'prompt' not in body:
+                return self.send_json({'error': 'prompt is required'}, 400)
+            rec = self.store.lookup(
+                prompt=body['prompt'],
+                model=body.get('model') or None,
+                max_tokens=_int(body.get('max_tokens')),
+                temperature=body.get('temperature', 0),
+            )
+            return self.send_json({'hit': rec is not None,
+                                   'id': (rec or {}).get('id'),
+                                   'record': rec})
+        except (ValueError, json.JSONDecodeError) as exc:
+            return self.send_json({'error': str(exc)}, 400)
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            return self.send_json({'error': f'{type(exc).__name__}: {exc}'}, 500)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         route = posixpath.normpath(parsed.path)

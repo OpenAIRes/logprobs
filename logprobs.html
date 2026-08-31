@@ -79,6 +79,10 @@
     button:active:not(:disabled) { background: #e8e7e3; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     button.danger { color: var(--danger); }
+    /* Vypnuty store ma byt videt na prvni pohled: jinak clovek nevi, proc se
+       najednou vola API na neco, co server ma. */
+    button.off { opacity: .55; }
+    button.off .cnt { text-decoration: line-through; }
     button.danger:hover:not(:disabled) { background: #fdf2f2; border-color: #e8c4c5; }
     button.icon { width: 1.9rem; padding: .35rem 0; text-align: center;
                   border-radius: 999px; color: var(--ink-dim); }
@@ -187,6 +191,8 @@
           title="Stáhne celou historii jako completion_history.json.">Export <span class="cnt" id="savedCount">0</span></button>
         <button id="sweepBtn"
           title="Načte sweep databáze jako cache pro čtení. Klik na token pak nejdřív hledá tam a volá API jen tehdy, když data nemáme. Import je jednorázový a trvalý.">Sweep cache <span class="cnt" id="sweepCount">0</span></button>
+        <button id="storeBtn" aria-pressed="true"
+          title="Ptát se serveru (server.py) na záznamy, které v tomto prohlížeči nejsou, ještě než se zaplatí volání. Vypnutím se program chová přesně jako dřív.">Store <span class="cnt" id="storeCount">?</span></button>
       </div>
 
       <div class="grp" role="group" aria-label="Údržba">
@@ -240,6 +246,14 @@
         nejdřív ve vlastní historii, pak tady, a <b>API volá jen když data nemáme</b>.
         Import je jednorázový a trvalý; leží v oddělené databázi, takže tvou historii
         nemůže poškodit.</dd>
+
+      <dt>Store</dt>
+      <dd>Ptá se serveru (<code>server.py</code>) na záznamy, které v tomto prohlížeči
+        nejsou — a to <b>až po</b> vlastní historii i sweep cache, tedy jako poslední
+        zastávku před zaplacením volání. Číslo je počet záznamů, které server drží;
+        <code>—</code> znamená, že neodpovídá (statický server nebo neběží).
+        <b>Vypnutím se program chová přesně jako dřív</b>, a stejně se zachová i sám,
+        když server nedostupný je.</dd>
 
       <dt>Opravit odkazy</dt>
       <dd>Přepočítá u promptových tokenů odkazy na záznamy, ze kterých pocházejí.
@@ -730,6 +744,61 @@ async function sweepLookupByText(promptText, model, maxTokens){
   return hit;
 }
 
+/* --- Store (server.py) jako posledni zdroj pred zaplacenim volani -----------
+
+   Store drzi vsech 8492 zaznamu, tedy i ty, ktere v tomto prohlizeci nikdy
+   nebyly. Pta se az po vlastni historii a sweep cache, takze nic nezpomaluje
+   to, co uz mame lokalne.
+
+   Navrat k puvodnimu chovani je zamerne trivialni: kdyz store neodpovi, neni
+   zapnuty, nebo vrati cokoli necekaneho, funkce vrati null a program pokracuje
+   presne jako predtim — zavola API. Zadna cesta odsud nesmi vyhodit vyjimku.  */
+const STORE_KEY = 'logprobs_use_store';
+let USE_STORE = (() => { try { return localStorage.getItem(STORE_KEY) !== '0'; } catch { return true; } })();
+
+async function storeLookup(promptText, model, maxTokens){
+  if (!USE_STORE) return null;
+  try {
+    // POST, ne GET: prompt muze mit 4096 tokenu a v query stringu by narazil na
+    // limit delky pozadavku — a falesny miss tady stoji penize.
+    const res = await fetch('/api/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: promptText, model, max_tokens: Number(maxTokens), temperature: 0 }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const choice = data?.record?.choices?.[0];
+    if (!data.hit || !Array.isArray(choice?.logprobs?.tokens)) return null;
+
+    const have = choice.logprobs.tokens.length;
+    const want = Number(maxTokens);
+    return {
+      id: data.record.id,
+      choices: [ have > want ? truncateChoice(choice, want) : choice ],
+      truncatedFrom: have > want ? have : null,
+    };
+  } catch {
+    return null;   // server nebezi -> presne dosavadni chovani
+  }
+}
+
+async function refreshStoreChip(){
+  const btn = document.getElementById('storeBtn');
+  const cnt = document.getElementById('storeCount');
+  if (!btn || !cnt) return;
+  btn.setAttribute('aria-pressed', USE_STORE ? 'true' : 'false');
+  btn.classList.toggle('off', !USE_STORE);
+  if (!USE_STORE) { cnt.textContent = 'off'; return; }
+  try {
+    const res = await fetch('/api/stats', { cache: 'no-store' });
+    const stats = await res.json();
+    cnt.textContent = String(stats.records ?? '?');
+  } catch {
+    cnt.textContent = '—';   // staticky server nebo server.py nebezi
+  }
+}
+
 function sweepPick(rows, model, maxTokens){
   if(!rows || !rows.length) return null;
 
@@ -1146,6 +1215,15 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
     console.log('[SWEEP HIT]', swept.id, swept.truncatedFrom ? `(zkraceno z ${swept.truncatedFrom})` : '');
     return { response: { id: swept.id, choices: swept.choices }, prompt: promptText,
              fromHistory: true, fromSweep: true, truncatedFrom: swept.truncatedFrom };
+  }
+
+  // Posledni zastavka pred zaplacenim: server drzi i zaznamy, ktere v tomhle
+  // prohlizeci nikdy nebyly. Kdyz nebezi, vrati null a jde se volat, jako dosud.
+  const stored = await storeLookup(promptText, model, maxTokens);
+  if (stored) {
+    console.log('[STORE HIT]', stored.id, stored.truncatedFrom ? `(zkraceno z ${stored.truncatedFrom})` : '');
+    return { response: { id: stored.id, choices: stored.choices }, prompt: promptText,
+             fromHistory: true, fromStore: true, truncatedFrom: stored.truncatedFrom };
   }
 
   console.log('[MISS] Calling API for prompt:', promptText);
@@ -1943,11 +2021,21 @@ if (repairBtn) repairBtn.addEventListener('click', repairLinks);
    ze sweep cache a byla pripadne zkracena na pozadovanou delku. */
 function hitLabel(result, missMsg){
   if (!result.fromHistory) return missMsg;
-  if (!result.fromSweep) return 'Načteno!';
+  const from = result.fromStore ? 'ze storu' : result.fromSweep ? 'ze sweep DB' : null;
+  if (!from) return 'Načteno!';
   return result.truncatedFrom
-    ? `Načteno ze sweep DB (zkráceno z ${result.truncatedFrom})`
-    : 'Načteno ze sweep DB';
+    ? `Načteno ${from} (zkráceno z ${result.truncatedFrom})`
+    : `Načteno ${from}`;
 }
+
+const storeBtn = document.getElementById('storeBtn');
+if (storeBtn) storeBtn.addEventListener('click', () => {
+  USE_STORE = !USE_STORE;
+  try { localStorage.setItem(STORE_KEY, USE_STORE ? '1' : '0'); } catch {}
+  refreshStoreChip();
+  showStatus(USE_STORE ? 'Store zapnut.' : 'Store vypnut — chová se jako dřív.');
+});
+refreshStoreChip();
 
 const sweepBtn = document.getElementById('sweepBtn');
 if (sweepBtn) sweepBtn.addEventListener('click', async () => {
