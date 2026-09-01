@@ -144,6 +144,10 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
             "prompt_len": len(prompt_tokens),
             "generated_len": len(own),
             "finish_reason": (rec.get("choices") or [{}])[0].get("finish_reason"),
+            # Same name in every view, so one column can show it and one filter
+            # can select on it. A completion is a recorded call, so its end is
+            # always the API's verdict -- "open" can only happen to a prefix.
+            "end": (rec.get("choices") or [{}])[0].get("finish_reason") or "length",
             "id": rec.get("id"),
             "n_calls": 1,
             **({"sweep": (rec.get("meta") or {}).get("sweep")}
@@ -194,13 +198,33 @@ def index_sweeps(records: List[Dict]) -> Dict[tuple, Dict]:
     return sweep_by_prompt
 
 
-def build_prefix_entries(root, sweep_by_prompt, args) -> List[Dict]:
+# A filtered best-first search can walk most of the trie before it finds enough
+# qualifying strings, so it is bounded. 1M pops covers the whole trie today
+# (exhausting it for the strictest filter takes well under that); the bound
+# exists so a future, larger trie degrades into "incomplete list, and it says so"
+# rather than into a hung request.
+MAX_POPS = 1_000_000
+
+
+def build_prefix_entries(root, sweep_by_prompt, args, ends_index=None,
+                         stats=None) -> List[Dict]:
     """Best-first ranking over the trie, one entry per prefix.
 
     Extracted from main() unchanged so the exporter and the store cannot drift:
     both call this, so a ranking served live is the ranking a file would hold.
+
+    `ends_index` maps a full token path to how the call that produced it ended,
+    which is what lets a prefix say whether it is a real endpoint or just a place
+    the enumeration stopped. Without it every prefix reads as "open", which is
+    the honest answer when nothing recorded ends there.
     """
-    ranked = rank_by_sum(root, args.top, args.min_n, args.chosen_only)
+    ends_index = ends_index or {}
+    allow = getattr(args, "ends", None)
+    accept = None
+    if allow:
+        accept = lambda toks: ends_index.get(toks, "open") in allow
+    ranked = rank_by_sum(root, args.top, args.min_n, args.chosen_only,
+                         accept=accept, max_pops=MAX_POPS, stats=stats)
 
     entries = []
     for i, r in enumerate(ranked, 1):
@@ -213,6 +237,7 @@ def build_prefix_entries(root, sweep_by_prompt, args) -> List[Dict]:
             "perplexity": math.exp(-r["mean"]),
             "text": "".join(r["tokens"]),
             "tokens": detail,
+            "end": ends_index.get(tuple(r["tokens"]), "open"),
         }
         # deepest prompt path that is a prefix of this entry and was itself a
         # sweep call — that is the branch point this prefix descends from

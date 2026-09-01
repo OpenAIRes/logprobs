@@ -81,6 +81,12 @@ def store_for(sources: List[str]) -> RecordStore:
     return _STORES[key]
 
 
+# Purely additive entry fields introduced after the frozen exports were written.
+ADDED_SINCE_EXPORT = frozenset({
+    'end',      # what decided the string's end: stop / length / open
+})
+
+
 def compare(name: str, show: int) -> Dict:
     path = os.path.join(ROOT, name)
     db = json.load(io.open(path, encoding='utf-8'))
@@ -113,6 +119,13 @@ def compare(name: str, show: int) -> Dict:
 
     a, b = db['entries'], live['entries']
     grew = db.get('source_records') != live['source_records']
+
+    # A field the store adds that no export could have carried is not a
+    # disagreement, it is new information. Dropping it before the comparison is
+    # what keeps this check about the numbers -- the moment it starts failing on
+    # every added field, nobody reads its output any more. Only ever ADDITIVE
+    # fields belong here: anything that could change an existing value must not.
+    b = [{k: v for k, v in e.items() if k not in ADDED_SINCE_EXPORT} for e in b]
 
     if a == b:
         # Equal entries despite a bigger store means the newer records simply do

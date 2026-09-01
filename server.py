@@ -140,6 +140,10 @@ class Handler(SimpleHTTPRequestHandler):
                     chosen_only=_bool(one('chosen_only')),
                     max_alts=_int(one('max_alts'), 8),
                     sort=one('sort', 'sum'),
+                    # ends=stop,length,open -- which kinds of string ending fall
+                    # into the scope. Absent means all of them, which is what
+                    # every existing link means, so none of them change.
+                    ends=one('ends') or None,
                 ))
 
             if route == '/api/record':

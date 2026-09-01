@@ -46,6 +46,15 @@
   }
   .opt input[type=text] { font-family: ui-monospace, Menlo, monospace; max-width: 22rem; }
   .opt[hidden] { display: none; }
+  /* One line per kind of ending, each carrying its own explanation: the point of
+     the control is that the three are not interchangeable, so a bare row of
+     three words would hide exactly what the reader has to know. */
+  .ends { display: grid; gap: .3rem; }
+  .ends label { display: grid; grid-template-columns: auto minmax(0, 1fr);
+    gap: .45rem; align-items: baseline; color: var(--ink-faint);
+    font-size: .78125rem; line-height: 1.45; cursor: pointer; }
+  .ends label b { color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
+  .ends label.off { opacity: .45; cursor: default; }
   .hint { font-size: .78125rem; color: var(--ink-faint); line-height: 1.5; }
   .hint.on { color: var(--accent); }
 
@@ -123,6 +132,17 @@
         <input type="text" id="lPrompt" placeholder="(empty = unconditional)" spellcheck="false">
       </label>
       <div class="opt" id="wGreedyInfo" hidden><span></span><span class="hint" id="greedyInfo"></span></div>
+      <div class="opt" id="wEnds"><span>scope</span>
+        <div class="ends">
+          <label><input type="checkbox" class="endBox" value="stop" checked>
+            <b>stop</b> — the model emitted EOS. The string is finished, so its Σ logprob is final.</label>
+          <label><input type="checkbox" class="endBox" value="length" checked>
+            <b>length</b> — <code>max_tokens</code> ran out. Cut off mid-thought; Σ is a partial sum.</label>
+          <label id="endOpenLabel"><input type="checkbox" class="endBox" value="open" checked>
+            <b>open</b> — nothing recorded ends here. The end is where the enumeration stopped.</label>
+        </div>
+      </div>
+      <div class="opt" id="wEndsHint"><span></span><span class="hint" id="endsHint"></span></div>
       <label class="opt" id="wSort"><span>ranked by</span>
         <select id="lSort">
           <option value="cost" id="optCost">deviation cost — the greedy criterion</option>
@@ -233,6 +253,19 @@ async function sync() {
      notion of. */
   if (!greedy && el('lSort').value === 'cost') el('lSort').value = 'sum';
   if (greedy && !sortTouched) el('lSort').value = 'cost';
+  el('wEnds').hidden = !ranked;
+  el('wEndsHint').hidden = !ranked;
+  /* A completion is a recorded call, so it always carries an API finish reason
+     and can never be 'open'. Disabling the box says that; leaving it tickable
+     and silently returning nothing would not. */
+  const openBox = endBoxes().find(b => b.value === 'open');
+  openBox.disabled = view === 'completions';
+  el('endOpenLabel').classList.toggle('off', openBox.disabled);
+  el('endsHint').textContent = view === 'completions'
+    ? 'Completions are recorded calls, so every one ends on the API’s verdict. '
+      + 'Only 219 of 8492 records ended on EOS.'
+    : 'Σ logprob is only comparable within one kind of ending. Untick "open" and the '
+      + 'prefix ranking turns into the same set of strings the completions view lists.';
   el('wPrefix').hidden = !ranked;
   el('wBase').hidden = ranked || greedy;
   el('wSteps').hidden = view !== 'walk';
@@ -306,6 +339,10 @@ function listUrl() {
   if (RANKED(view)) {
     if (el('lPrefix').value) p.set('prefix', el('lPrefix').value);
     if (view === 'completions' && el('lSort').value !== 'sum') p.set('sort', el('lSort').value);
+    // Everything ticked means the same as no filter, so the parameter stays off
+    // and existing links keep meaning exactly what they meant.
+    const ends = endsValue();
+    if (ends.length && ends.length < endBoxes().length) p.set('ends', ends.join(','));
   } else {
     if (el('lBase').value) p.set('base_id', el('lBase').value);
     if (view === 'walk') {
@@ -367,6 +404,17 @@ for (const node of document.querySelectorAll('input[name=view]')) {
 /* Whether the sort was chosen deliberately in this view, so switching views can
    reset it to that view's default without overriding an explicit choice. */
 let sortTouched = false;
+function endBoxes() { return [...document.querySelectorAll('.endBox')]; }
+function endsValue() {
+  return endBoxes().filter(b => b.checked && !b.disabled).map(b => b.value);
+}
+for (const box of endBoxes()) {
+  box.addEventListener('change', () => {
+    // All boxes off asks for nothing; put the one just cleared back.
+    if (!endsValue().length) { box.checked = true; return; }
+    sync();
+  });
+}
 el('lSort').addEventListener('change', () => { sortTouched = true; sync(); });
 for (const node of document.querySelectorAll('input[name=view]')) {
   node.addEventListener('change', () => { sortTouched = false; });

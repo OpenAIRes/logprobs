@@ -44,9 +44,25 @@ def _usable(node: TrieNode, chosen_only: bool) -> bool:
     return True
 
 
-def rank_by_sum(root: TrieNode, top: int, min_n: int = 1, chosen_only: bool = False) -> List[Dict]:
+def rank_by_sum(root: TrieNode, top: int, min_n: int = 1, chosen_only: bool = False,
+                accept=None, max_pops: Optional[int] = None,
+                stats: Optional[Dict] = None) -> List[Dict]:
+    """Best-first enumeration of the trie by cumulative logprob.
+
+    `accept(tokens)` decides which popped prefixes are RECORDED; expansion is
+    unaffected by it, so the cap counts matching entries and the search still
+    visits everything in descending-sum order. That is what makes a filter like
+    "only strings the model itself ended" honest: filtering the top N after the
+    fact would return however few of those happened to be in the top N, whereas
+    filtering inside returns the best N that qualify.
+
+    Such a filter can make the search walk most of the trie -- only 199 of 8492
+    recorded paths ended on EOS -- so `max_pops` bounds it and `stats` reports
+    whether the bound was hit, i.e. whether the list is complete.
+    """
     heap: List[Tuple[float, int, TrieNode, Tuple[str, ...]]] = []
     counter = 0  # tie-breaker so heapq never has to compare TrieNode/tuples directly
+    pops = 0
 
     def push(node: TrieNode, tokens: Tuple[str, ...], cum_sum: float):
         nonlocal counter
@@ -58,18 +74,29 @@ def rank_by_sum(root: TrieNode, top: int, min_n: int = 1, chosen_only: bool = Fa
             push(child, (child.token,), child.logprob)
 
     results: List[Dict] = []
+    exhausted = False
     while heap and len(results) < top:
+        if max_pops is not None and pops >= max_pops:
+            exhausted = True
+            break
         neg_sum, _, node, tokens = heapq.heappop(heap)
+        pops += 1
         cum_sum = -neg_sum
         n = len(tokens)
 
-        if n >= min_n:
+        if n >= min_n and (accept is None or accept(tokens)):
             results.append({"tokens": list(tokens), "sum": cum_sum, "n": n, "mean": cum_sum / n})
 
         for tok, child in node.children.items():
             if _usable(child, chosen_only):
                 push(child, tokens + (child.token,), cum_sum + child.logprob)
 
+    if stats is not None:
+        stats['pops'] = pops
+        # True means the cap was never reached and the search stopped early, so
+        # more qualifying strings may exist below the last one listed.
+        stats['budget_exhausted'] = exhausted
+        stats['complete'] = not exhausted and len(results) < top
     return results
 
 

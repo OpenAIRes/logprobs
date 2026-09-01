@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections import Counter
 from types import SimpleNamespace
 from typing import Dict, List, Optional
 
@@ -47,6 +48,20 @@ SOURCES = [
 
 VIEWS = ('prefixes', 'completions')
 
+# What decided where a string ends -- the axis that says whether two rows' scores
+# are comparable at all. Σ logprob over a prefix is a partial sum that can only
+# get worse; over a string the model itself ended it is final. Mixing them in one
+# ranking systematically favours the short prefixes, which is exactly what the
+# default prefixes view does: 195 of its top 200 rows are 'open'.
+#
+#   stop    the model emitted EOS. 219 of 8492 records, and the only ones whose
+#           score is a finished quantity.
+#   length  our max_tokens ran out. 8273 of 8492 -- so 97.4% of the corpus is a
+#           string cut off mid-thought, not a string the model finished.
+#   open    nothing recorded ends here; the end is an artefact of enumerating the
+#           trie. Only a prefix row can be this.
+ENDS = ('stop', 'length', 'open')
+
 # How a completions ranking may be ordered. Σ logprob is the default and the only
 # one the prefixes view can offer: there the ranking IS the search order, so
 # reordering the n-best by something else would just be "the best mean among the
@@ -65,7 +80,7 @@ SORTS = {
 }
 
 DEFAULTS = dict(top=200, min_n=1, prefix=None, model=None, chosen_only=False,
-                max_alts=8, sort='sum')
+                max_alts=8, sort='sum', ends=None)
 
 
 class RecordStore:
@@ -76,6 +91,7 @@ class RecordStore:
         self.by_id: Dict[str, Dict] = {}
         self.by_prompt: Dict[str, List[Dict]] = {}
         self.sweep_by_prompt: Dict[tuple, Dict] = {}
+        self.ends: Dict[tuple, str] = {}
         self._tries: Dict[Optional[str], object] = {}
         self._completions_cache: Dict[tuple, List[Dict]] = {}
         self._alts_cache: Dict[tuple, tuple] = {}
@@ -101,11 +117,54 @@ class RecordStore:
             if isinstance(key, str):
                 self.by_prompt.setdefault(key, []).append(rec)
         self.sweep_by_prompt = index_sweeps(self.records)
+        self.ends = self._index_ends(self.records)
         self._tries.clear()
         self._completions_cache.clear()
         self._alts_cache.clear()
         self.load_seconds = time.time() - started
         return self
+
+    @staticmethod
+    def _index_ends(records: List[Dict]) -> Dict[tuple, str]:
+        """Full token path -> how the call that produced it ended.
+
+        Keyed by the token tuple rather than the text, because two different
+        tokenisations can render the same characters and only the token path is
+        what the trie is indexed by.
+
+        'stop' wins a collision: if any call ended on EOS at exactly this path,
+        then this path IS a place the model finishes, whatever some other call
+        that was still cut off at max_tokens says.
+        """
+        ends: Dict[tuple, str] = {}
+        for rec in records:
+            choice = (rec.get('choices') or [{}])[0]
+            prompt_tokens = ((rec.get('prompt') or {}).get('logprobs') or {}).get('tokens') or []
+            own = (choice.get('logprobs') or {}).get('tokens') or []
+            path = tuple(list(prompt_tokens) + list(own))
+            if not path:
+                continue
+            if ends.get(path) == 'stop':
+                continue
+            ends[path] = choice.get('finish_reason') or 'length'
+        return ends
+
+    @staticmethod
+    def _normalize_ends(value) -> Optional[frozenset]:
+        """None / empty / everything -> no filter, so the fast path stays fast.
+
+        An unchecked-everything box means the same thing as no filter, and saying
+        so here keeps the search from paying for an accept() callback that always
+        returns True.
+        """
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = [p.strip() for p in value.split(',')]
+        wanted = frozenset(v for v in value if v in ENDS)
+        if not wanted:
+            raise ValueError(f'ends must name at least one of {ENDS}')
+        return None if wanted == frozenset(ENDS) else wanted
 
     def trie(self, model: Optional[str] = None):
         if model not in self._tries:
@@ -178,6 +237,11 @@ class RecordStore:
         chosen = args.sort if args.sort in SORTS else 'sum'
         if chosen != 'sum':
             entries = sorted(entries, key=SORTS[chosen][0])
+        # After the sort and before the cap, for the same reason the sort is:
+        # filtering the top N would answer "the best finished string among the
+        # top N by sum", which is a different question from the one asked.
+        if args.ends:
+            entries = [e for e in entries if e.get('end') in args.ends]
         entries = apply_prefix(entries, args.prefix)
         if args.top:
             entries = entries[:args.top]
@@ -190,14 +254,17 @@ class RecordStore:
             raise ValueError(f'unknown view {view!r}; expected one of {VIEWS}')
         args = SimpleNamespace(**{**DEFAULTS,
                                   **{k: v for k, v in kwargs.items() if k in DEFAULTS}})
+        args.ends = self._normalize_ends(args.ends)
         root = self.trie(args.model)
+        search: Dict = {}
         if view == 'completions':
             entries = self._completions(args)
             ranking = (SORTS.get(args.sort) or SORTS['sum'])[1]                 + ' over whole strings (prompt + completion)'
         else:
             # The heap search is by sum, so that is the only honest ranking here.
             args.sort = 'sum'
-            entries = build_prefix_entries(root, self.sweep_by_prompt, args)
+            entries = build_prefix_entries(root, self.sweep_by_prompt, args,
+                                           ends_index=self.ends, stats=search)
             ranking = 'sum_logprob desc (best-first / uniform-cost over token trie)'
         return {
             'generated_from': ', '.join(self.sources),
@@ -208,6 +275,13 @@ class RecordStore:
             'sort': args.sort,
             'view': view,
             'prefix_filter': args.prefix,
+            # None means every kind of ending, which is the pre-existing behaviour.
+            'ends': sorted(args.ends) if args.ends else None,
+            'end_counts': dict(Counter(e.get('end') for e in entries)),
+            # Only the trie search can run out of budget; a completions ranking is
+            # a filter over a finite list and is always complete.
+            'search_pops': search.get('pops'),
+            'truncated_by_budget': bool(search.get('budget_exhausted')),
             'count': len(entries),
             'entries': entries,
         }

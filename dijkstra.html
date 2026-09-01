@@ -47,7 +47,7 @@
   }
   /* only when the source data is a sweep and carries provenance */
   .has-sweep .thead, .has-sweep .row {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 10.5rem;
   }
   .c-sweep { font-size: .71875rem; color: var(--ink-faint);
     font-family: ui-monospace, Menlo, monospace; white-space: nowrap;
@@ -56,6 +56,18 @@
   .c-sweep .onpath { color: var(--good); }
   .c-sweep .stopped { color: var(--bad); font-weight: 600; }
   .c-sweep .ncalls { color: var(--mid); }   /* same string from several calls */
+  /* What decided the end of this string. Without it a prefix and a finished
+     string look alike in the table, and their Σ logprob is not the same kind of
+     quantity -- a prefix's can only get worse. */
+  .c-sweep .end { font-weight: 600; }
+  .c-sweep .end.stop { color: var(--good); }
+  .c-sweep .end.length { color: var(--mid); }
+  .c-sweep .end.open { color: var(--ink-faint); font-weight: 400; }
+  #endsWrap { display: inline-flex; gap: .55rem; align-items: center; }
+  #endsWrap label { display: inline-flex; gap: .2rem; align-items: center;
+    font-family: ui-monospace, Menlo, monospace; cursor: pointer; }
+  #endsWrap input:disabled + * , #endsWrap label:has(input:disabled) { opacity: .45; cursor: default; }
+  .warn { color: var(--bad); }
   .thead {
     position: sticky; top: 0; z-index: 5;
     background: var(--card); border-bottom: 1px solid var(--line);
@@ -222,6 +234,11 @@ fetch('/api/stats', { cache: 'no-store' })
       <input type="number" id="stepsIn" value="20" min="1" max="200" step="1" style="width:4.5rem">
     </label>
     <label id="fwdWrap" hidden><input type="checkbox" id="fwdIn"> forward only</label>
+    <span id="endsWrap">scope:
+      <label title="the model emitted EOS — the string is finished, so its Σ is final"><input type="checkbox" class="endBox" value="stop" checked> stop</label>
+      <label title="our max_tokens ran out — the string is cut off mid-thought"><input type="checkbox" class="endBox" value="length" checked> length</label>
+      <label title="nothing recorded ends here; the end is an artefact of enumerating the trie"><input type="checkbox" class="endBox" value="open" checked> open</label>
+    </span>
     <label for="prefixIn" id="prefixWrap">starts with:
       <input type="text" id="prefixIn" placeholder="e.g. I have" spellcheck="false">
       <button id="prefixClear" type="button" title="clear the filter" hidden>×</button>
@@ -240,7 +257,7 @@ fetch('/api/stats', { cache: 'no-store' })
       <div class="num key">Σ logprob</div>
       <div class="num c-mean">mean</div>
       <div class="num c-ppl">ppl</div>
-      <div class="c-sweep" id="thSweep" hidden>deviation</div>
+      <div class="c-sweep" id="thSweep" hidden>end · deviation</div>
     </div>
     <div id="list"></div>
   </div>
@@ -366,23 +383,44 @@ function renderRowHint(detailEl) {
 /* The provenance column. A sweep entry says which alternative it took; a greedy
    sibling says the same thing plus what the departure cost, which is the number
    the whole view is ordered by, so it has to be on the row. */
+/* What ended this string, shown on every row. It is not decoration: Σ logprob
+   over an 'open' prefix is a partial sum that can only get worse, over a 'stop'
+   string it is final, so two rows are only comparable when this matches. */
+const END_TITLE = {
+  stop: 'the model emitted EOS — finished, so Σ logprob is final',
+  length: 'cut off when max_tokens ran out — Σ logprob is a partial sum',
+  open: 'nothing recorded ends here — the end is where the enumeration stopped',
+};
+function endBadge(e) {
+  const end = e.end || e.finish_reason;
+  if (!end) return '';
+  return `<span class="end ${end}" title="${END_TITLE[end] || ''}">${end}</span>`;
+}
+
+/* The provenance column. A sweep entry says which alternative it took; a greedy
+   sibling says the same thing plus what the departure cost, which is the number
+   the whole view is ordered by, so it has to be on the row. */
 function devCell(e) {
+  const badge = endBadge(e);
+  let rest = '';
   if (e.deviation !== undefined) {
     if (!e.deviation) {
-      return '<div class="c-sweep"><span class="onpath">greedy</span></div>';
+      rest = '<span class="onpath">greedy</span>';
+    } else {
+      const d = e.deviation;
+      rest = `<span class="pos">${d.position}</span> `
+        + `${plain(d.original)}→${plain(d.alternative)} `
+        + `<span class="ncalls">+${fmt(e.cost, 3)}</span>`;
     }
-    const d = e.deviation;
-    return `<div class="c-sweep"><span class="pos">${d.position}</span> `
-      + `${plain(d.original)}→${plain(d.alternative)} `
-      + `<span class="ncalls">+${fmt(e.cost, 3)}</span></div>`;
-  }
-  if (!e.sweep) return '';
-  return `<div class="c-sweep">${e.sweep.is_greedy
+  } else if (e.sweep) {
+    // The finish_reason used to be repeated here; the badge above says it now.
+    rest = `${e.sweep.is_greedy
       ? '<span class="onpath">on-path</span>'
       : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}${
-      e.finish_reason && e.finish_reason !== 'length'
-        ? ` <span class="stopped">·${e.finish_reason}</span>` : ''}${
-      e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : ''}</div>`;
+      e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : ''}`;
+  }
+  if (!badge && !rest) return '';
+  return `<div class="c-sweep">${badge}${badge && rest ? ' ' : ''}${rest}</div>`;
 }
 
 function buildRow(e) {
@@ -456,7 +494,8 @@ function renderRows() {
   slice.forEach(e => frag.appendChild(buildRow(e)));
   listEl.appendChild(frag);
 
-  const anySweep = slice.some(e => e.sweep || e.deviation !== undefined);
+  const anySweep = slice.some(e => e.sweep || e.deviation !== undefined
+                                 || e.end || e.finish_reason);
   tableEl.classList.toggle('has-sweep', anySweep);
   document.getElementById('thSweep').hidden = !anySweep;
 
@@ -573,12 +612,28 @@ function applyBlurb() {
   document.getElementById('blurb').textContent = blurb;
 }
 
+const ENDS_KEY = 'dijkstra_ends';
+function endBoxes() { return [...document.querySelectorAll('.endBox')]; }
+function endsValue() {
+  return endBoxes().filter(b => b.checked && !b.disabled).map(b => b.value);
+}
 /* The toolbar follows the view: a starts-with filter is meaningless over a grid,
    a base selector over a ranking. Hidden controls do not reach the query. */
 function applyViewControls() {
   applyBlurb();
   const ranked = RANKED(VIEW);
   document.getElementById('limitWrap').hidden = !ranked;
+  // Only a ranking over strings has a scope to choose. A completion is a
+  // recorded call, so it can never be 'open' -- disabling the box says why,
+  // where silently returning nothing would not.
+  document.getElementById('endsWrap').hidden = !(VIEW === 'completions' || VIEW === 'prefixes');
+  const openBox = endBoxes().find(b => b.value === 'open');
+  if (openBox) {
+    openBox.disabled = VIEW === 'completions';
+    openBox.parentElement.title = VIEW === 'completions'
+      ? 'a completion is a recorded call, so it always has an API finish reason'
+      : 'nothing recorded ends here; the end is an artefact of enumerating the trie';
+  }
   // Prefixes come out of a sum-ordered heap; the ranking IS the search order.
   document.getElementById('sortWrap').hidden = !(VIEW === 'completions' || VIEW === 'greedy');
   const costOpt = [...sortSel.options].find(o => o.value === 'cost');
@@ -767,6 +822,10 @@ function render(db) {
     ${VIEW === 'greedy' ? `<div>departures ranked: <b>${db.departures_ranked}</b></div>
       <div>departures needing a call: <b>${db.departures_without_record}</b></div>` : ''}
     <div>view: <b>${VIEW_LABEL[VIEW] || VIEW}</b></div>
+    ${db.end_counts ? `<div>scope: <b>${db.ends ? db.ends.join(' + ') : 'every ending'}</b>
+      — ${Object.entries(db.end_counts).map(([k, v]) => `${v}&nbsp;${k}`).join(', ') || 'nothing'}</div>` : ''}
+    ${db.truncated_by_budget ? `<div class="warn">the trie search hit its ${db.search_pops}-step
+      budget before filling the list, so more matching strings may exist below the last row</div>` : ''}
     <div>records in store: <b>${db.source_records}</b></div>
     <div>results computed: <b>${db.entries.length}</b></div>
     <div>sources: <b>${db.generated_from}</b></div>
@@ -813,6 +872,25 @@ function loadSort() {
 }
 loadSort();
 
+/* Below PARAMS on purpose: `const` is not hoisted, so reading PARAMS from the
+   toolbar-setup section above would be a TDZ ReferenceError. */
+{
+  let saved = PARAMS.get('ends');
+  if (!saved) { try { saved = localStorage.getItem(ENDS_KEY); } catch {} }
+  if (saved) {
+    const set = new Set(saved.split(','));
+    endBoxes().forEach(b => { b.checked = set.has(b.value); });
+    if (!endsValue().length) endBoxes().forEach(b => { b.checked = true; });
+  }
+  endBoxes().forEach(b => b.addEventListener('change', () => {
+    // Never let every box be off: that asks for nothing and would show an empty
+    // table with no hint why. Put the one just cleared back.
+    if (!endsValue().length) { b.checked = true; return; }
+    try { localStorage.setItem(ENDS_KEY, endsValue().join(',')); } catch {}
+    load();
+  }));
+}
+
 function queryUrl() {
   if (VIEW === 'sweep') {
     const p = new URLSearchParams();
@@ -834,6 +912,10 @@ function queryUrl() {
   const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });
   if (prefixIn.value) p.set('prefix', prefixIn.value);
   if (VIEW === 'completions' && sortSel.value !== 'sum') p.set('sort', sortSel.value);
+  // Everything ticked means the same as no filter, and leaving the parameter off
+  // then keeps the fast path (and old links) exactly as they were.
+  const ends = endsValue();
+  if (ends.length && ends.length < endBoxes().length) p.set('ends', ends.join(','));
   return '/api/query?' + p.toString();
 }
 
