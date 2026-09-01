@@ -139,6 +139,7 @@ class Handler(SimpleHTTPRequestHandler):
                     model=one('model') or None,
                     chosen_only=_bool(one('chosen_only')),
                     max_alts=_int(one('max_alts'), 8),
+                    sort=one('sort', 'sum'),
                 ))
 
             if route == '/api/record':

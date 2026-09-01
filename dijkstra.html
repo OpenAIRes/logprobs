@@ -203,6 +203,13 @@ fetch('/api/stats', { cache: 'no-store' })
         <option value="walk">cheapest-deviation walk</option>
       </select>
     </label>
+    <label for="sortSel" id="sortWrap">ranked by:
+      <select id="sortSel">
+        <option value="sum">Σ logprob</option>
+        <option value="mean">mean logprob</option>
+        <option value="length">length</option>
+      </select>
+    </label>
     <label for="limitSel" id="limitWrap">results:
       <select id="limitSel"></select>
     </label>
@@ -260,6 +267,7 @@ const limitSel = document.getElementById('limitSel');
 const dataSel  = document.getElementById('dataSel');
 const prefixIn = document.getElementById('prefixIn');
 const prefixClear = document.getElementById('prefixClear');
+const sortSel  = document.getElementById('sortSel');
 const baseSel  = document.getElementById('baseSel');
 const stepsIn  = document.getElementById('stepsIn');
 const fwdIn    = document.getElementById('fwdIn');
@@ -465,6 +473,10 @@ dataSel.addEventListener('change', async () => {
   if (VIEW === 'sweep' || VIEW === 'walk') await ensureBases();
   load();
 });
+sortSel.addEventListener('change', () => {
+  try { localStorage.setItem(SORT_KEY, sortSel.value); } catch {}
+  load();
+});
 baseSel.addEventListener('change', load);
 stepsIn.addEventListener('change', load);
 fwdIn.addEventListener('change', load);
@@ -521,6 +533,8 @@ function applyViewControls() {
   applyBlurb();
   const ranked = RANKED(VIEW);
   document.getElementById('limitWrap').hidden = !ranked;
+  // Prefixes come out of a sum-ordered heap; the ranking IS the search order.
+  document.getElementById('sortWrap').hidden = VIEW !== 'completions';
   document.getElementById('prefixWrap').hidden = !ranked;
   document.getElementById('baseWrap').hidden = ranked;   // base applies to grid and walk
   document.getElementById('stepsWrap').hidden = VIEW !== 'walk';
@@ -700,7 +714,7 @@ function render(db) {
   specialEl.hidden = true;
 
   metaEl.innerHTML = `
-    <div>ranked by: <b>Σ logprob, descending</b></div>
+    <div>ranked by: <b>${db.ranking || 'Σ logprob, descending'}</b></div>
     <div>view: <b>${db.view === 'completions'
         ? 'completions (prompt + generated)' : 'prefixes — best-first'}</b></div>
     <div>records in store: <b>${db.source_records}</b></div>
@@ -734,6 +748,13 @@ else { try { prefixIn.value = localStorage.getItem(PREFIX_KEY) || ''; } catch {}
 setupLimitControl();
 if (PARAMS.get('forward_only') === '1') fwdIn.checked = true;
 if (PARAMS.get('steps')) stepsIn.value = PARAMS.get('steps');
+const SORT_KEY = 'dijkstra_sort';
+{
+  // ?sort= wins over the remembered value, so a link opens the ranking it names.
+  let want = PARAMS.get('sort');
+  if (!want) { try { want = localStorage.getItem(SORT_KEY); } catch {} }
+  if (want && [...sortSel.options].some(o => o.value === want)) sortSel.value = want;
+}
 
 function queryUrl() {
   if (VIEW === 'sweep') {
@@ -750,6 +771,7 @@ function queryUrl() {
   }
   const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });
   if (prefixIn.value) p.set('prefix', prefixIn.value);
+  if (VIEW === 'completions' && sortSel.value !== 'sum') p.set('sort', sortSel.value);
   return '/api/query?' + p.toString();
 }
 
@@ -773,6 +795,7 @@ async function load() {
     if (!LEGACY_FILE) {
       const p = new URLSearchParams({ view: VIEW });
       if (RANKED(VIEW) && prefixIn.value) p.set('prefix', prefixIn.value);
+      if (VIEW === 'completions' && sortSel.value !== 'sum') p.set('sort', sortSel.value);
       if (VIEW === 'walk') {
         if (fwdIn.checked) p.set('forward_only', '1');
         // So the link carries the step count too; otherwise a recipient sees 20.

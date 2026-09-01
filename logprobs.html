@@ -1510,7 +1510,11 @@ function renderTokens(tokens){
       frag.appendChild(span);
     }
     tokensEl.appendChild(frag);
-    if(i<tokens.length){requestAnimationFrame(chunk);}else{tokensEl.hidden=false;}
+    // setTimeout, not requestAnimationFrame: rAF does not fire in a tab that is
+    // not compositing, so a 4096-token record rendered its first 1200 tokens and
+    // then stopped for good. Frame alignment buys nothing when the work is
+    // building DOM off-screen anyway.
+    if(i<tokens.length){setTimeout(chunk, 0);}else{tokensEl.hidden=false;}
   }
   chunk();
 }

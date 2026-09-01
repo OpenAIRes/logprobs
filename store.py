@@ -46,7 +46,18 @@ SOURCES = [
 
 VIEWS = ('prefixes', 'completions')
 
-DEFAULTS = dict(top=200, min_n=1, prefix=None, model=None, chosen_only=False, max_alts=8)
+# How a completions ranking may be ordered. Σ logprob is the default and the only
+# one the prefixes view can offer: there the ranking IS the search order, so
+# reordering the n-best by something else would just be "the best mean among the
+# n best by sum", which reads as an answer and is not one.
+SORTS = {
+    'sum': (lambda e: -e['sum_logprob'], 'sum_logprob desc'),
+    'mean': (lambda e: -e['mean_logprob'], 'mean_logprob desc (length-independent)'),
+    'length': (lambda e: (-e['n'], -e['sum_logprob']), 'length desc, then sum_logprob desc'),
+}
+
+DEFAULTS = dict(top=200, min_n=1, prefix=None, model=None, chosen_only=False,
+                max_alts=8, sort='sum')
 
 
 class RecordStore:
@@ -146,7 +157,16 @@ class RecordStore:
             full = SimpleNamespace(**{**vars(args), 'prefix': None, 'top': None})
             self._completions_cache[key] = build_completion_entries(
                 self.trie(args.model), self.records, self.sweep_by_prompt, full)
-        entries = apply_prefix(self._completions_cache[key], args.prefix)
+
+        entries = self._completions_cache[key]
+        # Sorting must precede the cap, or "top 1 by mean" silently means "the best
+        # mean among the top N by sum". That is not hypothetical: the 4096-token
+        # root has the best mean logprob of all 8128 entries (-0.0127) and sits at
+        # rank 7786 by sum, so a cap of 5000 would hide the very answer asked for.
+        sort_key, _ = SORTS[args.sort if args.sort in SORTS else 'sum']
+        if args.sort != 'sum':
+            entries = sorted(entries, key=sort_key)
+        entries = apply_prefix(entries, args.prefix)
         if args.top:
             entries = entries[:args.top]
         # Copy before stamping rank: the cached list is shared between requests,
@@ -161,16 +181,19 @@ class RecordStore:
         root = self.trie(args.model)
         if view == 'completions':
             entries = self._completions(args)
-            ranking = 'sum_logprob desc over whole strings (prompt + completion)'
+            ranking = (SORTS.get(args.sort) or SORTS['sum'])[1]                 + ' over whole strings (prompt + completion)'
         else:
+            # The heap search is by sum, so that is the only honest ranking here.
+            args.sort = 'sum'
             entries = build_prefix_entries(root, self.sweep_by_prompt, args)
-            ranking = 'sum_logprob desc (best-first / Dijkstra over token trie)'
+            ranking = 'sum_logprob desc (best-first / uniform-cost over token trie)'
         return {
             'generated_from': ', '.join(self.sources),
             'model_filter': args.model,
             'chosen_only': args.chosen_only,
             'source_records': len(self.records),
             'ranking': ranking,
+            'sort': args.sort,
             'view': view,
             'prefix_filter': args.prefix,
             'count': len(entries),

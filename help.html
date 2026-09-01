@@ -132,6 +132,20 @@
   <section id="options">
     <h2>Options</h2>
     <dl>
+      <dt>ranked by <span class="std">the sort key</span></dt>
+      <dd>Only the Completions view offers this. Prefixes come off a sum-ordered heap,
+        so there the ranking <i>is</i> the search order; reordering an n-best list by
+        something else would give "the best mean among the n best by sum", which reads
+        like an answer and is not one.
+        <p><b>Σ logprob</b> favours short strings, because every extra token can only
+        subtract. <b>mean logprob</b> is length-independent. <b>length</b> puts the
+        longest first, which is how you ask for a string at its full generated
+        extent.</p>
+        <p>The sort is applied <b>before</b> the results cap, which matters more than it
+        sounds: the 4096-token unconditional root has the best mean logprob of all 8128
+        entries (−0.0127) and sits at rank <b>7786</b> by Σ logprob. Sorting after a cap
+        of 5000 would have hidden the very entry being asked for.</p></dd>
+
       <dt>results</dt>
       <dd>How many entries the ranking is computed and shown for. Set it to <b>1</b> and
         you are asking for a single string, so it opens in the <b>token browser</b>
