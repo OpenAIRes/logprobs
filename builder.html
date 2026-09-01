@@ -2,59 +2,26 @@
 <html lang="cs">
 <head>
 <meta charset="utf-8">
-<title>Builder — postupné generování databáze</title>
+<title>Logprobs — builder</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/app.css">
 <style>
-  :root {
-    --bg: #fbfbfa; --card: #ffffff; --ink: #1a1a18; --ink-dim: #6b6b66;
-    --ink-faint: #9a9a94; --line: #e5e4e0; --line-soft: #efeeeb;
-    --accent: #3d5a80; --good: #2d6a4f; --mid: #b07d2b; --bad: #a63d40;
-    --chip: #f2f1ee; --hover: #f7f6f4;
-    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 8px rgba(0,0,0,.03);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16161a; --card: #1f1f24; --ink: #e8e8e4; --ink-dim: #a0a09a;
-      --ink-faint: #6e6e68; --line: #2e2e34; --line-soft: #26262b;
-      --accent: #8ab0d9; --good: #6ec9a0; --mid: #e0b060; --bad: #e08588;
-      --chip: #2a2a30; --hover: #25252b;
-      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 2px 8px rgba(0,0,0,.2);
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 2rem 1.25rem 4rem; background: var(--bg); color: var(--ink);
-    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 1080px; margin: 0 auto; }
+  /* Paleta, tlacitka a formularove prvky jsou v app.css, aby vsechny
+     ctyri programy vypadaly jako jeden. Tady zustava jen vlastni layout. */
 
   header { margin-bottom: 1.25rem; }
   h1 { margin: 0 0 .35rem; font-size: 1.5rem; letter-spacing: -.01em; font-weight: 620; }
   .sub { color: var(--ink-dim); font-size: .875rem; max-width: 74ch; }
-  .sub code { background: var(--chip); padding: .1em .35em; border-radius: 4px; font-size: .92em; }
 
-  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 9px;
-    box-shadow: var(--shadow); padding: .9rem 1rem; margin-bottom: .8rem; }
-  .panel h2 { margin: 0 0 .7rem; font-size: .6875rem; text-transform: uppercase;
-    letter-spacing: .05em; color: var(--ink-faint); font-weight: 600; }
+  .panel { margin-bottom: .8rem; }
 
   .cfg { display: flex; flex-wrap: wrap; gap: .9rem 1.4rem; align-items: flex-end; }
-  .fld { display: flex; flex-direction: column; gap: .25rem; }
-  .fld > span { font-size: .75rem; color: var(--ink-dim); }
-  .fld input, .fld select { font: inherit; font-size: .8125rem; color: var(--ink);
-    background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
-    padding: .3rem .45rem; }
+  /* Tady jsou popisky nad polem, ne vedle nej — jinak je vzhled z app.css. */
+  .fld { flex-direction: column; align-items: stretch; gap: .25rem; }
+  .fld > span { font-size: .75rem; }
   .fld input[type=number] { width: 6.5rem; }
-  .fld select { cursor: pointer; }
-  .fld input:disabled, .fld select:disabled { opacity: .55; cursor: not-allowed; }
 
   .btns { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
-  button { font: inherit; font-size: .8125rem; font-weight: 500; cursor: pointer;
-    background: var(--card); color: var(--ink); border: 1px solid var(--line);
-    border-radius: 6px; padding: .4rem .8rem; }
-  button:hover:not(:disabled) { background: var(--hover); }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover:not(:disabled) { filter: brightness(1.1); }
-  button.danger { color: var(--bad); }
 
   .badge { font-size: .6875rem; font-weight: 600; text-transform: uppercase;
     letter-spacing: .04em; padding: .2rem .45rem; border-radius: 4px; }
@@ -120,8 +87,6 @@
 
   .toolbar { display: flex; align-items: center; gap: 1rem; margin: 1.1rem 0 .55rem; flex-wrap: wrap; }
   .toolbar label { font-size: .8125rem; color: var(--ink-dim); display: flex; align-items: center; gap: .4rem; }
-  .toolbar select { font: inherit; font-size: .8125rem; color: var(--ink); background: var(--card);
-    border: 1px solid var(--line); border-radius: 5px; padding: .2rem .4rem; cursor: pointer; }
   .shown { font-size: .78125rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
   .legend { margin-left: auto; display: flex; align-items: center; gap: .5rem;
     font-size: .75rem; color: var(--ink-faint); }
@@ -135,6 +100,23 @@
 </style>
 </head>
 <body>
+<nav class="appnav">
+  <a href="/">&#8592; Rozcestník</a><span class="sep">|</span>
+  <a href="/logprobs.html">Jeden řetězec</a>
+  <a href="/dijkstra.html">Seznamy</a>
+  <a href="/builder.html" aria-current="page">Builder</a>
+  <span class="right" id="navStore">…</span>
+</nav>
+<script>
+/* Lista rika, ve kterem ze ctyr programu clovek je, a jestli server odpovida —
+   pri nedostupnem serveru se nektere pohledy chovaji jinak a je lepsi to videt
+   hned, ne az z prazdne tabulky. */
+fetch('/api/stats', { cache: 'no-store' })
+  .then(r => r.json())
+  .then(s => { document.getElementById('navStore').textContent = s.records + ' záznamů'; })
+  .catch(() => { document.getElementById('navStore').textContent = 'server neodpovídá'; });
+</script>
+
 <div class="wrap">
   <header>
     <h1>Builder — postupné generování databáze</h1>

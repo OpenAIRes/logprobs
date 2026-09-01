@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Logprobs — rozcestník</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/app.css">
+<style>
+  /* Vzhled je z app.css; tady je jen rozvrzeni rozcestniku. */
+  header { margin: .5rem 0 1.6rem; }
+  h1 { margin: 0 0 .4rem; font-size: 1.6rem; letter-spacing: -.01em; font-weight: 620; }
+  .lede { color: var(--ink-dim); font-size: .9375rem; max-width: 76ch; }
+
+  .strip {
+    display: flex; flex-wrap: wrap; gap: .3rem 1.6rem;
+    margin: 1rem 0 1.6rem; padding: .6rem .9rem;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow); font-size: .8125rem;
+  }
+  .strip div { color: var(--ink-dim); }
+  .strip b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .strip.down b, .strip.down div { color: var(--danger); }
+
+  .cards { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr)); }
+  .card { display: flex; flex-direction: column; gap: .7rem; }
+  .card h2 { margin: 0; font-size: 1.0625rem; font-weight: 620; color: var(--ink);
+    text-transform: none; letter-spacing: 0; }
+  .card p { margin: 0; font-size: .875rem; color: var(--ink-dim); line-height: 1.55; }
+  .card .go { margin-top: auto; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+
+  .opts { display: grid; gap: .55rem; }
+  .opt { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); gap: .6rem;
+    align-items: center; font-size: .8125rem; color: var(--ink-dim); }
+  .opt > span { color: var(--ink-dim); }
+  .opt input[type=text] { font-family: ui-monospace, Menlo, monospace; }
+  .opt.wide { grid-template-columns: 8.5rem minmax(0, 1fr); }
+  .opt.check { grid-template-columns: 8.5rem auto; }
+  .opt[hidden] { display: none; }
+
+  /* Cilova adresa je videt, protoze je to sdilitelny odkaz — a taky proto, ze
+     je tim jasne, ze rozcestnik nedela nic navic, jen sklada URL. */
+  .target { font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--ink-faint);
+    background: var(--chip); border-radius: 6px; padding: .35rem .5rem;
+    word-break: break-all; }
+</style>
+</head>
+<body>
+<nav class="appnav">
+  <a href="/" aria-current="page">Rozcestník</a><span class="sep">|</span>
+  <a href="/logprobs.html">Jeden řetězec</a>
+  <a href="/dijkstra.html">Seznamy</a>
+  <a href="/builder.html">Builder</a>
+  <span class="right" id="navStore">…</span>
+</nav>
+
+<div class="wrap">
+  <header>
+    <h1>Logprobs</h1>
+    <div class="lede">
+      Jedna databáze volání <code>gpt-3.5-turbo-instruct</code> a nad ní několik pohledů.
+      Vyber, jestli chceš jeden řetězec token po tokenu, nebo seznam řetězců — a jaký.
+    </div>
+  </header>
+
+  <div class="strip" id="strip">
+    <div>načítám stav storu…</div>
+  </div>
+
+  <div class="cards">
+
+    <section class="panel card">
+      <h2>Jeden řetězec</h2>
+      <p>Strom token po tokenu. U každého tokenu vidíš 20 alternativ s jejich logprobs
+        a kliknutím se po některé vydáš dál. Data se berou z historie, sweepů i storu —
+        <b>API se volá jen na to, co nikde není</b>.</p>
+      <div class="opts">
+        <label class="opt"><span>model</span>
+          <select id="oneModel">
+            <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
+            <option value="davinci-002">davinci-002</option>
+            <option value="babbage-002">babbage-002</option>
+          </select>
+        </label>
+      </div>
+      <div class="go">
+        <button class="primary" id="goOne">Otevřít strom</button>
+        <span class="target" id="tOne"></span>
+      </div>
+    </section>
+
+    <section class="panel card">
+      <h2>Seznam řetězců</h2>
+      <p>Žebříčky a mřížky nad všemi záznamy. Server je počítá živě, takže seznam
+        nikdy nezůstane pozadu za daty.</p>
+      <div class="opts">
+        <label class="opt"><span>co zobrazit</span>
+          <select id="lView">
+            <option value="prefixes">prefixy — best-first (Dijkstra)</option>
+            <option value="completions">celé completions</option>
+            <option value="sweep">mřížka sweepu</option>
+            <option value="walk">chůze nejlevnějších odchylek</option>
+          </select>
+        </label>
+        <label class="opt" id="wSort"><span>řazeno podle</span>
+          <select id="lSort">
+            <option value="sum">Σ logP (součet), sestupně</option>
+          </select>
+        </label>
+        <label class="opt" id="wTop"><span>položek</span>
+          <select id="lTop">
+            <option>20</option><option>50</option><option>100</option>
+            <option selected>200</option><option>500</option>
+            <option>1000</option><option>2000</option>
+          </select>
+        </label>
+        <label class="opt" id="wPrefix"><span>začíná na</span>
+          <input type="text" id="lPrefix" placeholder="např. I have" spellcheck="false">
+        </label>
+        <label class="opt" id="wBase" hidden><span>base</span>
+          <select id="lBase"></select>
+        </label>
+        <label class="opt" id="wSteps" hidden><span>kroků</span>
+          <input type="number" id="lSteps" value="20" min="1" max="200">
+        </label>
+        <label class="opt check" id="wFwd" hidden><span>pozice</span>
+          <span><input type="checkbox" id="lFwd"> jen dopředu (neruší dřívější odchylky)</span>
+        </label>
+      </div>
+      <div class="go">
+        <button class="primary" id="goList">Otevřít seznam</button>
+        <span class="target" id="tList"></span>
+      </div>
+    </section>
+
+    <section class="panel card">
+      <h2>Generovat dál</h2>
+      <p>Builder rozbaluje vždy nejlepší dosud nevyzkoušený kandidát, takže databáze
+        roste v tom pořadí, ve kterém se pak čte. Umí i <b>simulaci bez API</b> —
+        a se zapnutým storem bere hotová volání zdarma.</p>
+      <div class="go">
+        <button id="goBuilder">Otevřít builder</button>
+        <span class="target">/builder.html</span>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+const el = id => document.getElementById(id);
+
+/* --- stav storu ------------------------------------------------------------ */
+fetch('/api/stats', { cache: 'no-store' })
+  .then(r => r.json())
+  .then(s => {
+    el('navStore').textContent = s.records + ' záznamů';
+    const models = Object.entries(s.models || {})
+      .map(([m, n]) => `${m.split(':')[0]} ${n}`).join(' · ');
+    el('strip').innerHTML = `
+      <div>záznamů: <b>${s.records}</b></div>
+      <div>různých promptů: <b>${s.distinct_prompts}</b></div>
+      <div>z toho sweep: <b>${s.sweep_calls}</b></div>
+      <div>tokeny in/out: <b>${s.prompt_tokens} / ${s.completion_tokens}</b></div>
+      <div>modely: <b>${models}</b></div>`;
+  })
+  .catch(() => {
+    el('navStore').textContent = 'server neodpovídá';
+    el('strip').classList.add('down');
+    el('strip').innerHTML = '<div>Server neodpovídá — spusť <b>py server.py</b>. '
+      + 'Bez něj se seznamy nenačtou a strom bude umět jen to, co má v prohlížeči.</div>';
+  });
+
+/* --- volby seznamu -------------------------------------------------------- */
+const RANKED = v => v === 'prefixes' || v === 'completions';
+
+let basesLoaded = false;
+async function ensureBases() {
+  if (basesLoaded) return;
+  try {
+    const { bases } = await (await fetch('/api/bases', { cache: 'no-store' })).json();
+    el('lBase').innerHTML = bases.map(b => {
+      const label = (b.text || b.base_id).replace(/\n/g, '⏎').slice(0, 44);
+      return `<option value="${b.base_id}">${b.calls}× — ${label
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')}</option>`;
+    }).join('');
+    basesLoaded = true;
+  } catch { el('lBase').innerHTML = '<option value="">(nelze načíst)</option>'; }
+}
+
+/* Volby, ktere pro dany pohled nic neznamenaji, se skryji — a hlavne se
+   nepromitnou do adresy, takze odkaz nenese parametry, ktere nic nedelaji. */
+async function syncList() {
+  const view = el('lView').value;
+  const ranked = RANKED(view);
+  el('wSort').hidden = !ranked;
+  el('wTop').hidden = !ranked;
+  el('wPrefix').hidden = !ranked;
+  el('wBase').hidden = ranked;
+  el('wSteps').hidden = view !== 'walk';
+  el('wFwd').hidden = view !== 'walk';
+  if (!ranked) await ensureBases();
+  el('tList').textContent = listUrl();
+}
+
+function listUrl() {
+  const view = el('lView').value;
+  const p = new URLSearchParams({ view });
+  if (RANKED(view)) {
+    if (el('lPrefix').value) p.set('prefix', el('lPrefix').value);
+  } else {
+    if (el('lBase').value) p.set('base_id', el('lBase').value);
+    if (view === 'walk' && el('lFwd').checked) p.set('forward_only', '1');
+  }
+  return '/dijkstra.html?' + p.toString();
+}
+
+/* Pocet polozek si dijkstra.html drzi v localStorage, takze se predava tam,
+   ne v URL — jinak by se volba z rozcestniku a z viewru prebijely. */
+function applyTopPreference() {
+  try { localStorage.setItem('dijkstra_limit', el('lTop').value); } catch {}
+}
+function applyPrefixPreference() {
+  try {
+    if (el('lPrefix').value) localStorage.setItem('dijkstra_prefix', el('lPrefix').value);
+    else localStorage.removeItem('dijkstra_prefix');
+  } catch {}
+}
+
+for (const id of ['lView', 'lBase', 'lSteps', 'lFwd', 'lPrefix']) {
+  el(id).addEventListener(id === 'lPrefix' ? 'input' : 'change', syncList);
+}
+
+el('goList').addEventListener('click', () => {
+  applyTopPreference();
+  applyPrefixPreference();
+  const view = el('lView').value;
+  const url = new URL(listUrl(), location.origin);
+  if (view === 'walk') url.searchParams.set('steps', el('lSteps').value || '20');
+  location.href = url.pathname + url.search;
+});
+
+el('goOne').addEventListener('click', () => { location.href = el('tOne').textContent; });
+el('goBuilder').addEventListener('click', () => { location.href = '/builder.html'; });
+
+function syncOne() { el('tOne').textContent = '/logprobs.html?model=' + el('oneModel').value; }
+el('oneModel').addEventListener('change', syncOne);
+
+syncOne();
+syncList();
+</script>
+</body>
+</html>

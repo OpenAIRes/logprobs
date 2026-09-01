@@ -1,0 +1,178 @@
+/* Shared look for the whole set: index, logprobs, dijkstra, builder.
+
+   The three viewers grew separately and each carried its own palette, its own
+   button rules and its own body font, so switching between them read as
+   switching between unrelated programs. The light palette here is logprobs.html's
+   -- it is the page the work actually happens on, so it sets the house style.
+
+   Both naming schemes are kept as aliases (--panel and --card, --danger and
+   --bad) so the existing page rules keep working instead of every selector
+   having to be rewritten. New rules should prefer --panel and --danger.
+
+   logprobs.html had no dark mode while the other two did. Unifying means all of
+   them follow the system, so the dark block below covers every page. --good was
+   only ever defined inside dijkstra's dark block, which quietly made
+   `color: var(--good)` do nothing in light mode; it is defined in both here. */
+
+:root {
+  --bg: #fbfbfa;
+  --panel: #fff;
+  --card: #fff;
+  --ink: #1a1a18;
+  --ink-dim: #5d5d58;
+  --ink-faint: #8f8f89;
+  --line: #e2e1dd;
+  --line-soft: #efeeeb;
+  --accent: #3d5a80;
+  --danger: #a63d40;
+  --bad: #a63d40;
+  --good: #2d6a4f;
+  --mid: #b07d2b;
+  --chip: #f2f1ee;
+  --hover: #f7f6f4;
+  --btn-hover-line: #d3d2cd;
+  --btn-active: #e8e7e3;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 2px 10px rgba(0, 0, 0, .04);
+  --hi: #ffeaa7;          /* token hover in logprobs.html */
+  --sel: #74b9ff;         /* selected token */
+  --prompt-bg: #eef1f5;   /* the given prompt: no logprobs, nothing to click */
+  --prompt-bg-hover: #e2e8f0;
+  --prompt-ink: #4a5568;
+  --prompt-line: #94a3b8;
+  --best-bg: #dfe6e9;     /* the argmax row in the tooltip */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16161a;
+    --panel: #1f1f24;
+    --card: #1f1f24;
+    --ink: #e8e8e4;
+    --ink-dim: #a0a09a;
+    --ink-faint: #6e6e68;
+    --line: #2e2e34;
+    --line-soft: #26262b;
+    --accent: #8ab0d9;
+    --danger: #e08588;
+    --bad: #e08588;
+    --good: #6ec9a0;
+    --mid: #e0b060;
+    --chip: #2a2a30;
+    --hover: #25252b;
+    --btn-hover-line: #3a3a42;
+    --btn-active: #303038;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 2px 8px rgba(0, 0, 0, .2);
+    --hi: #6b5a1f;
+    --sel: #2f5d84;
+    --prompt-bg: #2b303a;
+    --prompt-bg-hover: #343a46;
+    --prompt-ink: #b6c0cf;
+    --prompt-line: #5c6675;
+    --best-bg: #2c3a3c;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 1rem 1.25rem 3rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* A page that lays out its own centred column overrides this. */
+.wrap { max-width: 1080px; margin: 0 auto; }
+
+/* --- buttons: logprobs.html's, which are the ones with real mileage --- */
+button {
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: .35rem .7rem;
+  transition: background .12s, border-color .12s;
+}
+button:hover:not(:disabled) { background: var(--chip); border-color: var(--btn-hover-line); }
+button:active:not(:disabled) { background: var(--btn-active); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.danger { color: var(--danger); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover:not(:disabled) { filter: brightness(1.12); background: var(--accent); }
+button.icon {
+  width: 1.9rem; padding: .35rem 0; text-align: center;
+  border-radius: 999px; color: var(--ink-dim);
+}
+button.icon[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* --- form controls --- */
+select, input[type=text], input[type=number], textarea {
+  font: inherit;
+  font-size: .8125rem;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: .25rem .4rem;
+}
+select { cursor: pointer; }
+select:focus, input:focus, textarea:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
+input:disabled, select:disabled, textarea:disabled { opacity: .55; cursor: not-allowed; }
+
+/* --- shared bits every page had its own copy of --- */
+.cnt {
+  display: inline-block; min-width: 1.4em; padding: 0 .3em; margin-left: .25em;
+  background: var(--chip); border-radius: 999px; font-variant-numeric: tabular-nums;
+  font-size: .8em; color: var(--ink-dim);
+}
+
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: var(--shadow); padding: .9rem 1.05rem;
+}
+
+/* The uppercase micro-heading all three pages use above a block. */
+.eyebrow, .panel > h2 {
+  margin: 0 0 .7rem; font-size: .6875rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--ink-faint); font-weight: 600;
+}
+
+code {
+  background: var(--chip); padding: .08em .3em; border-radius: 4px; font-size: .92em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Button groups and inline labelled fields in a toolbar. */
+.grp {
+  display: flex; align-items: center; gap: .3rem;
+  padding-right: .5rem; margin-right: .2rem; border-right: 1px solid var(--line-soft);
+}
+.grp:last-of-type { border-right: 0; }
+.fld { display: flex; align-items: center; gap: .35rem; font-size: .8125rem; color: var(--ink-dim); }
+
+/* --- the nav strip that tells you which of the four programs you are in --- */
+.appnav {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  margin: -1rem -1.25rem 1rem; padding: .45rem 1.25rem;
+  background: var(--panel); border-bottom: 1px solid var(--line);
+  font-size: .8125rem;
+}
+.appnav a {
+  color: var(--ink-dim); text-decoration: none; padding: .2rem .5rem;
+  border: 1px solid transparent; border-radius: 6px;
+}
+.appnav a:hover { background: var(--chip); color: var(--ink); }
+.appnav a[aria-current="page"] {
+  color: var(--accent); font-weight: 600;
+  border-color: var(--line); background: var(--bg);
+}
+.appnav .sep { color: var(--ink-faint); }
+.appnav .right { margin-left: auto; color: var(--ink-faint); }

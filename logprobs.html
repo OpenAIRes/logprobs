@@ -2,18 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs Viewer</title>
+  <title>Logprobs — jeden řetězec</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/app.css">
   <style>
-    :root {
-      --bg: #fbfbfa; --panel: #fff; --ink: #1a1a18; --ink-dim: #5d5d58;
-      --ink-faint: #8f8f89; --line: #e2e1dd; --line-soft: #efeeeb;
-      --accent: #3d5a80; --danger: #a63d40; --chip: #f2f1ee;
-      --shadow: 0 1px 2px rgba(0,0,0,.04), 0 2px 10px rgba(0,0,0,.04);
-    }
-    * { box-sizing: border-box; }
-    body { font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-           margin: 0; padding: 1rem 1.25rem 3rem; background: var(--bg); color: var(--ink); }
+    /* Paleta, tlacitka, .cnt, .grp a .fld jsou v app.css — tady zustava jen to,
+       co je vlastni tomuhle programu. */
 
     /* --- lista --- */
     #header {
@@ -26,36 +20,28 @@
     #statusArea { display: flex; align-items: baseline; gap: .6rem; min-height: 1.9rem;
                   padding-top: .25rem; }
     #toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-    /* logicke skupiny tlacitek, aby lista nebyla jedna dlouha rada */
-    #toolbar .grp { display: flex; align-items: center; gap: .3rem;
-      padding-right: .5rem; margin-right: .2rem; border-right: 1px solid var(--line-soft); }
-    #toolbar .grp:last-of-type { border-right: 0; }
-    #toolbar .fld { display: flex; align-items: center; gap: .35rem; font-size: .8125rem;
-                    color: var(--ink-dim); }
     #toolbar .fld select { font: inherit; font-size: .8125rem; color: var(--ink);
       background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
       padding: .25rem .4rem; cursor: pointer; }
-    .cnt { display: inline-block; min-width: 1.4em; padding: 0 .3em; margin-left: .25em;
-      background: var(--chip); border-radius: 999px; font-variant-numeric: tabular-nums;
-      font-size: .8em; color: var(--ink-dim); }
 
     #tokens { max-width: 100%; line-height: 1.5; white-space: normal; }
     .token      { display: inline; cursor: pointer; }
-    .token:hover{ background: #ffeaa7; }
+    .token:hover{ background: var(--hi); }
     .newline    { display: inline; white-space: normal; }
 .newline.only-nl { position: relative; display: inline-block; width: 1ch; height: calc(var(--nl-count, 1) * 1.5em); vertical-align: baseline; }
 .newline.only-nl::after { content: ""; position: absolute; inset: 0; cursor: pointer; pointer-events: auto; background: transparent; }
-.newline.only-nl:hover::after { background: #ffeaa7; }
-    .newline:hover { background: #ffeaa7; }
-    .selected   { background: #74b9ff; }
+.newline.only-nl:hover::after { background: var(--hi); }
+    .newline:hover { background: var(--hi); }
+    .selected   { background: var(--sel); }
     /* zadany prompt: nema logprobs, takze neni na co klikat */
-    .token.is-prompt { background: #eef1f5; color: #4a5568; border-bottom: 1px dotted #94a3b8; }
-    .token.is-prompt:hover { background: #e2e8f0; }
+    .token.is-prompt { background: var(--prompt-bg); color: var(--prompt-ink);
+                       border-bottom: 1px dotted var(--prompt-line); }
+    .token.is-prompt:hover { background: var(--prompt-bg-hover); }
 
     #tooltip {
       position: absolute;
-      background: #fff;
-      border: 1px solid #ccc;
+      background: var(--panel);
+      border: 1px solid var(--line);
       padding: .5rem;
       font: 14px/1.3 monospace;
       box-shadow: 0 2px 6px #0003;
@@ -66,27 +52,17 @@
     #tooltip.hidden { display:none; }
     #tooltip table  { border-collapse: collapse; margin-top: .25rem; width: 100%; }
     #tooltip th,
-    #tooltip td     { padding: .15rem .5rem; border: 1px solid #ddd; }
-    #tooltip tr.best td { background: #dfe6e9; font-weight: bold; }
+    #tooltip td     { padding: .15rem .5rem; border: 1px solid var(--line); }
+    #tooltip tr.best td { background: var(--best-bg); font-weight: bold; }
     #loading  { color: var(--ink-faint); font-size: .875rem; }
-    button {
-      font: inherit; font-size: .8125rem; font-weight: 500; cursor: pointer;
-      color: var(--ink); background: var(--panel);
-      border: 1px solid var(--line); border-radius: 6px; padding: .35rem .7rem;
-      transition: background .12s, border-color .12s;
-    }
-    button:hover:not(:disabled) { background: var(--chip); border-color: #d3d2cd; }
-    button:active:not(:disabled) { background: #e8e7e3; }
-    button:disabled { opacity: .45; cursor: not-allowed; }
-    button.danger { color: var(--danger); }
     /* Vypnuty store ma byt videt na prvni pohled: jinak clovek nevi, proc se
        najednou vola API na neco, co server ma. */
     button.off { opacity: .55; }
     button.off .cnt { text-decoration: line-through; }
-    button.danger:hover:not(:disabled) { background: #fdf2f2; border-color: #e8c4c5; }
-    button.icon { width: 1.9rem; padding: .35rem 0; text-align: center;
-                  border-radius: 999px; color: var(--ink-dim); }
-    button.icon[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.danger:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+      border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
+    }
     #status { font-size: .875rem; color: var(--ink-dim); }
     #status.error { color: var(--danger); font-weight: 600; }
 
@@ -111,7 +87,7 @@
     #rawOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001; }
     #rawOverlay.hidden { display: none; }
     #rawBox { position: fixed; top: 5%; left: 5%; right: 5%; bottom: 5%; background: var(--panel); box-shadow: 0 12px 40px rgba(0,0,0,.28); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-    #rawBoxHeader { display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; border-bottom: 1px solid #eee; font-weight: 600; }
+    #rawBoxHeader { display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; border-bottom: 1px solid var(--line); font-weight: 600; }
     #rawClose { border: none; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
     #rawText {
       flex: 1;
@@ -123,10 +99,11 @@
       overflow: auto;
       font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
       white-space: pre;
-      background: #fff;
+      background: var(--panel);
+      color: var(--ink);
     }
     #rawText[readonly] {
-      background: #fafafa;
+      background: var(--bg);
     }
     #rawBoxHeader button {
       margin-left: .5rem;
@@ -134,7 +111,7 @@
 
     /* newline visualization (override) */
     .nl-hit { display:inline-block; width: 1ch; height: 1.2em; vertical-align: baseline; cursor: pointer; }
-    .nl-hit:hover { background: #ffeaa7; }
+    .nl-hit:hover { background: var(--hi); }
     .newline.only-nl { position: relative; display: inline; width: auto; height: auto; }
     .newline.only-nl::after { content: none; }
       /* Prompts overlay */
@@ -146,21 +123,21 @@
       border-radius: 10px; overflow: hidden;
       box-shadow: 0 12px 40px rgba(0,0,0,.28); display: flex; flex-direction: column; }
     #newTreeHeader { display: flex; align-items: center; justify-content: space-between;
-      padding: .5rem .75rem; border-bottom: 1px solid #eee; font-weight: 600; }
+      padding: .5rem .75rem; border-bottom: 1px solid var(--line); font-weight: 600; }
     #newTreeClose { border: none; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
     #newTreeBody { padding: .75rem; }
-    #newTreeBody .hint { font: 13px/1.5 system-ui, sans-serif; color: #666; margin: 0 0 .6rem; }
+    #newTreeBody .hint { font: 13px/1.5 system-ui, sans-serif; color: var(--ink-dim); margin: 0 0 .6rem; }
     #newTreePrompt { width: 100%; box-sizing: border-box; font: 13px/1.5 ui-monospace, Menlo, monospace;
-      padding: .5rem; border: 1px solid #ccc; resize: vertical; }
+      padding: .5rem; resize: vertical; }
     #newTreeBody .row2 { display: flex; align-items: center; gap: .75rem; margin-top: .6rem; flex-wrap: wrap; }
-    #newTreeBody .row2 label { font: 13px system-ui, sans-serif; color: #444; }
+    #newTreeBody .row2 label { font: 13px system-ui, sans-serif; color: var(--ink-dim); }
     #newTreeMax { width: 6rem; font: inherit; padding: .2rem .3rem; }
-    #newTreeGo.primary { background: #3d5a80; color: #fff; border-color: #3d5a80; }
+    /* .primary je v app.css; tady uz jen nic. */
 
     #promptsOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1001; }
     #promptsOverlay.hidden { display: none; }
     #promptsBox { position: fixed; top: 5%; left: 5%; right: 5%; bottom: 5%; background: var(--panel); box-shadow: 0 12px 40px rgba(0,0,0,.28); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-    #promptsBoxHeader { display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; border-bottom: 1px solid #eee; font-weight: 600; }
+    #promptsBoxHeader { display: flex; align-items: center; justify-content: space-between; padding: .5rem .75rem; border-bottom: 1px solid var(--line); font-weight: 600; }
     #promptsClose { border: none; background: transparent; font-size: 20px; line-height: 1; cursor: pointer; }
     #promptsList { flex: 1; overflow: auto; padding: .75rem; font: 14px/1.45 system-ui, sans-serif; }
     #promptsList ul { margin: 0; padding-left: 1.25rem; }
@@ -169,6 +146,23 @@
   </style>
 </head>
 <body>
+<nav class="appnav">
+  <a href="/">&#8592; Rozcestník</a><span class="sep">|</span>
+  <a href="/logprobs.html" aria-current="page">Jeden řetězec</a>
+  <a href="/dijkstra.html">Seznamy</a>
+  <a href="/builder.html">Builder</a>
+  <span class="right" id="navStore">…</span>
+</nav>
+<script>
+/* Lista rika, ve kterem ze ctyr programu clovek je, a jestli server odpovida —
+   pri nedostupnem serveru se nektere pohledy chovaji jinak a je lepsi to videt
+   hned, ne az z prazdne tabulky. */
+fetch('/api/stats', { cache: 'no-store' })
+  .then(r => r.json())
+  .then(s => { document.getElementById('navStore').textContent = s.records + ' záznamů'; })
+  .catch(() => { document.getElementById('navStore').textContent = 'server neodpovídá'; });
+</script>
+
   <div id="header">
     <div id="statusArea">
       <span id="loading">Načítám tokeny…</span>
@@ -368,7 +362,18 @@ const newTreeBtn = document.getElementById('newTreeBtn');
 
 // Model select: restore last choice, persist on change. getSelectedModel() is
 // the single source of truth used by every API call in the app.
-try{ const savedModel = localStorage.getItem('selected_model'); if(savedModel && modelSelect) modelSelect.value = savedModel; }catch{}
+/* ?model= z rozcestniku ma prednost pred zapamatovanou volbou, aby odkaz odtud
+   skutecne otevrel ten model, ktery si clovek vybral — a hned se i zapamatoval,
+   takze dalsi otevreni bez parametru zustane u nej. */
+try {
+  const wanted = new URLSearchParams(location.search).get('model');
+  const saved = localStorage.getItem('selected_model');
+  const pick = wanted || saved;
+  if (pick && modelSelect && [...modelSelect.options].some(o => o.value === pick)) {
+    modelSelect.value = pick;
+    if (wanted) localStorage.setItem('selected_model', wanted);
+  }
+} catch {}
 if (modelSelect) modelSelect.addEventListener('change', ()=>{
   try{ localStorage.setItem('selected_model', modelSelect.value); }catch{}
 });
