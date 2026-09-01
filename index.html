@@ -125,6 +125,7 @@
       <div class="opt" id="wGreedyInfo" hidden><span></span><span class="hint" id="greedyInfo"></span></div>
       <label class="opt" id="wSort"><span>ranked by</span>
         <select id="lSort">
+          <option value="cost" id="optCost">deviation cost — the greedy criterion</option>
           <option value="sum">Σ logprob — cumulative, descending</option>
           <option value="mean">mean logprob — per token, length-independent</option>
           <option value="length">length — longest first</option>
@@ -173,7 +174,9 @@ const viewOf = () => document.querySelector('input[name=view]:checked').value;
 const RANKED = v => v === 'prefixes' || v === 'completions';
 /* Greedy is always one string, so it always goes to the token browser -- results
    does not apply to it at all. */
-const single = () => viewOf() === 'greedy' || (RANKED(viewOf()) && el('lTop').value === '1');
+/* results = 1 always means one string in the token browser. Greedy with more
+   than 1 means the greedy path plus its next-best siblings, which is a list. */
+const single = () => el('lTop').value === '1' && (viewOf() === 'greedy' || RANKED(viewOf()));
 
 /* --- store status --------------------------------------------------------- */
 fetch('/api/stats', { cache: 'no-store' })
@@ -218,10 +221,14 @@ async function sync() {
   const view = viewOf();
   const ranked = RANKED(view);
   const greedy = view === 'greedy';
-  el('wTop').hidden = !ranked;
-  el('wTopHint').hidden = !ranked;
+  el('wTop').hidden = !(ranked || greedy);
+  el('wTopHint').hidden = !(ranked || greedy);
   // Prefixes are ranked by the search order itself, so there is nothing to choose.
-  el('wSort').hidden = view !== 'completions';
+  el('wSort').hidden = !(view === 'completions' || greedy);
+  // Only the greedy family can be ordered by what a departure costs.
+  el('optCost').hidden = !greedy;
+  if (!greedy && el('lSort').value === 'cost') el('lSort').value = 'sum';
+  if (greedy && !['cost','sum','mean','length'].includes(el('lSort').value)) el('lSort').value = 'cost';
   el('wPrefix').hidden = !ranked;
   el('wBase').hidden = ranked || greedy;
   el('wSteps').hidden = view !== 'walk';
@@ -233,7 +240,10 @@ async function sync() {
   el('topHint').textContent = single()
     ? 'One result is a single string, so it opens in the token browser: every token with its '
       + 'top-20 alternatives, and a click follows one of them.'
-    : 'A list, one string per row. Click a row to see its per-token detail.';
+    : greedy
+      ? 'More than one means the greedy path plus its next-best siblings: each is one token '
+        + 'changed, then greedy again. Rank 1 is the greedy path itself.'
+      : 'A list, one string per row. Click a row to see its per-token detail.';
   el('topHint').classList.toggle('on', single());
 
   if (!ranked && !greedy) await ensureBases();
@@ -279,6 +289,11 @@ async function describeGreedy() {
 function listUrl() {
   const view = viewOf();
   const p = new URLSearchParams({ view });
+  if (view === 'greedy') {
+    if (el('lPrompt').value) p.set('prompt', el('lPrompt').value);
+    if (el('lSort').value !== 'cost') p.set('sort', el('lSort').value);
+    return '/dijkstra.html?' + p.toString();
+  }
   if (RANKED(view)) {
     if (el('lPrefix').value) p.set('prefix', el('lPrefix').value);
     if (view === 'completions' && el('lSort').value !== 'sum') p.set('sort', el('lSort').value);

@@ -200,11 +200,13 @@ fetch('/api/stats', { cache: 'no-store' })
         <option value="completions">completions</option>
         <option value="prefixes">prefixes — best-first</option>
         <option value="sweep">alternatives grid</option>
+        <option value="greedy">greedy path + next best</option>
         <option value="walk">cheapest-deviation walk</option>
       </select>
     </label>
     <label for="sortSel" id="sortWrap">ranked by:
       <select id="sortSel">
+        <option value="cost" hidden>deviation cost</option>
         <option value="sum">Σ logprob</option>
         <option value="mean">mean logprob</option>
         <option value="length">length</option>
@@ -361,6 +363,28 @@ function renderRowHint(detailEl) {
   detailEl.classList.remove('hide');
 }
 
+/* The provenance column. A sweep entry says which alternative it took; a greedy
+   sibling says the same thing plus what the departure cost, which is the number
+   the whole view is ordered by, so it has to be on the row. */
+function devCell(e) {
+  if (e.deviation !== undefined) {
+    if (!e.deviation) {
+      return '<div class="c-sweep"><span class="onpath">greedy</span></div>';
+    }
+    const d = e.deviation;
+    return `<div class="c-sweep"><span class="pos">${d.position}</span> `
+      + `${plain(d.original)}→${plain(d.alternative)} `
+      + `<span class="ncalls">+${fmt(e.cost, 3)}</span></div>`;
+  }
+  if (!e.sweep) return '';
+  return `<div class="c-sweep">${e.sweep.is_greedy
+      ? '<span class="onpath">on-path</span>'
+      : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}${
+      e.finish_reason && e.finish_reason !== 'length'
+        ? ` <span class="stopped">·${e.finish_reason}</span>` : ''}${
+      e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : ''}</div>`;
+}
+
 function buildRow(e) {
   const row = document.createElement('div');
   row.className = 'row';
@@ -378,12 +402,7 @@ function buildRow(e) {
     <div class="cell num key">${fmt(e.sum_logprob)}</div>
     <div class="cell num c-mean">${fmt(e.mean_logprob)}</div>
     <div class="cell num c-ppl">${fmt(e.perplexity, 2)}</div>
-    ${e.sweep ? `<div class="c-sweep">${e.sweep.is_greedy
-        ? '<span class="onpath">on-path</span>'
-        : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}${
-        e.finish_reason && e.finish_reason !== 'length'
-          ? ` <span class="stopped">·${e.finish_reason}</span>` : ''}${
-        e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : ''}</div>` : ''}
+    ${devCell(e)}
     <div class="detail hide"></div>`;
 
   const detailEl = row.querySelector('.detail');
@@ -437,7 +456,7 @@ function renderRows() {
   slice.forEach(e => frag.appendChild(buildRow(e)));
   listEl.appendChild(frag);
 
-  const anySweep = slice.some(e => e.sweep);
+  const anySweep = slice.some(e => e.sweep || e.deviation !== undefined);
   tableEl.classList.toggle('has-sweep', anySweep);
   document.getElementById('thSweep').hidden = !anySweep;
 
@@ -458,6 +477,16 @@ const POOL_STEPS = [20, 50, 100, 200, 500, 1000, 2000];
 
 function setupLimitControl() {
   if (limitSel.options.length) return;          // once, not on every query
+  // The greedy list is short by nature (one departure per position x alternative
+  // that has a continuation), so 200 there means "all of them" and 20 is saner.
+  // The key is a literal, not SORT_KEY: that const is declared below this call,
+  // and let/const are not hoisted -- referencing it here is a ReferenceError.
+  try {
+    if (VIEW === 'greedy' && !localStorage.getItem('dijkstra_greedy_seen')) {
+      localStorage.setItem(LIMIT_KEY, '20');
+      localStorage.setItem('dijkstra_greedy_seen', '1');
+    }
+  } catch {}
   limitSel.innerHTML = POOL_STEPS.map(n => `<option value="${n}">${n}</option>`).join('');
   let saved = Number(localStorage.getItem(LIMIT_KEY));
   limitSel.value = String(POOL_STEPS.includes(saved) ? saved : 200);
@@ -500,12 +529,28 @@ prefixClear.addEventListener('click', () => {
 });
 
 const el = id => document.getElementById(id);
-const RANKED = v => v === 'prefixes' || v === 'completions';
+/* greedy is a ranked list too -- of the greedy path and its one-token siblings --
+   so it shares the table, the results cap and the sort control. */
+const RANKED = v => v === 'prefixes' || v === 'completions' || v === 'greedy';
+
+/* The meta block used to derive its label from db.view, which reads 'prefixes'
+   for anything that is not completions -- and /api/greedy_alternatives answers
+   with view 'greedy_alternatives', so the greedy list announced itself as a
+   best-first prefix search. VIEW is what was asked for, so VIEW names it. */
+const VIEW_LABEL = {
+  completions: 'completions (prompt + generated)',
+  prefixes: 'prefixes — best-first',
+  greedy: 'greedy path + one-token siblings',
+};
 const specialEl = document.getElementById('special');
 
 /* The heading carries a quarter of the explanation, so it follows the view --
    "Prefixes by cumulative logprob" above an alternatives grid would simply lie. */
 const BLURBS = {
+  greedy: ['Greedy path and its next best',
+    'Rank 1 is what temperature 0 produces. Every other row is that path with ONE token '
+    + 'changed, then greedy again — so "second best by the greedy criterion" is the cheapest '
+    + 'departure. Ordering by cost and by resulting Σ logprob give very different answers.'],
   completions: ['Completions by cumulative logprob',
     'One entry per recorded call: the whole string it produced, prompt included. The strings '
     + 'are not all the same length (the prompt grows with the deviation position), so a sum '
@@ -534,7 +579,10 @@ function applyViewControls() {
   const ranked = RANKED(VIEW);
   document.getElementById('limitWrap').hidden = !ranked;
   // Prefixes come out of a sum-ordered heap; the ranking IS the search order.
-  document.getElementById('sortWrap').hidden = VIEW !== 'completions';
+  document.getElementById('sortWrap').hidden = !(VIEW === 'completions' || VIEW === 'greedy');
+  const costOpt = [...sortSel.options].find(o => o.value === 'cost');
+  if (costOpt) costOpt.hidden = VIEW !== 'greedy';
+  if (VIEW !== 'greedy' && sortSel.value === 'cost') sortSel.value = 'sum';
   document.getElementById('prefixWrap').hidden = !ranked;
   document.getElementById('baseWrap').hidden = ranked;   // base applies to grid and walk
   document.getElementById('stepsWrap').hidden = VIEW !== 'walk';
@@ -715,8 +763,9 @@ function render(db) {
 
   metaEl.innerHTML = `
     <div>ranked by: <b>${db.ranking || 'Σ logprob, descending'}</b></div>
-    <div>view: <b>${db.view === 'completions'
-        ? 'completions (prompt + generated)' : 'prefixes — best-first'}</b></div>
+    ${VIEW === 'greedy' ? `<div>departures ranked: <b>${db.departures_ranked}</b></div>
+      <div>departures needing a call: <b>${db.departures_without_record}</b></div>` : ''}
+    <div>view: <b>${VIEW_LABEL[VIEW] || VIEW}</b></div>
     <div>records in store: <b>${db.source_records}</b></div>
     <div>results computed: <b>${db.entries.length}</b></div>
     <div>sources: <b>${db.generated_from}</b></div>
@@ -768,6 +817,11 @@ function queryUrl() {
       forward_only: fwdIn.checked ? '1' : '0',
       ...(baseSel.value ? { base_id: baseSel.value } : {}),
     }).toString();
+  }
+  if (VIEW === 'greedy') {
+    const p = new URLSearchParams({ top: limitSel.value || '20', sort: sortSel.value });
+    if (PARAMS.get('prompt')) p.set('prompt', PARAMS.get('prompt'));
+    return '/api/greedy_alternatives?' + p.toString();
   }
   const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });
   if (prefixIn.value) p.set('prefix', prefixIn.value);

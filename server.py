@@ -155,6 +155,15 @@ class Handler(SimpleHTTPRequestHandler):
                     max_steps=_int(one('max_steps')),
                 ))
 
+            if route == '/api/greedy_alternatives':
+                return self.send_json(self.store.greedy_alternatives(
+                    prompt=(query.get('prompt') or [''])[0],
+                    model=one('model', 'gpt-3.5-turbo-instruct'),
+                    top=min(_int(one('top'), 20) or 20, MAX_TOP),
+                    sort=one('sort', 'cost'),
+                    max_alts=_int(one('max_alts'), 8),
+                ))
+
             if route == '/api/walk':
                 return self.send_json(self.store.walk(
                     base_id=one('base_id') or None,
@@ -210,9 +219,14 @@ def serve(port: int, host: str = '127.0.0.1') -> None:
     # time. Warm it in the background so the port opens immediately and the cache
     # is ready before anyone switches to that view.
     def warm():
-        started = __import__('time').time()
+        import time as _t
+        started = _t.time()
         store.query(view='completions', top=1)
-        print(f'  completions ranking warmed in {__import__("time").time() - started:.1f}s')
+        print(f'  completions ranking warmed in {_t.time() - started:.1f}s')
+        # ~82k lookups over a 4096-token path, so the same treatment.
+        started = _t.time()
+        store.greedy_alternatives(top=1)
+        print(f'  greedy siblings warmed in {_t.time() - started:.1f}s')
 
     threading.Thread(target=warm, daemon=True).start()
 

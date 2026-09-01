@@ -28,6 +28,7 @@ from export_dijkstra_top import (
     build_prefix_entries,
     index_sweeps,
     load_records,
+    walk_detail,
 )
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -70,6 +71,7 @@ class RecordStore:
         self.sweep_by_prompt: Dict[tuple, Dict] = {}
         self._tries: Dict[Optional[str], object] = {}
         self._completions_cache: Dict[tuple, List[Dict]] = {}
+        self._alts_cache: Dict[tuple, tuple] = {}
         self.load_seconds = 0.0
         self.missing: List[str] = []
 
@@ -94,6 +96,7 @@ class RecordStore:
         self.sweep_by_prompt = index_sweeps(self.records)
         self._tries.clear()
         self._completions_cache.clear()
+        self._alts_cache.clear()
         self.load_seconds = time.time() - started
         return self
 
@@ -330,6 +333,139 @@ class RecordStore:
             'needs_call': None if last_finish == 'stop' else {
                 'prompt': text, 'prompt_chars': len(text),
             },
+        }
+
+    def greedy_alternatives(self, prompt: str = '', model: str = 'gpt-3.5-turbo-instruct',
+                            top: int = 20, sort: str = 'cost',
+                            max_alts: int = 8) -> Dict:
+        """The greedy path and its next-best siblings: one-token departures from it.
+
+        "Second best by the greedy criterion" is the cheapest single-token
+        deviation from the greedy path, followed by greedy decoding again. That is
+        well defined and free to compute -- the cost of every departure is already
+        in top_logprobs -- so this ranks all of them and marks which ones have a
+        continuation on record.
+
+        The ordering matters and is not one thing. Ranking by deviation cost is
+        the greedy criterion literally read: which departure gives up the fewest
+        nats at the point of departure. Ranking by the resulting string's Σ
+        logprob asks which departure ends up most probable overall. These differ
+        sharply, because the regenerated tail carries its own sum:
+
+            by cost   #2 is  '9' -> '8'          cost 0.0352   Σ  -16.3878
+            by sum    #2 is '\n' -> '\ufeffusing' cost 1.7802   Σ   -6.5815
+
+        The second is more probable than the greedy path itself at the same length
+        (greedy@21 = -15.4085) by about 8.8 nats, i.e. some 6800x. Which is the
+        textbook point that greedy decoding is locally optimal and not MAP, here
+        with a margin nobody could call marginal.
+        """
+        cache_key = (prompt, model, max_alts)
+        if cache_key in self._alts_cache:
+            greedy, candidates, missing = self._alts_cache[cache_key]
+            return self._rank_alts(prompt, model, sort, top, greedy, candidates, missing)
+
+        greedy = self.greedy(prompt=prompt, model=model)
+        if not greedy['n'] or not greedy['first_id']:
+            return {'view': 'greedy_alternatives', 'prompt': prompt, 'model': model,
+                    'sort': sort, 'entries': [], 'count': 0, 'source_records': len(self.records),
+                    'greedy': greedy, 'missing_continuation': 0}
+
+        root = self.trie(None)
+        base = self.by_id[greedy['first_id']]
+        lp = (base.get('choices') or [{}])[0].get('logprobs') or {}
+        toks = list(lp.get('tokens') or [])
+        tls = list(lp.get('token_logprobs') or [])
+        tops = [dict(t or {}) for t in (lp.get('top_logprobs') or [])]
+
+        import itertools, math
+        cum = list(itertools.accumulate(v if isinstance(v, (int, float)) else 0.0 for v in tls))
+
+        def entry_for(tokens: List[str], detail_from: List[Dict]) -> Dict:
+            n = len(tokens)
+            total = detail_from[-1]['cumulative'] if detail_from else 0.0
+            return {
+                'n': n, 'sum_logprob': total, 'mean_logprob': total / n if n else 0.0,
+                'perplexity': math.exp(-total / n) if n else None,
+                'text': ''.join(tokens), 'tokens': detail_from,
+            }
+
+        # The greedy path itself is rank 1 with cost 0: it is the thing the others
+        # depart from, so leaving it out of its own list would be odd.
+        greedy_detail = walk_detail(root, toks, max_alts)
+        entries = [{
+            **entry_for(toks[:len(greedy_detail)], greedy_detail),
+            'deviation': None, 'cost': 0.0, 'is_greedy': True,
+            'id': base.get('id'), 'finish_reason': (base.get('choices') or [{}])[0].get('finish_reason'),
+        }]
+
+        missing = 0
+        for i, tok in enumerate(toks):
+            if i >= len(tops) or not tops[i] or not isinstance(tls[i], (int, float)):
+                continue
+            for alt, alt_lp in tops[i].items():
+                if alt == tok or not isinstance(alt_lp, (int, float)):
+                    continue
+                cost = tls[i] - alt_lp
+                prefix = ''.join(toks[:i]) + alt
+                rec = self.lookup(prefix, model=model, max_tokens=None)
+                if rec is None:
+                    missing += 1
+                    continue
+                rlp = (rec.get('choices') or [{}])[0].get('logprobs') or {}
+                path = toks[:i] + [alt] + list(rlp.get('tokens') or [])
+                detail = walk_detail(root, path, max_alts)
+                if len(detail) != len(path):
+                    continue          # unscorable path: skip rather than half-score it
+                entries.append({
+                    **entry_for(path, detail),
+                    'deviation': {'position': i, 'original': tok, 'alternative': alt,
+                                  'original_logprob': tls[i], 'alternative_logprob': alt_lp},
+                    'cost': cost, 'is_greedy': False,
+                    'id': rec.get('id'),
+                    'finish_reason': (rec.get('choices') or [{}])[0].get('finish_reason'),
+                    # What the greedy path scores at this same length, so the row can
+                    # be compared against it rather than only against its siblings.
+                    'greedy_sum_at_n': cum[len(path) - 1] if len(path) <= len(cum) else None,
+                })
+
+        # Building the candidates costs ~3 s: one lookup per (position, alternative)
+        # over a 4096-token path is ~82k probes, and only the swept positions have
+        # a continuation. Sorting and capping are cheap, so only the build is cached.
+        self._alts_cache[cache_key] = (greedy, entries, missing)
+        return self._rank_alts(prompt, model, sort, top, greedy, entries, missing)
+
+    ALT_SORTS = {
+        'cost': (lambda e: (e['cost'], -e['sum_logprob']), 'deviation cost asc (the greedy criterion)'),
+        'sum': (lambda e: -e['sum_logprob'], 'sum_logprob desc'),
+        'mean': (lambda e: -e['mean_logprob'], 'mean_logprob desc'),
+        'length': (lambda e: (-e['n'], -e['sum_logprob']), 'length desc'),
+    }
+
+    def _rank_alts(self, prompt, model, sort, top, greedy, candidates, missing) -> Dict:
+        key, label = self.ALT_SORTS.get(sort) or self.ALT_SORTS['cost']
+        entries = sorted(candidates, key=key)
+        if top:
+            entries = entries[:top]
+        # Copy before stamping rank: the candidate list is shared between requests.
+        entries = [{**e, 'rank': r} for r, e in enumerate(entries, 1)]
+        return {
+            'view': 'greedy_alternatives',
+            'prompt': prompt,
+            'model': model,
+            'sort': sort if sort in self.ALT_SORTS else 'cost',
+            'ranking': label,
+            'source_records': len(self.records),
+            'generated_from': ', '.join(self.sources),
+            'greedy': {k: greedy[k] for k in
+                       ('n', 'sum_logprob', 'mean_logprob', 'first_id', 'finish_reason')},
+            # Every departure whose continuation is not on record; each would cost
+            # one call. Most of these are positions no sweep ever covered, so the
+            # number is large by design and not a sign of missing data.
+            'departures_without_record': missing,
+            'departures_ranked': len(candidates) - 1,
+            'count': len(entries),
+            'entries': entries,
         }
 
     def walk(self, base_id: Optional[str] = None, steps: int = 20, extend: int = 20,

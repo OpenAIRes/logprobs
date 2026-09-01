@@ -109,6 +109,23 @@
         <code>max_tokens</code> and could go further; one that ends on <code>stop</code>
         is the whole string the model wanted to write.</p></dd>
 
+      <dt>Greedy path + next best <span class="std">one-token departures, ranked</span></dt>
+      <dd>Rank 1 is the greedy path. Every other row is that path with <b>one token
+        changed, then greedy again</b> — so "second best by the greedy criterion" is
+        the cheapest departure. The cost of every departure is already in
+        <code>top_logprobs</code>, so the ranking is free; only having a continuation
+        on record is not, and the view says how many departures would need a call.
+        <p><b>The ordering is not one thing, and this is where it gets interesting.</b>
+        By deviation cost, #2 is position 4, <code>9</code>→<code>8</code>, giving up
+        0.0352 nats and landing on the 2018 FIFA World Cup with Σ −16.25. By resulting
+        Σ logprob, #1 is position 0, <code>
+</code>→<code>﻿using</code>, which costs
+        <b>1.78 nats</b> — fifty times more — and reaches Σ <b>−6.58</b>.</p>
+        <p>The greedy path scores −15.41 over those same 21 tokens. So one deliberately
+        expensive first step ends up about <b>8.8 nats — some 6800× — more probable</b>
+        than greedy decoding. That is the textbook fact that greedy is locally optimal
+        and not MAP, and on this data the gap is not subtle.</p></dd>
+
       <dt>Completions <span class="std">whole sequences</span></dt>
       <dd>One entry per recorded call: the whole string that call produced, prompt
         included. Ranked by cumulative logprob, descending.
