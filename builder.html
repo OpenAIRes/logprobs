@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="cs">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Logprobs — builder</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/app.css">
 <style>
-  /* Paleta, tlacitka a formularove prvky jsou v app.css, aby vsechny
-     ctyri programy vypadaly jako jeden. Tady zustava jen vlastni layout. */
+  /* Palette, buttons and form controls live in app.css so every page reads as
+     one program. Only this page's own layout stays here. */
 
   header { margin-bottom: 1.25rem; }
   h1 { margin: 0 0 .35rem; font-size: 1.5rem; letter-spacing: -.01em; font-weight: 620; }
@@ -16,7 +16,7 @@
   .panel { margin-bottom: .8rem; }
 
   .cfg { display: flex; flex-wrap: wrap; gap: .9rem 1.4rem; align-items: flex-end; }
-  /* Tady jsou popisky nad polem, ne vedle nej — jinak je vzhled z app.css. */
+  /* Labels sit above the field here, not beside it; the rest is from app.css. */
   .fld { flex-direction: column; align-items: stretch; gap: .25rem; }
   .fld > span { font-size: .75rem; }
   .fld input[type=number] { width: 6.5rem; }
@@ -101,40 +101,41 @@
 </head>
 <body>
 <nav class="appnav">
-  <a href="/">&#8592; Rozcestník</a><span class="sep">|</span>
-  <a href="/logprobs.html">Jeden řetězec</a>
-  <a href="/dijkstra.html">Seznamy</a>
-  <a href="/builder.html" aria-current="page">Builder</a>
+  <a href="/">Start</a><span class="sep">|</span>
+  <a href="/logprobs.html">Single string</a>
+  <a href="/dijkstra.html">Lists</a>
+  <a href="/builder.html" aria-current="page">Builder</a><span class="sep">|</span>
+  <a href="/help.html">Help</a>
   <span class="right" id="navStore">…</span>
 </nav>
 <script>
-/* Lista rika, ve kterem ze ctyr programu clovek je, a jestli server odpovida —
-   pri nedostupnem serveru se nektere pohledy chovaji jinak a je lepsi to videt
-   hned, ne az z prazdne tabulky. */
+/* The strip says which page you are on and whether the store answers. Several
+   views behave differently when it does not, and noticing that from an empty
+   table is worse than being told. */
 fetch('/api/stats', { cache: 'no-store' })
   .then(r => r.json())
-  .then(s => { document.getElementById('navStore').textContent = s.records + ' záznamů'; })
-  .catch(() => { document.getElementById('navStore').textContent = 'server neodpovídá'; });
+  .then(s => { document.getElementById('navStore').textContent = s.records + ' records'; })
+  .catch(() => { document.getElementById('navStore').textContent = 'store not answering'; });
 </script>
 
 <div class="wrap">
   <header>
-    <h1>Builder — postupné generování databáze</h1>
+    <h1>Builder — growing the database</h1>
     <div class="sub">
-      Rozbaluje vždy <b>nejlepší dosud nevyzkoušený kandidát</b> (best-first / Dijkstra).
-      Každá odpověď dá 20 alternativ na každé pozici, takže logprob každého kandidáta známe
-      <i>ještě před</i> voláním — frontieru lze uspořádat zdarma. Databáze tím roste přesně
-      v pořadí, ve kterém se pak čte.
+      Always expands <b>the best candidate not yet tried</b> (best-first / Dijkstra).
+      Every response gives 20 alternatives at every position, so each candidate's logprob is
+      known <i>before</i> any call — the frontier can be ordered for free. The database
+      therefore grows in exactly the order it will be read in.
     </div>
   </header>
 
   <div class="panel">
-    <h2>Nastavení <span id="cfgLock" class="badge" style="display:none"></span></h2>
+    <h2>Settings <span id="cfgLock" class="badge" style="display:none"></span></h2>
     <div class="cfg">
-      <label class="fld"><span>režim</span>
+      <label class="fld"><span>mode</span>
         <select id="mode">
-          <option value="sim">simulace (bez API)</option>
-          <option value="api">API — skutečná volání (platí se)</option>
+          <option value="sim">simulation (no API)</option>
+          <option value="api">API — real calls (costs money)</option>
         </select>
       </label>
       <label class="fld"><span>model</span>
@@ -147,16 +148,16 @@ fetch('/api/stats', { cache: 'no-store' })
       <label class="fld"><span>max_tokens (N)</span>
         <input type="number" id="maxTokens" value="20" min="1" max="4096" step="1">
       </label>
-      <label class="fld"><span>nových volání na běh</span>
+      <label class="fld"><span>new calls per run</span>
         <input type="number" id="maxCalls" value="20" min="1" step="10">
       </label>
-      <label class="fld"><span>stop: dokázat top-K</span>
+      <label class="fld"><span>stop at proven top-K</span>
         <input type="number" id="targetK" value="20" min="0" step="10">
       </label>
       <label class="fld"><span>store (server.py)</span>
         <select id="useStore">
-          <option value="1">ptát se před voláním</option>
-          <option value="0">nepoužívat (jako dřív)</option>
+          <option value="1">ask before every call</option>
+          <option value="0">do not use</option>
         </select>
       </label>
     </div>
@@ -164,74 +165,74 @@ fetch('/api/stats', { cache: 'no-store' })
   </div>
 
   <div class="panel">
-    <h2>Ovládání</h2>
+    <h2>Controls</h2>
     <div class="btns">
-      <button id="btnStart" class="primary">Založit databázi</button>
-      <button id="btnStep" disabled>Krok</button>
-      <button id="btnRun" disabled>Běž</button>
-      <button id="btnExport" disabled>Export dat</button>
+      <button id="btnStart" class="primary">Start database</button>
+      <button id="btnStep" disabled>Step</button>
+      <button id="btnRun" disabled>Run</button>
+      <button id="btnExport" disabled>Export</button>
       <button id="btnReset" class="danger" disabled>Reset</button>
     </div>
   </div>
 
   <div class="panel">
-    <h2>Stav</h2>
+    <h2>State</h2>
     <div class="stats">
-      <div class="stat"><span>volání</span><b id="sCalls">0</b></div>
-      <div class="stat"><span>uzlů (prefixů)</span><b id="sNodes">0</b></div>
-      <div class="stat"><span>frontiera</span><b id="sFrontier">0</b></div>
-      <div class="stat hi"><span>dokázaný top-K</span><b id="sProven">0</b></div>
-      <div class="stat"><span>nejlepší na frontieře</span><b id="sBestF">—</b></div>
-      <div class="stat"><span>strop nevidených</span><b id="sCeiling">—</b></div>
-      <div class="stat"><span>tokeny (in/out)</span><b id="sTokens">0 / 0</b></div>
-      <div class="stat"><span>odhad ceny</span><b id="sCost">$0.0000</b></div>
-      <div class="stat"><span>max hloubka</span><b id="sDepth">0</b></div>
-      <div class="stat hi"><span>uloženo záznamů</span><b id="sSaved">0</b></div>
-      <div class="stat"><span>ze storu (zdarma)</span><b id="sStore">0</b></div>
+      <div class="stat"><span>calls</span><b id="sCalls">0</b></div>
+      <div class="stat"><span>nodes (prefixes)</span><b id="sNodes">0</b></div>
+      <div class="stat"><span>frontier</span><b id="sFrontier">0</b></div>
+      <div class="stat hi"><span>proven top-K</span><b id="sProven">0</b></div>
+      <div class="stat"><span>best on frontier</span><b id="sBestF">—</b></div>
+      <div class="stat"><span>unseen ceiling</span><b id="sCeiling">—</b></div>
+      <div class="stat"><span>tokens (in/out)</span><b id="sTokens">0 / 0</b></div>
+      <div class="stat"><span>est. cost</span><b id="sCost">$0.0000</b></div>
+      <div class="stat"><span>max depth</span><b id="sDepth">0</b></div>
+      <div class="stat hi"><span>records saved</span><b id="sSaved">0</b></div>
+      <div class="stat"><span>from store (free)</span><b id="sStore">0</b></div>
     </div>
     <div class="note">
-      <b>Nových volání na běh</b> je rozpočet na jedno stisknutí „Běž", ne absolutní strop —
-      každé další stisknutí přidá dalších N volání. „Krok" rozpočtem omezený není.
+      <b>New calls per run</b> is the budget for one press of Run, not an absolute cap —
+      each further press adds another N. Step is not budgeted.
     </div>
     <div class="note">
-      <b>Dokázaný top-K</b>: je-li nejlepší kandidát na frontieře se součtem <i>S</i>, pak každý
-      objevený prefix se součtem &gt; <i>S</i> už nemůže být ničím přeskočen — jeho pozice je
-      finální. Přesně ta vlastnost, která dělá Dijkstru správnou.
+      <b>Proven top-K</b>: if the best frontier candidate has sum <i>S</i>, then every
+      discovered prefix with sum &gt; <i>S</i> can no longer be overtaken by anything — its
+      position is final. That is exactly the property that makes Dijkstra correct.
     </div>
     <div class="note">
-      <b>Strop nevidených</b>: API vrací jen 20 alternativ na pozici z ~100 000 tokenů slovníku,
-      takže každý rozbalený uzel má i děti, které jsme nikdy neviděli a které v žádné frontieře
-      nejsou. Ohraničené ale jsou: mimo top-20 má token logprob ≤ ten dvacátý, takže celý nevidený
-      podstrom pod uzlem <i>N</i> má součet ≤ <i>N.sum + min(top20)</i>. Největší takový odhad je
-      <b>tvrdý strop</b> — pod ním se z top-20 dat nedá dokázat nic, ať zavoláme kolikrát chceme.
-      Dokázaný top-K se proto řídí tím horším z obou limitů; když začne omezovat strop, je to
-      označené <b>⚑</b>.
+      <b>Unseen ceiling</b>: the API returns only 20 alternatives per position out of a ~100,000
+      token vocabulary, so every expanded node also has children nobody ever saw and which are in
+      no frontier. They are bounded, though: outside the top 20 a token's logprob is ≤ the 20th, so
+      the whole unseen subtree under node <i>N</i> has sum ≤ <i>N.sum + min(top20)</i>. The largest
+      such bound is a <b>hard ceiling</b>: below it nothing can be proven from top-20 data, however
+      many calls are made. Proven top-K therefore follows whichever limit is worse; when the ceiling
+      starts to bind, it is marked <b>⚑</b>.
     </div>
     <h2 style="margin-top:1rem">Log</h2>
     <div id="log"></div>
   </div>
 
   <div class="toolbar">
-    <label for="limitSel">položek:
+    <label for="limitSel">results:
       <select id="limitSel">
         <option>20</option><option>50</option><option>100</option>
-        <option>200</option><option value="0">vše</option>
+        <option>200</option><option value="0">all</option>
       </select>
     </label>
     <span class="shown" id="shown"></span>
-    <label><input type="checkbox" id="showFrontier" checked> zobrazovat i nerozbalené kandidáty</label>
-    <div class="legend"><span>nejistý</span><span class="ramp"></span><span>jistý</span></div>
+    <label><input type="checkbox" id="showFrontier" checked> include unexpanded candidates</label>
+    <div class="legend"><span>uncertain</span><span class="ramp"></span><span>certain</span></div>
   </div>
 
   <div class="tbl">
     <div class="thead">
       <div>#</div><div>prefix</div>
-      <div class="num c-n">délka</div>
-      <div class="num key">Σ logP</div>
-      <div class="num c-mean">⌀ logP</div>
+      <div class="num c-n">length</div>
+      <div class="num key">Σ logprob</div>
+      <div class="num c-mean">mean</div>
       <div class="c-flag"></div>
     </div>
-    <div id="list"><div class="empty">Databáze je prázdná — začni tlačítkem „Založit databázi".</div></div>
+    <div id="list"><div class="empty">The database is empty — press Start database.</div></div>
   </div>
 </div>
 
@@ -600,11 +601,11 @@ function parseCompletionsResponse(json) {
   const choice = json?.choices?.[0];
   const lp = choice?.logprobs;
   if (!lp || !Array.isArray(lp.tokens)) {
-    throw new Error('Odpověď nemá očekávaný tvar (choices[0].logprobs.tokens chybí).');
+    throw new Error('The response has an unexpected shape (choices[0].logprobs.tokens is missing).');
   }
   const toks = lp.tokens, lps = lp.token_logprobs || [], tops = lp.top_logprobs || [];
   if (lps.length !== toks.length) {
-    throw new Error(`Nesoulad délek: ${toks.length} tokenů vs ${lps.length} logprobs.`);
+    throw new Error(`Length mismatch: ${toks.length} tokens vs ${lps.length} logprobs.`);
   }
   return toks.map((t, i) => ({
     token: t,
@@ -633,7 +634,7 @@ async function readApiResponse(res) {
   }
 
   if (json?.error) {
-    const msg = json.error.message || 'neznámá chyba';
+    const msg = json.error.message || 'unknown error';
     const retryable = res.status === 429 || res.status >= 500;
     throw new ApiError(`API chyba (HTTP ${res.status}): ${msg}`, { status: res.status, retryable });
   }
@@ -643,7 +644,7 @@ async function readApiResponse(res) {
                        { status: res.status, retryable: res.status === 429 || res.status >= 500 });
   }
   if (!json) {
-    throw new ApiError(`HTTP ${res.status}: odpověď není JSON (content-type: ${ctype || 'neuveden'})`,
+    throw new ApiError(`HTTP ${res.status}: the response is not JSON (content-type: ${ctype || 'none'})`,
                        { status: res.status, retryable: res.status >= 500 });
   }
   return json;
@@ -675,7 +676,7 @@ function safeHeader(res, name) {
 
 async function fetchPositionsFromApi(prompt, maxTokens, model) {
   const key = await getApiKey();
-  if (!key) throw new ApiError('Chybí API klíč (localStorage „openai_key" ani local_api_key.json).');
+  if (!key) throw new ApiError('No API key (neither localStorage "openai_key" nor local_api_key.json).');
 
   const body = buildRequestBody(prompt, maxTokens, model);
   let lastErr = null;
@@ -841,7 +842,7 @@ let engine = null;
 let running = false;
 let renderQueued = false;
 let ceilingWarned = false;
-// Budget is per "Běž" press, not an absolute cap — otherwise the very first run
+// Budget is per Run press, not an absolute cap -- otherwise the very first run
 // would exhaust it and further building would need the field edited by hand.
 let runStartCalls = 0;
 
@@ -881,18 +882,18 @@ function log(msg, cls) {
 function updateModeNote() {
   const sim = modeEl.value === 'sim';
   modeNote.innerHTML = sim
-    ? '<b>Simulace:</b> data se vyrábějí lokálně, deterministicky podle promptu. Nikam se '
-      + 'neukládají a nikdy se nesmíchají s reálnou databází — slouží jen k vyzkoušení '
-      + 'enginu a UI. Žádné volání API, žádné náklady (odhad ceny níže je hypotetický).'
-    : '<b>API režim je zapojený a bude účtovat skutečné tokeny.</b> Každá odpověď se ukládá '
-      + 'do vlastní IndexedDB (<code>builderDB</code>, oddělené od dat <code>logprobs.html</code>) '
-      + '<i>před</i> zpracováním, takže zaplacené volání nemůže zmizet; po reloadu se strom '
-      + 'obnoví z úložiště bez jediného volání. Klíč se bere z <code>local_api_key.json</code> '
-      + 'nebo z localStorage a nikdy se nedostane do logu ani do uložených dat.';
+    ? '<b>Simulation:</b> the data is made locally, deterministically from the prompt. It is '
+      + 'never stored and never mixed with the real database — it exists to try out the engine '
+      + 'and the UI. No API calls, no cost (the estimate below is hypothetical).'
+    : '<b>API mode is live and will be charged for real tokens.</b> Every response is written '
+      + 'to its own IndexedDB (<code>builderDB</code>, separate from <code>logprobs.html</code>) '
+      + '<i>before</i> it is processed, so a paid call cannot be lost; after a reload the tree '
+      + 'is rebuilt from storage without a single call. The key comes from <code>local_api_key.json</code> '
+      + 'or from localStorage and never reaches the log or the stored data.';
   const alts = ALT_COUNT[modelEl.value] || 20;
   if (alts < 20) {
-    modeNote.innerHTML += `<br><b>Pozor:</b> ${modelEl.value} vrací jen ${alts} alternativ `
-      + 'na pozici (ne 20), takže frontiera roste výrazně pomaleji.';
+    modeNote.innerHTML += `<br><b>Note:</b> ${modelEl.value} returns only ${alts} alternatives `
+      + 'per position, not 20, so the frontier grows much more slowly.';
   }
 }
 
@@ -901,7 +902,7 @@ function setConfigEnabled(on) {
   cfgLock.style.display = on ? 'none' : '';
   if (!on) {
     cfgLock.className = 'badge ' + (engine && modeEl.value === 'sim' ? 'sim' : 'api');
-    cfgLock.textContent = (modeEl.value === 'sim' ? 'simulace' : 'api') + ' · uzamčeno';
+    cfgLock.textContent = (modeEl.value === 'sim' ? 'simulation' : 'api') + ' · locked';
   }
 }
 
@@ -911,7 +912,7 @@ function refreshButtons() {
   btnStep.disabled = !has || running;
   btnRun.disabled = !has;
   btnReset.disabled = !has || running;
-  btnRun.textContent = running ? 'Pauza' : 'Běž';
+  btnRun.textContent = running ? 'Pause' : 'Run';
   btnRun.classList.toggle('primary', running);
 }
 
@@ -954,8 +955,8 @@ function renderAll() {
   // Once the ceiling binds, more calls cannot extend the proof — say so once.
   if (capped && !ceilingWarned) {
     ceilingWarned = true;
-    log(`strop nevidených tokenů (${fmt(ceil)}) je od teď tím, co omezuje důkaz — `
-      + `další volání dokázaný top-K už nezvýší`, 'err');
+    log(`the unseen-token ceiling (${fmt(ceil)}) is now what limits the proof — `
+      + `more calls will not raise the proven top-K`, 'err');
   }
 
   const limitRaw = Number(limitSel.value);
@@ -964,7 +965,7 @@ function renderAll() {
 
   listEl.textContent = '';
   if (!slice.length) {
-    listEl.innerHTML = '<div class="empty">Zatím žádné prefixy.</div>';
+    listEl.innerHTML = '<div class="empty">Nothing here yet.</div>';
     shownEl.textContent = '';
     return;
   }
@@ -977,9 +978,9 @@ function renderAll() {
       const bar = document.createElement('div');
       bar.className = 'sealbar' + (capped ? ' capped' : '');
       bar.innerHTML = capped
-        ? `<span>▲ dokázaný top-${proven} — a dál to nejde: pod strop ${fmt(cut)} `
-          + `vidí jen top-20 alternativ</span><span class="ln"></span>`
-        : `<span>▲ dokázaný top-${proven} — nic dalšího to už nepřeskočí</span><span class="ln"></span>`;
+        ? `<span>▲ proven top-${proven} — and no further: below the ${fmt(cut)} ceiling `
+          + `only top-20 alternatives are visible</span><span class="ln"></span>`
+        : `<span>▲ proven top-${proven} — nothing else can overtake these</span><span class="ln"></span>`;
       frag.appendChild(bar);
       sealDrawn = true;
     }
@@ -1007,7 +1008,7 @@ function renderAll() {
   listEl.appendChild(frag);
 
   shownEl.textContent = `zobrazeno ${slice.length} z ${all.length}`
-    + (includeFrontier ? '' : ' (jen rozbalené)');
+    + (includeFrontier ? '' : ' (expanded only)');
 }
 
 let savedCount = 0;
@@ -1076,7 +1077,7 @@ async function generateInto(targetNode) {
 
   let responseId = `sim-${engine.calls + 1}`;
   if (modeEl.value === 'api') {
-    if (!res.raw?.id) throw new Error('Odpověď neobsahuje id — nelze bezpečně uložit.');
+    if (!res.raw?.id) throw new Error('The response carries no id, so it cannot be stored safely.');
     const rec = buildRecord({
       raw: res.raw, request: res.request, promptTokens, promptText,
       previousResponseId: targetNode.originId, maxTokens: engine.maxTokens,
@@ -1091,7 +1092,7 @@ async function generateInto(targetNode) {
     if (res.fromStore) storeHits++;
     log(res.fromStore
       ? `  ze storu ${rec.id} — nezaplaceno`
-      : `  uloženo ${rec.id}  req=${rec.meta.http?.request_id || '—'}  ${rec.meta.http?.latency_ms}ms`,
+      : `  saved ${rec.id}  req=${rec.meta.http?.request_id || '—'}  ${rec.meta.http?.latency_ms}ms`,
       'ok');
   }
 
@@ -1109,7 +1110,7 @@ function confirmApiSpend() {
   const n = Number(maxCallsEl.value) || 0;
   const ok = confirm(
     `Tohle bude volat OpenAI API modelem ${engine ? engine.model : modelEl.value} `
-    + `a účtovat skutečné tokeny.\n\nRozpočet na běh: ${n} volání.\n\nPokračovat?`);
+    + `and be charged for real tokens.\n\nBudget for this run: ${n} calls.\n\nContinue?`);
   if (ok) apiSpendConfirmed = true;
   return ok;
 }
@@ -1123,7 +1124,7 @@ async function step(useRunBudget = false) {
   if (useRunBudget) {
     const budget = Number(maxCallsEl.value) || Infinity;
     const done = engine.calls - runStartCalls;
-    if (done >= budget) { log(`stop: ${done} nových volání v tomto běhu (limit ${budget})`); return false; }
+    if (done >= budget) { log(`stop: ${done} new calls in this run (limit ${budget})`); return false; }
   }
 
   const targetK = Number(targetKEl.value) || 0;
@@ -1131,14 +1132,14 @@ async function step(useRunBudget = false) {
     const cut = engine.provenCut();
     if (cut != null) {
       const proven = engine.allPrefixes(true).filter(n => n.sum > cut).length;
-      if (proven >= targetK) { log(`stop: dokázáno top-${proven} (cíl ${targetK})`, 'ok'); return false; }
+      if (proven >= targetK) { log(`stop: proven top-${proven} (target ${targetK})`, 'ok'); return false; }
     }
   }
 
-  if (!confirmApiSpend()) { log('zrušeno uživatelem'); return false; }
+  if (!confirmApiSpend()) { log('cancelled'); return false; }
 
   const target = engine.nextTarget();
-  if (!target) { log('stop: frontiera je prázdná'); return false; }
+  if (!target) { log('stop: the frontier is empty'); return false; }
 
   const prompt = engine.pathText(target);
   try {
@@ -1164,18 +1165,18 @@ async function start() {
   setConfigEnabled(false);
   refreshButtons();
   logEl.textContent = '';
-  log(`start: model=${engine.model} max_tokens=${maxTokens} režim=${modeEl.value}`);
+  log(`start: model=${engine.model} max_tokens=${maxTokens} mode=${modeEl.value}`);
 
   if (!confirmApiSpend()) {
-    log('zrušeno uživatelem — nic se nevolalo');
+    log('cancelled — nothing was called');
     engine = null; setConfigEnabled(true); refreshButtons();
     return;
   }
 
   try {
     const res = await generateInto(engine.root);
-    log(`#1 rozbalen prázdný prompt → ${res.positions.length} pozic, `
-      + `${engine.nodeCount} prefixů, frontiera ${engine.frontier.size}`, 'ok');
+    log(`#1 expanded the empty prompt → ${res.positions.length} positions, `
+      + `${engine.nodeCount} prefixes, frontier ${engine.frontier.size}`, 'ok');
   } catch (err) {
     log('CHYBA: ' + err.message, 'err');
   }
@@ -1186,7 +1187,7 @@ async function start() {
 /* A reload must not cost anything: rebuild the tree from persisted records. */
 async function resumeFromStore() {
   let records = [];
-  try { records = await idbGetAll(); } catch (err) { log('nelze číst úložiště: ' + err.message, 'err'); return; }
+  try { records = await idbGetAll(); } catch (err) { log('cannot read storage: ' + err.message, 'err'); return; }
   await refreshSavedCount();
   if (!records.length) return;
 
@@ -1202,8 +1203,8 @@ async function resumeFromStore() {
   engine.rebuildFromRecords(records);
   setConfigEnabled(false);
   updateModeNote();
-  log(`obnoveno z úložiště: ${records.length} záznamů → ${engine.nodeCount} prefixů, `
-    + `frontiera ${engine.frontier.size} (žádné volání)`, 'ok');
+  log(`restored from storage: ${records.length} records → ${engine.nodeCount} prefixes, `
+    + `frontier ${engine.frontier.size} (no calls)`, 'ok');
   scheduleRender();
   refreshButtons();
 }
@@ -1211,13 +1212,13 @@ async function resumeFromStore() {
 /* Export in the same shape logprobs.html and the Python scripts read. */
 async function exportData() {
   const records = await idbGetAll();
-  if (!records.length) { alert('Úložiště je prázdné.'); return; }
+  if (!records.length) { alert('Storage is empty.'); return; }
   const blob = new Blob([JSON.stringify(records)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = 'builder_history.json'; a.click();
   URL.revokeObjectURL(url);
-  log(`export: ${records.length} záznamů → builder_history.json`, 'ok');
+  log(`export: ${records.length} records → builder_history.json`, 'ok');
 }
 
 async function runLoop() {
@@ -1240,19 +1241,19 @@ btnRun.addEventListener('click', () => {
 });
 btnExport.addEventListener('click', () => exportData());
 btnReset.addEventListener('click', async () => {
-  if (!confirm('Zahodit rozpracovaný strom a začít znovu?\n\n'
-    + 'Uložené záznamy v úložišti ZŮSTANOU — smaž je zvlášť potvrzením v dalším dialogu.')) return;
+  if (!confirm('Discard the tree in progress and start over?\n\n'
+    + 'Saved records STAY in storage — delete them separately in the next dialog.')) return;
   running = false;
   engine = null;
   ceilingWarned = false;
-  if (savedCount > 0 && confirm(`Smazat i ${savedCount} uložených záznamů z úložiště?\n\n`
-      + 'POZOR: tohle zahodí data ze skutečných (zaplacených) volání. Nejdřív si je vyexportuj.')) {
-    try { await idbClear(); log('úložiště smazáno', 'err'); } catch (e) { log('mazání selhalo: ' + e.message, 'err'); }
+  if (savedCount > 0 && confirm(`Also delete ${savedCount} saved records from storage?\n\n`
+      + 'WARNING: this throws away data from real, paid calls. Export it first.')) {
+    try { await idbClear(); log('storage cleared', 'err'); } catch (e) { log('clearing failed: ' + e.message, 'err'); }
   }
   await refreshSavedCount();
   setConfigEnabled(true);
   logEl.textContent = '';
-  listEl.innerHTML = '<div class="empty">Databáze je prázdná — začni tlačítkem „Založit databázi".</div>';
+  listEl.innerHTML = '<div class="empty">The database is empty — press Start database.</div>';
   shownEl.textContent = '';
   ['sCalls','sNodes','sFrontier','sProven','sDepth'].forEach(id => el(id).textContent = '0');
   el('sBestF').textContent = '—';
@@ -1276,7 +1277,7 @@ window.__builder = {
   // Explicit programmatic equivalent of answering the spend dialog. Needed for
   // unattended runs: a background tab defers confirm() indefinitely, so the
   // dialog can never be answered there and the run would hang.
-  approveSpend() { apiSpendConfirmed = true; log('útrata schválena programově', 'ok'); },
+  approveSpend() { apiSpendConfirmed = true; log('spend approved programmatically', 'ok'); },
   // pure/testable pieces of the API layer — no network involved
   buildRequestBody, parseCompletionsResponse, readApiResponse, buildRecord, ApiError,
   fetchPositionsFromApi,

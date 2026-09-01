@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Logprobs — help</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/app.css">
+<style>
+  header { margin: .5rem 0 1.2rem; }
+  h1 { margin: 0 0 .4rem; font-size: 1.6rem; letter-spacing: -.01em; font-weight: 620; }
+  .lede { color: var(--ink-dim); font-size: .9375rem; max-width: 78ch; }
+
+  .toc { display: flex; flex-wrap: wrap; gap: .35rem .8rem; margin: 1rem 0 1.6rem;
+    font-size: .8125rem; }
+  .toc a { color: var(--accent); text-decoration: none; padding: .15rem .45rem;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  .toc a:hover { background: var(--chip); }
+
+  section { margin-bottom: 1.6rem; max-width: 82ch; }
+  section > h2 { margin: 0 0 .7rem; font-size: 1.0625rem; font-weight: 620; color: var(--ink);
+    text-transform: none; letter-spacing: 0; scroll-margin-top: 3.5rem; }
+  p { margin: 0 0 .7rem; font-size: .9375rem; color: var(--ink-dim); line-height: 1.6; }
+  p b, li b, dd b { color: var(--ink); font-weight: 600; }
+
+  dl { margin: 0; font-size: .9375rem; }
+  dt { font-weight: 620; margin-top: .9rem; color: var(--ink); }
+  dt:first-child { margin-top: 0; }
+  dt .std { font-weight: 400; font-size: .8125rem; color: var(--ink-faint); margin-left: .4rem; }
+  dd { margin: .2rem 0 0; color: var(--ink-dim); line-height: 1.6; }
+
+  .formula { display: block; margin: .5rem 0 .8rem; padding: .5rem .7rem;
+    background: var(--chip); border-radius: 6px;
+    font: 13px/1.6 ui-monospace, Menlo, monospace; color: var(--ink); }
+  .note { border-left: 3px solid var(--mid); padding: .1rem 0 .1rem .8rem; margin: .8rem 0; }
+  .note p:last-child { margin-bottom: 0; }
+  table { border-collapse: collapse; font-size: .875rem; margin: .3rem 0 .8rem; }
+  th, td { text-align: left; padding: .3rem .8rem .3rem 0; border-bottom: 1px solid var(--line-soft);
+    color: var(--ink-dim); vertical-align: top; }
+  th { color: var(--ink-faint); font-size: .75rem; text-transform: uppercase;
+    letter-spacing: .04em; font-weight: 600; }
+  td b { color: var(--ink); }
+</style>
+</head>
+<body>
+<nav class="appnav">
+  <a href="/">Start</a><span class="sep">|</span>
+  <a href="/logprobs.html">Single string</a>
+  <a href="/dijkstra.html">Lists</a><span class="sep">|</span>
+  <a href="/help.html" aria-current="page">Help</a>
+  <span class="right" id="navStore">…</span>
+</nav>
+
+<div class="wrap">
+  <header>
+    <h1>Help</h1>
+    <div class="lede">
+      What every view and every option means, and the standard term for it where one exists.
+      Everything here reads one database: the log of calls actually made to
+      <code>gpt-3.5-turbo-instruct</code> at temperature 0.
+    </div>
+    <div class="toc">
+      <a href="#data">The data</a>
+      <a href="#views">Views</a>
+      <a href="#options">Options</a>
+      <a href="#scores">Scores</a>
+      <a href="#extend">Extending</a>
+      <a href="#store">The store</a>
+      <a href="#terms">Terminology</a>
+    </div>
+  </header>
+
+  <section id="data">
+    <h2>The data</h2>
+    <p>One call to the legacy <code>/v1/completions</code> endpoint with
+      <code>logprobs: 20</code> returns, for every token it generated, that token's
+      log-probability <b>and the 20 highest-ranked alternatives at that position</b>.
+      All calls here use <code>temperature: 0</code>, so the token returned at each
+      position is the <b>argmax</b> — the most probable one — and every alternative is
+      by definition no more probable than it.</p>
+    <p>That is what makes most of this cheap. A single call tells you the cost of
+      every one-token deviation from the string it produced. Only <i>following</i> a
+      deviation — seeing what the model writes after it — needs another call.</p>
+    <div class="note">
+      <p><code>top_logprobs</code> is capped at <b>20</b> for
+        <code>gpt-3.5-turbo-instruct</code> and at <b>5</b> for <code>davinci-002</code>
+        and <code>babbage-002</code>. A model showing 5 alternatives instead of 20 is the
+        endpoint's limit, not a bug here.</p>
+    </div>
+  </section>
+
+  <section id="views">
+    <h2>Views</h2>
+    <dl>
+      <dt>Completions <span class="std">whole sequences</span></dt>
+      <dd>One entry per recorded call: the whole string that call produced, prompt
+        included. Ranked by cumulative logprob, descending.
+        <b>These strings are not all the same length</b> — the generated part is
+        <code>max_tokens</code>, but the prompt grows with the position a deviation was
+        made at, so a position-0 branch runs about 21 tokens and a position-19 branch
+        about 40. Ranking by a sum therefore favours the shorter ones, which is why mean
+        logprob sits in the next column.</dd>
+
+      <dt>Prefixes — best-first <span class="std">n-best list, uniform-cost search</span></dt>
+      <dd>Every prefix in the token trie, in exact rank order. Because every logprob is
+        ≤ 0, extending a prefix can never raise its sum, so pulling prefixes off a
+        max-heap yields them in provably correct order — this is Dijkstra's algorithm,
+        or uniform-cost search, over the trie. A prefix is a path, not a call: several
+        calls contribute to one, and a prefix has no single record behind it.</dd>
+
+      <dt>Alternatives grid <span class="std">per-position top-k</span></dt>
+      <dd>For one <b>base completion</b>, every position as a row, and in each row all
+        20 alternatives the model offered there. The one it actually chose is framed.
+        This is the shape the sweep data really has; a ranked list flattens it and loses
+        exactly the thing worth seeing — how far behind the rejected tokens sat.</dd>
+
+      <dt>Cheapest-deviation walk <span class="std">greedy hill-climbing over single-token edits</span></dt>
+      <dd>Repeatedly: find the single-token deviation that costs the fewest nats, apply
+        it, regenerate the continuation. Which deviation is cheapest is free to work out
+        — it is already in the data — so a walk of N strings needs N calls, not N×400.
+        <p>It produces a <b>path</b>, not a ranking. The top of the Completions list is
+        the most probable strings; a walk shows how the output drifts when you keep
+        paying as little as possible for each departure. Those are different questions.</p>
+        <p>Two guards are not optional. After deviating at position <i>i</i>, the token
+        sitting there is no longer the argmax, so the cheapest move at that position is
+        to put the original back — at <b>negative</b> cost. It would win every time and
+        the walk would oscillate on step one, so a deviated position is frozen. And
+        deviating at an earlier position unfreezes the later ones, which makes a longer
+        cycle reachable, so strings already walked are never revisited.</p></dd>
+    </dl>
+  </section>
+
+  <section id="options">
+    <h2>Options</h2>
+    <dl>
+      <dt>results</dt>
+      <dd>How many entries the ranking is computed and shown for. Set it to <b>1</b> and
+        you are asking for a single string, so it opens in the <b>token browser</b>
+        instead of as a one-row list: every token with its top-20 alternatives, and a
+        click follows one of them.
+        <p>Above 1 it is a list. The cap is 2000 because each entry carries per-token
+        detail — 600 completions are about 7.5 MB, 5000 about 72 MB.</p></dd>
+
+      <dt>starts with <span class="std">prefix filter</span></dt>
+      <dd>Keeps only strings beginning with this text. Leading whitespace is ignored on
+        both sides, since nearly every string here starts with a newline.
+        <b>The filter is applied before the results cap</b>, on the server, so matches
+        far down the ranking still come through — searching only the top 200 would miss
+        most of them.</dd>
+
+      <dt>base completion</dt>
+      <dd>Which recorded call a grid or a walk starts from. The list is built from the
+        store, so a newly swept base appears on its own. The number is how many calls
+        that base has around it.</dd>
+
+      <dt>steps</dt>
+      <dd>How many walk steps to attempt. The walk stops early when the next
+        regeneration is not in the database, and says which prompt it would need — it
+        never calls the API on its own.</dd>
+
+      <dt>forward only</dt>
+      <dd>Restricts each step to positions at or after the last deviation, so every
+        string extends the previous one instead of replacing part of it. It costs more
+        per step, visibly: from the porchlight base, a free walk goes back to position 1
+        for 0.1079, while forward-only must go to position 17 for 0.1252.</dd>
+
+      <dt>model</dt>
+      <dd>Which model's records to use. <b>Data from different models is never mixed</b>:
+        a record only answers a request for the same model it was asked of. This matters
+        because the alternative count differs — 20 versus 5 — and because a
+        <code>davinci-002</code> continuation of a <code>gpt-3.5-turbo-instruct</code>
+        prefix would be a different distribution presented as the same one.</dd>
+    </dl>
+  </section>
+
+  <section id="scores">
+    <h2>Scores</h2>
+    <dl>
+      <dt>Σ logprob <span class="std">cumulative / sequence log-probability</span></dt>
+      <dd>The sum of the per-token log-probabilities, i.e. log P(sequence). Always ≤ 0;
+        closer to 0 is more probable. Comparable only between strings of the same length.</dd>
+
+      <dt>mean logprob <span class="std">per-token average</span></dt>
+      <dd>Σ logprob divided by the number of tokens. Length-independent, so it is the one
+        to use when the strings differ in length.</dd>
+
+      <dt>perplexity</dt>
+      <dd>e<sup>−mean logprob</sup>. A monotone transform of mean logprob, so it never
+        changes the ordering — it is the same information on a scale where 1 means
+        perfectly predicted and larger means less so.</dd>
+      <span class="formula">Σ logprob = Σ log P(tokenᵢ) · mean = Σ / n · perplexity = e^(−mean)</span>
+
+      <dt>cost of a deviation <span class="std">nats</span></dt>
+      <dd>logprob(chosen) − logprob(alternative) at that position. Since the chosen token
+        is the argmax at temperature 0, this is ≥ 0. A cost of 0.0352 means giving up
+        about 3.5% of relative probability on that one token.</dd>
+    </dl>
+    <div class="note">
+      <p>A sampled token can come back with <code>−9999</code> when it fell outside
+        <code>top_logprobs</code> even at 20. That is a sentinel, not a log-probability;
+        summing it produced a confident-looking <code>p = 0</code>, so such strings are
+        reported as unscored rather than scored wrongly.</p>
+    </div>
+  </section>
+
+  <section id="extend">
+    <h2>Extending a view</h2>
+    <p>Every view can be pushed further, and what "further" means depends on the view.
+      Nothing extends on its own — each of these costs real API calls and is started
+      explicitly.</p>
+    <table>
+      <tr><th>View</th><th>Extending it means</th><th>Where</th></tr>
+      <tr><td><b>Completions / Prefixes</b></td>
+          <td>Expand the best prefix not yet tried, so the database grows in the same
+              order the list is read in</td>
+          <td>Builder, in the browser</td></tr>
+      <tr><td><b>Alternatives grid</b></td>
+          <td>Sweep a base: follow every alternative at every position — 20 × 20 calls
+              for one base</td>
+          <td><code>sweep_alternatives.py</code></td></tr>
+      <tr><td><b>Cheapest-deviation walk</b></td>
+          <td>Pay for the next regeneration the walk stopped at — one call per step</td>
+          <td><code>sweep_alternatives.py</code>, or step it in the token browser</td></tr>
+      <tr><td><b>Single string</b></td>
+          <td>Click a token to follow an alternative; the call happens only if no
+              record answers it</td>
+          <td>Token browser</td></tr>
+    </table>
+    <p>The <b>Builder</b> expands the best untried candidate first (best-first, same
+      ordering as the Prefixes view), so the database grows in the order it will be read.
+      It also runs a <b>simulation mode with no API calls at all</b>, and it can prove a
+      top-K: any token outside the top 20 has a logprob at or below the smallest one
+      shown, which bounds the whole unseen subtree and lets the frontier be cut off
+      without exploring it.</p>
+  </section>
+
+  <section id="store">
+    <h2>The store</h2>
+    <p>The store is <code>server.py</code>. It holds every record from every source
+      file — the root history, all sweeps, the builder's output — and answers one
+      question the whole set used to answer four different ways:
+      <b>do we already have this call?</b></p>
+    <p>Both generators ask it as the last stop before spending. The order is: this
+      browser's own history, then the imported sweep cache, then the store, and only then
+      the API. In the builder that turned seven expansions costing seven calls into seven
+      expansions costing nothing.</p>
+    <p>It can be switched off — a chip in the token browser, a select in the builder —
+      and it switches itself off in effect whenever it cannot be reached. Either way the
+      program falls back to exactly what it did before: call the API. The lists, on the
+      other hand, are computed by the store, so with it stopped they will not load at all.</p>
+    <p>Rankings are served live rather than read from exported files. An export goes
+      stale silently: the one that fed this viewer had been built from 391 records while
+      8492 existed, and contained no sweep data at all.</p>
+  </section>
+
+  <section id="terms">
+    <h2>Terminology</h2>
+    <table>
+      <tr><th>Here</th><th>Standard term</th><th>Meaning</th></tr>
+      <tr><td>logprob</td><td>log-probability</td><td>natural log of a probability; ≤ 0</td></tr>
+      <tr><td>Σ logprob</td><td>cumulative / sequence log-probability</td><td>log P of the whole string</td></tr>
+      <tr><td>greedy, chosen</td><td>argmax, greedy decoding</td><td>the most probable token at that position</td></tr>
+      <tr><td>alternatives</td><td>top-k / <code>top_logprobs</code></td><td>the k highest-ranked tokens at a position</td></tr>
+      <tr><td>prefix</td><td>prefix, hypothesis</td><td>a path from the start through the token trie</td></tr>
+      <tr><td>best-first</td><td>uniform-cost search, Dijkstra</td><td>expand the cheapest frontier node first</td></tr>
+      <tr><td>list of prefixes</td><td>n-best / k-best list</td><td>the n highest-scoring sequences</td></tr>
+      <tr><td>frontier</td><td>frontier, open set, beam</td><td>candidates found but not yet expanded</td></tr>
+      <tr><td>base completion</td><td>reference / base hypothesis</td><td>the string deviations are measured against</td></tr>
+      <tr><td>deviation</td><td>single-token edit / substitution</td><td>replacing one token with an alternative</td></tr>
+      <tr><td>sweep</td><td>exhaustive one-token perturbation</td><td>every alternative at every position</td></tr>
+      <tr><td>walk</td><td>greedy hill-climbing / local search</td><td>repeatedly take the cheapest edit</td></tr>
+      <tr><td>unseen ceiling</td><td>upper bound on the unexplored subtree</td><td>see Builder</td></tr>
+      <tr><td>store</td><td>record store, cache</td><td>every call ever made, queryable</td></tr>
+    </table>
+    <p>The exact-decoding literature calls what the Prefixes view does <b>exact MAP
+      decoding</b> when it runs to completion, and the result an <b>n-best</b> or
+      <b>k-best list</b>. Searching a lattice this way is standard; what is unusual here
+      is doing it against a hosted model through <code>top_logprobs</code> rather than
+      against local model weights.</p>
+  </section>
+</div>
+
+<script>
+fetch('/api/stats', { cache: 'no-store' })
+  .then(r => r.json())
+  .then(s => { document.getElementById('navStore').textContent = s.records + ' records'; })
+  .catch(() => { document.getElementById('navStore').textContent = 'store not answering'; });
+</script>
+</body>
+</html>

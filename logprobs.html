@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logprobs — jeden řetězec</title>
+  <title>Logprobs — single string</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="/app.css">
   <style>
@@ -147,56 +147,56 @@
 </head>
 <body>
 <nav class="appnav">
-  <a href="/">&#8592; Rozcestník</a><span class="sep">|</span>
-  <a href="/logprobs.html" aria-current="page">Jeden řetězec</a>
-  <a href="/dijkstra.html">Seznamy</a>
-  <a href="/builder.html">Builder</a>
+  <a href="/">Start</a><span class="sep">|</span>
+  <a href="/logprobs.html" aria-current="page">Single string</a>
+  <a href="/dijkstra.html">Lists</a><span class="sep">|</span>
+  <a href="/help.html">Help</a>
   <span class="right" id="navStore">…</span>
 </nav>
 <script>
-/* Lista rika, ve kterem ze ctyr programu clovek je, a jestli server odpovida —
-   pri nedostupnem serveru se nektere pohledy chovaji jinak a je lepsi to videt
-   hned, ne az z prazdne tabulky. */
+/* The strip says which page you are on and whether the store answers. Several
+   views behave differently when it does not, and noticing that from an empty
+   table is worse than being told. */
 fetch('/api/stats', { cache: 'no-store' })
   .then(r => r.json())
-  .then(s => { document.getElementById('navStore').textContent = s.records + ' záznamů'; })
-  .catch(() => { document.getElementById('navStore').textContent = 'server neodpovídá'; });
+  .then(s => { document.getElementById('navStore').textContent = s.records + ' records'; })
+  .catch(() => { document.getElementById('navStore').textContent = 'store not answering'; });
 </script>
 
   <div id="header">
     <div id="statusArea">
-      <span id="loading">Načítám tokeny…</span>
+      <span id="loading">loading tokens…</span>
       <span id="status"></span>
     </div>
     <div id="toolbar">
       <div class="grp" role="group" aria-label="Strom">
         <button id="newTreeBtn"
-          title="Založí nový strom. V dialogu zadáš výchozí prompt (prázdný = nepodmíněný začátek) a max_tokens.">Nový strom…</button>
+          title="Start a new tree. The dialog asks for the starting prompt (empty = unconditional) and max_tokens.">New tree…</button>
         <button id="continueBtn4096" hidden
-          title="Zahodí zobrazené pokračování a vygeneruje nové z téhož promptu, ale s max_tokens 4096 — tedy až na strop modelu. Pozor: výrazně dražší než běžné klikání.">Dogenerovat 4096</button>
+          title="Throws away the continuation shown and generates a new one from the same prompt with max_tokens 4096, i.e. up to the model ceiling. Note: far dearer than ordinary clicking.">Generate 4096</button>
       </div>
 
       <div class="grp" role="group" aria-label="Data">
         <button id="promptsBtn" hidden
-          title="Seznam všech promptů v historii, s hledáním. Kliknutím na prompt zobrazíš jeho záznamy.">Prompty</button>
+          title="Every prompt in the history, searchable. Click one to see its records.">Prompts</button>
         <button id="objectBtn" hidden
-          title="Zobrazí surový JSON aktuálního záznamu — request, tokeny, logprobs, usage. Lze i editovat a uložit.">Zdrojová data</button>
+          title="The raw JSON of the current record: request, tokens, logprobs, usage. Editable and savable.">Raw record</button>
         <button id="exportBtn" hidden
-          title="Stáhne celou historii jako completion_history.json.">Export <span class="cnt" id="savedCount">0</span></button>
+          title="Download the whole history as completion_history.json.">Export <span class="cnt" id="savedCount">0</span></button>
         <button id="sweepBtn"
-          title="Načte sweep databáze jako cache pro čtení. Klik na token pak nejdřív hledá tam a volá API jen tehdy, když data nemáme. Import je jednorázový a trvalý.">Sweep cache <span class="cnt" id="sweepCount">0</span></button>
+          title="Imports the sweep databases as a read-only cache. A token click looks there first and calls the API only when nothing has the answer. The import is one-off and permanent.">Sweep cache <span class="cnt" id="sweepCount">0</span></button>
         <button id="storeBtn" aria-pressed="true"
-          title="Ptát se serveru (server.py) na záznamy, které v tomto prohlížeči nejsou, ještě než se zaplatí volání. Vypnutím se program chová přesně jako dřív.">Store <span class="cnt" id="storeCount">?</span></button>
+          title="Ask the store (server.py) for records this browser does not have, before a call is paid for. Switching it off makes the program behave exactly as before.">Store <span class="cnt" id="storeCount">?</span></button>
       </div>
 
-      <div class="grp" role="group" aria-label="Údržba">
+      <div class="grp" role="group" aria-label="Maintenance">
         <button id="repairBtn" hidden
-          title="Přepočítá u promptových tokenů odkazy (ids) na záznamy, ze kterých pocházejí. Potřeba jen když odkazy chybí nebo nesouhlasí.">Opravit odkazy</button>
+          title="Recompute, for each prompt token, the link to the record it came from. Only needed when those links are missing or wrong.">Repair links</button>
         <button id="clearBtn" class="danger" hidden
-          title="Nevratně smaže celou historii v prohlížeči. Sweep cache zůstane. Nejdřív si udělej Export!">Vymazat historii</button>
+          title="Permanently deletes the whole history in this browser. The sweep cache stays. Export first!">Clear history</button>
       </div>
 
-      <label class="fld" for="modelSelect" title="Model, kterým se generuje. Uzamyká se na záznam: data z jednoho modelu se nemíchají s druhým.">
+      <label class="fld" for="modelSelect" title="Which model generates. Recorded per record: data from different models is never mixed.">
         <span>model</span>
         <select id="modelSelect">
           <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
@@ -205,72 +205,73 @@ fetch('/api/stats', { cache: 'no-store' })
         </select>
       </label>
 
-      <button id="helpBtn" class="icon" title="Nápověda — co které tlačítko dělá" aria-label="Nápověda">?</button>
+      <button id="helpBtn" class="icon" title="Help — what each control does" aria-label="Help">?</button>
     </div>
   </div>
 
   <div id="helpPanel" hidden>
-    <h2>Co která věc dělá</h2>
+    <h2>What each control does</h2>
     <dl>
-      <dt>Nový strom…</dt>
-      <dd>Založí nový strom. V dialogu zadáš <b>výchozí prompt</b> — prázdný znamená
-        nepodmíněný začátek, tedy co model řekne „sám od sebe“. Zadaný prompt se
-        v textu zobrazí <span class="token is-prompt">šedě</span>; nemá alternativy,
-        protože jeho logprobs API nevrací.</dd>
+      <dt>New tree…</dt>
+      <dd>Starts a new tree. The dialog asks for the <b>starting prompt</b> — empty means
+        unconditional, i.e. what the model says on its own. A given prompt is shown
+        <span class="token is-prompt">greyed</span> in the text; it has no alternatives,
+        because the API returns logprobs only for tokens it generated.</dd>
 
-      <dt>Dogenerovat 4096</dt>
-      <dd>Zahodí zobrazené pokračování a vygeneruje z téhož promptu nové, dlouhé
-        až na strop modelu. <b>Řádově dražší</b> než běžné klikání — jedno stisknutí
-        stojí asi tolik jako dvě stě kliknutí na token.</dd>
+      <dt>Generate 4096</dt>
+      <dd>Throws away the continuation shown and generates a new one from the same
+        prompt, up to the model's ceiling. <b>Orders of magnitude dearer</b> than ordinary
+        clicking — one press costs about as much as two hundred token clicks.</dd>
 
       <dt>Prompty</dt>
-      <dd>Seznam všech promptů v historii s hledáním. Kliknutím na prompt uvidíš
-        jeho záznamy a můžeš se na kterýkoli přepnout.</dd>
+      <dd>Every prompt in the history, searchable. Click one to see its records and
+        switch to any of them.</dd>
 
-      <dt>Zdrojová data</dt>
-      <dd>Surový JSON aktuálního záznamu: odeslaný request, tokeny, logprobs,
-        <code>usage</code>, identifikátor volání. Jde i editovat a uložit.</dd>
+      <dt>Raw record</dt>
+      <dd>The current record as JSON: the request sent, tokens, logprobs,
+        <code>usage</code>, the call id. Editable and savable.</dd>
 
       <dt>Export</dt>
-      <dd>Stáhne celou historii jako <code>completion_history.json</code>. Číslo
-        udává, kolik záznamů v ní je.</dd>
+      <dd>Downloads the whole history as <code>completion_history.json</code>. The number
+        is how many records it holds.</dd>
 
       <dt>Sweep cache</dt>
-      <dd>Načte sweep databáze jako cache <i>pro čtení</i>. Klik na token pak hledá
-        nejdřív ve vlastní historii, pak tady, a <b>API volá jen když data nemáme</b>.
-        Import je jednorázový a trvalý; leží v oddělené databázi, takže tvou historii
-        nemůže poškodit.</dd>
+      <dd>Imports the sweep databases as a <i>read-only</i> cache. A token click then looks
+        in this browser's own history first, then here, and <b>calls the API only when
+        nothing has the answer</b>. The import is one-off and permanent, and lives in a
+        separate database, so it cannot damage your history.</dd>
 
       <dt>Store</dt>
-      <dd>Ptá se serveru (<code>server.py</code>) na záznamy, které v tomto prohlížeči
-        nejsou — a to <b>až po</b> vlastní historii i sweep cache, tedy jako poslední
-        zastávku před zaplacením volání. Číslo je počet záznamů, které server drží;
-        <code>—</code> znamená, že neodpovídá (statický server nebo neběží).
-        <b>Vypnutím se program chová přesně jako dřív</b>, a stejně se zachová i sám,
-        když server nedostupný je.</dd>
+      <dd>Asks the store (<code>server.py</code>) for records this browser does not have —
+        and only <b>after</b> its own history and the sweep cache, i.e. as the last stop
+        before a call is paid for. The number is how many records the store holds;
+        <code>—</code> means it is not answering (a plain static server, or not running).
+        <b>Switching it off makes the program behave exactly as it did before</b>, and it
+        does the same by itself whenever the store cannot be reached.</dd>
 
       <dt>Opravit odkazy</dt>
-      <dd>Přepočítá u promptových tokenů odkazy na záznamy, ze kterých pocházejí.
-        Potřeba jen když odkazy chybí nebo nesouhlasí.</dd>
+      <dd>Recomputes, for each prompt token, the link to the record it came from. Only
+        needed when those links are missing or wrong.</dd>
 
       <dt>Vymazat historii</dt>
-      <dd>Nevratně smaže historii v prohlížeči. Sweep cache zůstává.
-        <b>Nejdřív Export.</b></dd>
+      <dd>Permanently deletes the history in this browser. The sweep cache stays.
+        <b>Export first.</b></dd>
 
       <dt>model</dt>
-      <dd>Kterým modelem se generuje. Do každého záznamu se ukládá, takže se data
-        z různých modelů nemíchají. <code>davinci-002</code> a <code>babbage-002</code>
-        vracejí jen 5 alternativ na pozici místo 20.</dd>
+      <dd>Which model generates. It is stored in every record, so data from different
+        models never gets mixed. <code>davinci-002</code> and <code>babbage-002</code>
+        return only 5 alternatives per position instead of 20.</dd>
     </dl>
     <h2>V textu</h2>
     <dl>
       <dt>klik na token</dt>
-      <dd>Ukáže 20 nejpravděpodobnějších alternativ na té pozici s logprobem
-        i pravděpodobností. Klik na alternativu v tabulce větví strom — vygeneruje
-        pokračování, jako by model na tom místě vybral ji.</dd>
-      <dt>stavová hláška</dt>
-      <dd><b>Načteno!</b> = z vlastní historie · <b>Načteno ze sweep DB</b> = z cache ·
-        <b>Uloženo!</b> = muselo se skutečně zavolat API.</dd>
+      <dd>Shows the 20 most probable alternatives at that position with their logprob and
+        probability. Clicking one in the table branches the tree — it generates the
+        continuation as if the model had picked that token there.</dd>
+      <dt>the status message</dt>
+      <dd><b>Loaded</b> = from this browser's history · <b>Loaded from the sweep cache</b> or
+        <b>from the store</b> = no call was made · <b>Saved</b> = the API really was called
+        and it cost money.</dd>
     </dl>
   </div>
 
@@ -294,25 +295,25 @@ fetch('/api/stats', { cache: 'no-store' })
   <div id="newTreeOverlay" class="hidden">
     <div id="newTreeBox">
       <div id="newTreeHeader">
-        <span>Nový strom — výchozí prompt</span>
+        <span>New tree — starting prompt</span>
         <button id="newTreeClose" aria-label="Close">×</button>
       </div>
       <div id="newTreeBody">
-        <p class="hint">Nechej prázdné pro nepodmíněný strom (jako dosud). Jinak se strom
-          založí z tohoto textu. Prompt se v zobrazení ukáže jako jeden celek — jeho
-          logprobs neznáme, API je vrací jen pro vygenerované tokeny.</p>
+        <p class="hint">Leave it empty for an unconditional tree. Otherwise the tree starts
+          from this text. The prompt is shown as one block: its logprobs are unknown, since
+          the API returns them only for tokens it generated.</p>
         <textarea id="newTreePrompt" spellcheck="false" rows="6"
-                  placeholder="(prázdné = nepodmíněný začátek)"></textarea>
+                  placeholder="(empty = unconditional start)"></textarea>
         <div class="row2">
           <label>max_tokens
             <input type="number" id="newTreeMax" value="20" min="1" max="4096">
           </label>
-          <span class="hint" id="newTreeHintMax">20 se shoduje se sweep daty, takže je
-            větší šance na zásah cache místo placeného volání.</span>
+          <span class="hint" id="newTreeHintMax">20 matches the sweep data, so a cache hit is
+            likelier than a paid call.</span>
         </div>
         <div class="row2">
-          <button id="newTreeGo" class="primary">Založit strom</button>
-          <button id="newTreeCancel">Zrušit</button>
+          <button id="newTreeGo" class="primary">Start tree</button>
+          <button id="newTreeCancel">Cancel</button>
         </div>
       </div>
     </div>
@@ -386,12 +387,61 @@ function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('err
 async function updateSavedCount(){ try{ const n = await idbCount(); savedCountEl.textContent = n; }catch{ savedCountEl.textContent = '0'; } }
 function toPlainTokens(arr){return (arr||[]).map(t=>typeof t==='string'?t:(t&&typeof t.token==='string'?t.token:String(t)))}
 
+/* ?id= opens one record, ?prompt= starts a tree from a given prompt.
+
+   The id may name a record this browser has never seen -- the start page resolves
+   the top-ranked entry from the store, which holds every call ever made. So on a
+   local miss the record is fetched from the store and written to IndexedDB, and
+   only then opened; that also keeps the invariant that everything on screen came
+   from the local database.
+
+   ?prompt= deliberately does NOT generate. It fills in the new-tree dialog and
+   leaves it open, because starting a tree can cost a call and a link must never
+   be able to spend money on its own. */
+async function openFromUrl() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  const prompt = params.get('prompt');
+
+  if (id) {
+    let entry = null;
+    try { entry = await idbGet(id); } catch {}
+    if (!entry) {
+      try {
+        const res = await fetch('/api/record?id=' + encodeURIComponent(id), { cache: 'no-store' });
+        if (res.ok) {
+          const rec = await res.json();
+          if (rec && rec.id) { await idbPut(rec); entry = rec; }
+        }
+      } catch { /* store down: fall through to the default tree */ }
+    }
+    if (entry) {
+      await openEntryById(id);
+      await updateSavedCount();
+      return true;
+    }
+    showStatus('Record ' + id + ' not found here or in the store');
+    return false;
+  }
+
+  if (prompt !== null && typeof openNewTreeDialog === 'function') {
+    openNewTreeDialog(prompt);
+    return false;   // the default tree still loads behind the dialog
+  }
+  return false;
+}
+
 /* ============ INITIAL LOAD ============ */
 async function loadTokens() {
   try {
     await migrateFromLocalStorage();
     await autoImportHistoryFile();
     await autoLoadApiKey();
+
+    // A link from the start page or from a list can name what to open. Handled
+    // before the default tree is built, so the default work is not wasted.
+    if (await openFromUrl()) return;
+
     const res = await fetch('logprobs.json');
     const data = await res.json();
 
@@ -466,7 +516,7 @@ async function loadTokens() {
         model: data.model,
         previous_response_id: null,
         prompt: {
-          text: "", // Chat prompt se neukládá explicitně
+          text: "", // the chat prompt is not stored explicitly
           index: 0,
           logprobs: { tokens: [], token_logprobs: [], top_logprobs: [] }
         },
@@ -495,8 +545,8 @@ async function loadTokens() {
       throw new Error("Unsupported JSON format");
     }
 
-    // Ulož aktuální položku do IndexedDB, aby bylo možné zobrazit její raw data,
-    // i když už existují starší záznamy v historii.
+    // Store the current entry in IndexedDB so its raw record can be shown even
+    // when older records already exist in the history.
     await idbPut(firstEntry);
     await updateSavedCount();
 
@@ -674,14 +724,14 @@ async function sweepImport(){
   let total = 0;
   for(const f of SWEEP_FILES){
     try{
-      showStatus(`sweep DB: načítám ${f}…`);
+      showStatus(`sweep cache: loading ${f}…`);
       const arr = await sweepFetchRecords(f);
       // po davech, aby jedna transakce nedrzela desitky MB
       for(let i=0;i<arr.length;i+=500){
         await sweepPutBatch(arr.slice(i, i+500));
       }
       total += arr.length;
-      showStatus(`sweep DB: ${f} → ${arr.length} záznamů`);
+      showStatus(`sweep cache: ${f} → ${arr.length} records`);
       await sweepUpdateCount();
     }catch(err){
       showStatus(`sweep DB: ${f} selhalo — ${err.message}`);
@@ -689,7 +739,7 @@ async function sweepImport(){
     }
   }
   const n = await sweepUpdateCount();
-  showStatus(`sweep DB: hotovo, ${n} záznamů v cache`);
+  showStatus(`sweep cache: done, ${n} records`);
   return total;
 }
 
@@ -730,7 +780,7 @@ async function sweepLookup(promptTokens, model, maxTokens){
 }
 
 /* Hledani podle TEXTU promptu. Pro rucne zadany prompt je to jedina cesta:
-   jeho tokenizaci neznáme (API vraci logprobs jen pro vygenerovane tokeny),
+   its tokenisation is unknown (the API returns logprobs only for generated tokens),
    takze podle pole tokenu ho dohledat nelze. Kdyz se najde, vezme se i jeho
    skutecne tokenizovane pole — coz je lepsi, nez si prompt drzet jako jeden
    neprubojny celek. */
@@ -838,7 +888,7 @@ async function autoImportHistoryFile(){
     if (Array.isArray(arr) && arr.length) {
       await idbBulkPut(arr);
       await updateSavedCount();
-      showStatus(`Historie načtena z completion_history.json (${arr.length})`);
+      showStatus(`History loaded from completion_history.json (${arr.length})`);
     }
   }catch{}
 }
@@ -864,7 +914,7 @@ function estimateBytes(str){ try { return new TextEncoder().encode(str).length; 
 
 function clone(obj){ return JSON.parse(JSON.stringify(obj)); }
 
-// Odlehčení historie: u starších položek odstraníme největší pole (top_logprobs)
+// Slimming the history: drop the largest field (top_logprobs) from older entries
 function compactHistory(hist, keepLastN=60){
   const out = clone(hist);
   for (let i=0; i<out.length - keepLastN; i++){
@@ -900,17 +950,17 @@ function persistHistory(hist){
     updateSavedCount();
     return {ok:true, evicted:0, exported:0, used: s.length};
   } catch (err) {
-    // Bez mačkání: místo kompakce exportujeme nejstarší chunk a smažeme ho, dokud se nevejdeme
+    // No squeezing: instead of compacting, export the oldest chunk and delete it until it fits
     let tmp = JSON.parse(JSON.stringify(hist));
     let removedTotal = 0;
     let exportedCount = 0;
-    let chunk = Math.max(10, Math.ceil(tmp.length * 0.25)); // začni čtvrtinou historie (min 10)
+    let chunk = Math.max(10, Math.ceil(tmp.length * 0.25)); // start with a quarter (min 10)
 
     while (tmp.length > 1) {
       const take = Math.min(chunk, Math.max(1, tmp.length - 1));
       const removed = tmp.splice(0, take);
       removedTotal += removed.length;
-      // export právě odříznutého bloku
+      // export the block just cut off
       try {
         const fname = `completion_history_archive_${fmtTs()}_${removed.length}.json`;
         downloadBlob(JSON.stringify(removed), fname);
@@ -922,7 +972,7 @@ function persistHistory(hist){
         showStatus(`Storage full — exported & cleared ${removedTotal} oldest item(s).`);
         return {ok:true, evicted:removedTotal, exported:exportedCount, used:s2.length};
       } catch (e) {
-        // pořád plné: zmenši chunk a zkus znovu
+        // still full: shrink the chunk and retry
         if (chunk > 1) chunk = Math.max(1, Math.floor(chunk / 2));
         continue;
       }
@@ -957,7 +1007,7 @@ async function getCompletionById(id) {
     if (!scl || sct.length === 0) return null;
     const baseIdx = sp.length;
 
-    // EXAKTNÍ SHODA
+    // EXACT MATCH
     {
       const all = sp.concat(sct);
       if (currPromptArr.length > 0 && all.length >= currPromptArr.length){
@@ -999,7 +1049,7 @@ async function getCompletionById(id) {
     entry.previous_response_id = mapping.src.id; await idbPut(entry); source = mapping.src;
   } else if (mapping){ source = mapping.src; }
 
-  // ---- Prefetch zdrojů dle IDS pro prompt tokeny (včetně INITIAL_ID) ----
+  // ---- Prefetch the source records named by IDS for prompt tokens (incl. INITIAL_ID) ----
   const INITIAL_ID = 'cmpl-Bxpc9AqOf2sIPVVJ9hStmVtyNXV9O';
   const promptIds = Array.isArray(entry?.prompt?.logprobs?.ids) ? entry.prompt.logprobs.ids : [];
   const uniqueIds = Array.from(new Set(
@@ -1011,7 +1061,7 @@ async function getCompletionById(id) {
   const srcMap = Object.create(null);
   for (const { id: cid, entry: e } of srcEntriesArr) if (e) srcMap[cid] = e;
 
-  // Helper: vytáhne top_logprobs pro „další token“ u kandidáta pro token promptu i
+  // Helper: pull top_logprobs for the "next token" from the candidate for prompt token i
   function extractNextTokenLogprobsFromCandidate(candEntry, i /* index tokenu v target promptu */) {
     if (!candEntry) return null;
 
@@ -1034,11 +1084,11 @@ async function getCompletionById(id) {
     }
     if (!cCompTokens || !cTopArr) return null;
 
-    // Relativní index v completion kandidáta
+    // index relative to the candidate's completion
     let k = i - cPromptToks.length;
 
-    // ✅ Nově: pokud i leží "uvnitř" promptu kandidáta (i < promptLen),
-    // použij první krok jeho completion (k = 0) – to umožní i initial ID na i===0.
+    // If i falls "inside" the candidate's prompt (i < promptLen), use the first
+    // step of its completion (k = 0) -- that also allows the initial id at i === 0.
     if (k < 0) k = 0;
 
     if (k >= cCompTokens.length) return null;
@@ -1056,7 +1106,7 @@ async function getCompletionById(id) {
     };
   }
 
-  // pomocný fallback: zkus vytáhnout distribuci pro prompt token i z "mapping source"
+  // fallback: try to recover the distribution for prompt token i from the mapping source
   function extractFromMappingForPromptIndex(i) {
     try {
       if (!mapping || !source) return null;
@@ -1076,8 +1126,8 @@ async function getCompletionById(id) {
                 : Array.isArray(scl.content) ? scl.content.map(t => t.logprob)
                 : [];
 
-      const baseIdx     = mapping.baseIdx;   // délka promptu zdroje
-      const subseqStart = mapping.start;     // kde v (prompt+completion) zdroje začíná náš prompt
+      const baseIdx     = mapping.baseIdx;   // length of the source prompt
+      const subseqStart = mapping.start;     // where our prompt starts in the source string
 
       const abs = subseqStart + i;
       const idxInCompletion = abs - baseIdx;
@@ -1097,15 +1147,15 @@ async function getCompletionById(id) {
     } catch { return null; }
   }
 
-  // ---- Sestavení PROMPT tokenů s alternativami z IDS (vč. initial pro i===0; fallback přes mapping) ----
+  // ---- Build PROMPT tokens with alternatives from IDS (incl. initial for i===0; mapping fallback) ----
   const promptRawTokens = entry?.prompt?.logprobs?.tokens || [];
   const promptTokensUI = promptRawTokens.map((t, i) => {
     const idList = Array.isArray(promptIds[i]) ? promptIds[i] : [];
     let chosen = null;
 
-    // 1) standardně z ids (NEPŘESKAKUJ initial pro i===0)
+    // 1) normally from ids (do NOT skip initial for i===0)
     for (const cid of idList) {
-      // initial klidně ignoruj pro i>0, ale není nutné — repairLinks ho stejně dává jen na index 0
+      // initial may be ignored for i>0, though it need not be: repairLinks only ever puts it at index 0
       if (cid === INITIAL_ID && i !== 0) continue;
 
       const src = srcMap[cid];
@@ -1130,13 +1180,13 @@ async function getCompletionById(id) {
       return { token: t, logprob: lpForT, top_logprobs: res.top_logprobs_sorted, isPrompt: true };
     }
 
-    // nic použitelného → prázdné alternativy
+    // nothing usable -> no alternatives
     // isPrompt i tady: zaznam otevreny z historie musi vypadat stejne jako
     // hned po vytvoreni, jinak se rozliseni promptu ztrati pri reloadu
     return { token: t, logprob: null, top_logprobs: [], isPrompt: true };
   });
 
-  // ---- Sestavení COMPLETION tokenů (beze změny) ----
+  // ---- Build COMPLETION tokens (unchanged) ----
   const scl = entry?.choices?.[0]?.logprobs || null;
   let compTokens = Array.isArray(scl?.tokens) ? scl.tokens
                  : Array.isArray(scl?.content) ? scl.content.map(t => t.token)
@@ -1157,7 +1207,7 @@ async function getCompletionById(id) {
     return { token: t, logprob: compTokLPs[i], top_logprobs: sorted };
   });
 
-  // ---- Vrácení sjednoceného pohledu (prompt + completion) pro renderer ----
+  // ---- Return the unified view (prompt + completion) for the renderer ----
   const allTokens = promptTokensUI.concat(completionTokensUI);
   return {
     promptTokens: toPlainTokens(promptRawTokens),
@@ -1283,12 +1333,12 @@ async function continueFromPromptOnly(maxTokens) {
   const prev = await getCompletionById(prevId);
   if (!prev) {
     console.error('[ERROR] Cannot continue: previous completion not found');
-    showStatus('Nelze pokračovat – chybí aktuální záznam');
+    showStatus('Cannot continue — no current record');
     return;
   }
 
-  // Použij pouze původní prompt (bez completionu). 0 je platná délka (prázdný
-  // prompt, např. kořen stromu) — není to chybějící data, nic se nefallbackuje.
+  // Use only the original prompt, without the completion. 0 is a valid length (an
+  // empty prompt, e.g. the tree root) -- not missing data, so nothing falls back.
   const promptOnlyIdx = prev.promptTokens.length;
 
   const result = await createCompletion(prevId, promptOnlyIdx, undefined, maxTokens);
@@ -1306,7 +1356,7 @@ async function continueFromPromptOnly(maxTokens) {
   safeTokens = allTokens.map(t => t.token);
   currentCompletionId = result.response.id;
   renderTokens(allTokens);
-  showStatus(hitLabel(result, 'Pokračování (z promptu) nahrazeno!'));
+  showStatus(hitLabel(result, 'Continuation from the prompt replaced — saved'));
 }
 
 /* ============ API HELPER ============ */
@@ -1378,7 +1428,7 @@ async function fetchCompletionAutoFit(prompt, maxTokens, key, model){
           data = await callOnce(effectiveMax);
         }
       } else {
-        // Fallback: vytáhni čísla bez regex escape problémů
+        // Fallback: pull the numbers out without regex-escaping trouble
         const nums = [];
         let cur = '';
         for (let ch of msg) {
@@ -1485,7 +1535,7 @@ function showTopLogprobs(e,tokens,idx){
 function positionTooltip(e){
   const rect = e.currentTarget.getBoundingClientRect();
 
-  // Zviditelnit kvůli měření, ale neukazovat
+  // Made visible so it can be measured, but not shown
   const prevVis = tooltipEl.style.visibility;
   tooltipEl.classList.remove('hidden');
   tooltipEl.style.visibility = 'hidden';
@@ -1520,7 +1570,7 @@ async function completion(e){
   const result=await createCompletion(currentCompletionId,idx,altToken,16);
   if(!result) return;
   applyCompletion(result.response,idx,altToken);
-  showStatus(hitLabel(result, 'Uloženo!'));
+  showStatus(hitLabel(result, 'Saved — the API was called'));
 }
 
 async function ensureApiKey(){
@@ -1546,11 +1596,11 @@ exportBtn.addEventListener('click', async ()=>{
 clearBtn.addEventListener('click', async ()=>{
   await idbClear();
   await updateSavedCount();
-  showStatus('Historie vymazána');
+  showStatus('History cleared');
 });
 
-// Nové chování: pokračovat z POUHÉHO promptu
-// Nové tlačítko 4096
+// Continue from the PROMPT ALONE
+// the 4096 button
 if (continueBtn4096) continueBtn4096.addEventListener('click',()=>continueFromPromptOnly(4096));
 
 document.addEventListener('click',()=>tooltipEl.classList.add('hidden'),{passive:true});
@@ -1560,7 +1610,7 @@ window.addEventListener('DOMContentLoaded',loadTokens);
 async function showCurrentRaw(){
   try{
     const entry = await idbGet(currentCompletionId);
-    if(!entry){ showStatus('Nenalezen aktuální záznam'); return; }
+    if(!entry){ showStatus('Current record not found'); return; }
 
     rawEntryId  = entry.id || null;
     rawLastText = JSON.stringify(entry, null, 2);
@@ -1576,7 +1626,7 @@ async function showCurrentRaw(){
     rawOverlay.classList.remove('hidden');
     setTimeout(()=> rawText.scrollTop = 0, 0);
   }catch(err){
-    showStatus('Chyba při čtení raw dat');
+    showStatus('Could not read the raw record');
   }
 }
 
@@ -1594,27 +1644,27 @@ async function saveRawEdit(){
     const text = rawText.value;
     let obj;
     try { obj = JSON.parse(text); }
-    catch(e){ showStatus('Neplatný JSON: ' + e.message); statusEl.classList.add('error'); return; }
+    catch(e){ showStatus('Invalid JSON: ' + e.message); statusEl.classList.add('error'); return; }
 
     if (!obj || typeof obj !== 'object') {
-      showStatus('Neplatný obsah: očekáván JSON objekt'); statusEl.classList.add('error'); return;
+      showStatus('Invalid content: a JSON object was expected'); statusEl.classList.add('error'); return;
     }
 
-    // Bezpečnost: pokud chybí id, zastav
+    // Safety: stop if the id is missing
     if (!obj.id || typeof obj.id !== 'string') {
-      showStatus('Objekt musí mít platné "id"'); statusEl.classList.add('error'); return;
+      showStatus('The object needs a valid "id"'); statusEl.classList.add('error'); return;
     }
 
     softValidateEntry(obj);
 
-    // Ulož do IndexedDB
+    // Save to IndexedDB
     await idbPut(obj);
     await updateSavedCount();
 
-    // Pokud se změnilo ID, přepneme aktuální výběr
+    // If the id changed, move the current selection with it
     currentCompletionId = obj.id;
 
-    // Refresh zobrazených tokenů (pokud se uživatel dívá na tento objekt)
+    // Redraw the tokens if this is the record being looked at
     try {
       const view = await getCompletionById(currentCompletionId);
       if (view) {
@@ -1633,9 +1683,9 @@ async function saveRawEdit(){
     rawSave.hidden   = true;
     rawCancel.hidden = true;
 
-    showStatus('Uloženo.');
+    showStatus('Saved.');
   }catch(err){
-    showStatus('Chyba při ukládání'); statusEl.classList.add('error');
+    showStatus('Could not save'); statusEl.classList.add('error');
   }
 }
 
@@ -1648,7 +1698,7 @@ function cancelRawEdit(){
   rawSave.hidden   = true;
   rawCancel.hidden = true;
 
-  showStatus('Změny zrušeny');
+  showStatus('Changes discarded');
 }
 
 function softValidateEntry(obj){
@@ -1656,8 +1706,8 @@ function softValidateEntry(obj){
     const toks = obj?.prompt?.logprobs?.tokens || [];
     const ids  = obj?.prompt?.logprobs?.ids || [];
     if (Array.isArray(toks) && Array.isArray(ids) && ids.length && ids.length !== toks.length) {
-      console.warn('Varování: tokens length != ids length', toks.length, ids.length);
-      showStatus('Varování: tokens a ids mají různou délku');
+      console.warn('Warning: tokens length != ids length', toks.length, ids.length);
+      showStatus('Warning: tokens and ids have different lengths');
     }
   }catch{}
 }
@@ -1668,7 +1718,7 @@ if (rawCancel) rawCancel.addEventListener('click', cancelRawEdit);
 
 if (rawClose) rawClose.addEventListener('click', ()=>{
   if (rawEditMode) {
-    const ok = confirm('Máte neuložené změny. Opravdu zavřít?');
+    const ok = confirm('There are unsaved changes. Close anyway?');
     if (!ok) return;
   }
   rawOverlay.classList.add('hidden');
@@ -1677,7 +1727,7 @@ if (rawClose) rawClose.addEventListener('click', ()=>{
 if (rawOverlay) rawOverlay.addEventListener('click', (e)=>{
   if (e.target === rawOverlay) {
     if (rawEditMode) {
-      const ok = confirm('Máte neuložené změny. Opravdu zavřít?');
+      const ok = confirm('There are unsaved changes. Close anyway?');
       if (!ok) return;
     }
     rawOverlay.classList.add('hidden');
@@ -1713,7 +1763,7 @@ async function startNewTree(promptText = '', maxTokens = 16){
   const model = getSelectedModel();
   promptText = String(promptText ?? '');
 
-  // Tokenizaci vlastniho promptu neznáme — API vraci logprobs jen pro
+  // The tokenisation of our own prompt is unknown: the API returns logprobs only
   // vygenerovane tokeny a echo uz tyhle modely nepodporuji. Prompt se proto
   // drzi jako JEDEN neprubojny token: join() ho vrati presne zpet, takze
   // vsechny cesty, ktere prompt rekonstruuji z tokenu, funguji dal. Kdyz ho
@@ -1731,7 +1781,7 @@ async function startNewTree(promptText = '', maxTokens = 16){
   });
   if (existing) {
     await openEntryById(existing.id);
-    showStatus(`Načteno z historie (model: ${model})`);
+    showStatus(`Loaded from history (model: ${model})`);
     return;
   }
 
@@ -1745,13 +1795,13 @@ async function startNewTree(promptText = '', maxTokens = 16){
       choice: swept.choices[0], usage: null, request: null, fromSweep: true,
     });
     showStatus(swept.truncatedFrom
-      ? `Načteno ze sweep DB (zkráceno z ${swept.truncatedFrom})`
-      : 'Načteno ze sweep DB');
+      ? `Loaded from the sweep cache (truncated from ${swept.truncatedFrom})`
+      : 'Loaded from the sweep cache');
     return;
   }
 
-  const label = promptText === '' ? 'prázdný prompt' : `prompt „${promptText.slice(0, 60)}"`;
-  const ok = confirm(`Založit nový strom (${label}) pomocí modelu "${model}"?\nTohle zavolá OpenAI API.`);
+  const label = promptText === '' ? 'an empty prompt' : `prompt "${promptText.slice(0, 60)}"`;
+  const ok = confirm(`Start a new tree (${label}) with model "${model}"?\nThis will call the OpenAI API.`);
   if (!ok) return;
 
   const key = await ensureApiKey();
@@ -1819,7 +1869,7 @@ async function saveTreeRoot({ id, model, promptText, promptTokens, maxTokens,
   safeTokens = allTokens.map(t => t.token);
   currentCompletionId = newEntry.id;
   renderTokens(allTokens);
-  showStatus(`Nový strom založen (model: ${model})`);
+  showStatus(`New tree started (model: ${model})`);
 }
 /* ---- napoveda ---- */
 const helpBtn = document.getElementById('helpBtn');
@@ -1839,14 +1889,18 @@ const newTreePrompt  = document.getElementById('newTreePrompt');
 const newTreeMax     = document.getElementById('newTreeMax');
 const NEWTREE_KEY = 'newtree_prompt';
 
-function openNewTreeDialog(){
-  try { newTreePrompt.value = localStorage.getItem(NEWTREE_KEY) || ''; } catch {}
+/* `preset` comes from ?prompt=: it fills the box instead of the remembered value,
+   but still only opens the dialog. A link must not be able to spend money. */
+function openNewTreeDialog(preset){
+  if (typeof preset === 'string') newTreePrompt.value = preset;
+  else { try { newTreePrompt.value = localStorage.getItem(NEWTREE_KEY) || ''; } catch {} }
   newTreeOverlay.classList.remove('hidden');
   newTreePrompt.focus();
 }
 function closeNewTreeDialog(){ newTreeOverlay.classList.add('hidden'); }
 
-if (newTreeBtn) newTreeBtn.addEventListener('click', openNewTreeDialog);
+// Wrapped: addEventListener would pass the Event as `preset`.
+if (newTreeBtn) newTreeBtn.addEventListener('click', () => openNewTreeDialog());
 document.getElementById('newTreeClose').addEventListener('click', closeNewTreeDialog);
 document.getElementById('newTreeCancel').addEventListener('click', closeNewTreeDialog);
 newTreeOverlay.addEventListener('click', e => { if (e.target === newTreeOverlay) closeNewTreeDialog(); });
@@ -1876,14 +1930,14 @@ function formatDt(epoch){ try{ if(!epoch) return ''; const d=new Date(Number(epo
 async function openEntryById(id){
   try{
     const view = await getCompletionById(id);
-    if(!view){ showStatus('Záznam nenalezen'); return; }
+    if(!view){ showStatus('Record not found'); return; }
     allTokens = view.allTokens;
     safeTokens = allTokens.map(t=>t.token);
     currentCompletionId = id;
     renderTokens(allTokens);
     promptsOverlay.classList.add('hidden');
-    showStatus('Načteno z historie');
-  }catch{ showStatus('Chyba při otevírání záznamu'); }
+    showStatus('Loaded from history');
+  }catch{ showStatus('Could not open the record'); }
 }
 
 async function openBestCompletion(){
@@ -1897,36 +1951,36 @@ async function openBestCompletion(){
 }
 async function showPromptMatches(promptStr){
   const matches = await idbQueryByPrompt(promptStr);
-  if(matches.length===0){ showStatus('Žádné záznamy pro tento prompt'); return; }
+  if(matches.length===0){ showStatus('No records for this prompt'); return; }
   matches.sort((a,b)=> (b.created||0)-(a.created||0));
   const ul = document.createElement('ul');
   matches.forEach(e=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent = `${formatDt(e.created)} — ${e.id}`; a.addEventListener('click',(ev)=>{ ev.preventDefault(); openEntryById(e.id); }); li.appendChild(a); ul.appendChild(li); });
-  promptsList.innerHTML=''; const back=document.createElement('button'); back.textContent='← Zpět'; back.style.marginBottom='.5rem'; back.addEventListener('click', showPrompts); promptsList.appendChild(back); promptsList.appendChild(ul);
+  promptsList.innerHTML=''; const back=document.createElement('button'); back.textContent='← Back'; back.style.marginBottom='.5rem'; back.addEventListener('click', showPrompts); promptsList.appendChild(back); promptsList.appendChild(ul);
 }
 async function deletePrompt(promptStr){
   try{
     const matches = await idbQueryByPrompt(promptStr);
-    if(matches.length===0){ showStatus('Žádné záznamy k odstranění'); return; }
+    if(matches.length===0){ showStatus('Nothing to delete'); return; }
     await idbBulkDelete(matches.map(m=>m.id));
     await updateSavedCount();
-    showStatus('Prompt odstraněn');
+    showStatus('Prompt deleted');
     showPrompts();
-  }catch(err){ showStatus('Chyba při mazání promptu'); }
+  }catch(err){ showStatus('Could not delete the prompt'); }
 }
 async function showSearchResults(query){
   const matches = await idbSearch(query);
-  if(matches.length===0){ showStatus('Žádné záznamy pro hledaný text'); return; }
+  if(matches.length===0){ showStatus('No records match that text'); return; }
   matches.sort((a,b)=> (b.created||0)-(a.created||0));
   const ul = document.createElement('ul');
   matches.forEach(e=>{ const li=document.createElement('li'); const a=document.createElement('a'); a.href='#'; a.textContent=`${formatDt(e.created)} — ${e.id}`; a.addEventListener('click',(ev)=>{ ev.preventDefault(); openEntryById(e.id); }); li.appendChild(a); ul.appendChild(li); });
-  promptsList.innerHTML=''; const back=document.createElement('button'); back.textContent='← Zpět'; back.style.marginBottom='.5rem'; back.addEventListener('click', showPrompts); promptsList.appendChild(back); promptsList.appendChild(ul);
+  promptsList.innerHTML=''; const back=document.createElement('button'); back.textContent='← Back'; back.style.marginBottom='.5rem'; back.addEventListener('click', showPrompts); promptsList.appendChild(back); promptsList.appendChild(ul);
 }
 async function showPrompts(){
   try{
     const history = await idbGetAll();
     const prompts = history.map(extractPromptText).map(s=> (s||'').trim()).filter(Boolean);
     const uniq = Array.from(new Set(prompts)).sort((a,b)=>a.localeCompare(b));
-    if (uniq.length === 0) { showStatus('Žádné prompty v historii'); return; }
+    if (uniq.length === 0) { showStatus('No prompts in the history'); return; }
     const searchDiv=document.createElement('div');
     const searchInput=document.createElement('input'); searchInput.type='text'; searchInput.placeholder='Search…';
     const searchBtn=document.createElement('button'); searchBtn.textContent='Search';
@@ -1941,7 +1995,7 @@ async function showPrompts(){
       li.appendChild(a); li.appendChild(btn); ul.appendChild(li);
     });
     promptsList.innerHTML=''; promptsList.appendChild(searchDiv); promptsList.appendChild(ul); promptsOverlay.classList.remove('hidden');
-  }catch(err){ showStatus('Chyba při čtení promptů'); }
+  }catch(err){ showStatus('Could not read the prompts'); }
 }
 if (promptsBtn) promptsBtn.addEventListener('click', showPrompts);
 if (promptsClose) promptsClose.addEventListener('click', ()=> promptsOverlay.classList.add('hidden'));
@@ -1952,7 +2006,7 @@ window.addEventListener('keydown', (e)=>{ if(e.key==='Escape') promptsOverlay.cl
 async function repairLinks() {
   const history = await idbGetAll();
   if (!Array.isArray(history) || history.length === 0) {
-    showStatus('Historie je prázdná');
+    showStatus('The history is empty');
     return;
   }
 
@@ -1983,10 +2037,10 @@ async function repairLinks() {
 
     if (ptoks.length > 0) idsPerToken[0] = [INITIAL_ID];
 
-    // i = index tokenu v promptu; pro i>=1 používáme prefix prvních i tokenů
+    // i = index of the token in the prompt; for i>=1 use the first i tokens as a prefix
     for (let i = 1; i < ptoks.length; i++) {
       const prefixLen = i;                  // pro 2. token bereme jen 1. token
-      const threshold = i + 1;              // prompt kandidáta musí mít < threshold tokenů
+      const threshold = i + 1;              // the candidate prompt must have < threshold tokens
       const prefix = ptoks.slice(0, prefixLen);
       const candidates = [];
 
@@ -2018,19 +2072,19 @@ async function repairLinks() {
 
   await idbBulkPut(history);
   await updateSavedCount();
-  showStatus('Repair: doplněna ids podle nových prefix pravidel');
+  showStatus('Repair: ids filled in by the prefix rules');
 }
 if (repairBtn) repairBtn.addEventListener('click', repairLinks);
 
-/* Rozlisit, odkud shoda prisla — jinak "Načteno!" zakryva, ze data pochazi
+/* Say where the hit came from -- otherwise a bare "Loaded" hides whether the data
    ze sweep cache a byla pripadne zkracena na pozadovanou delku. */
 function hitLabel(result, missMsg){
   if (!result.fromHistory) return missMsg;
-  const from = result.fromStore ? 'ze storu' : result.fromSweep ? 'ze sweep DB' : null;
-  if (!from) return 'Načteno!';
+  const from = result.fromStore ? 'from the store' : result.fromSweep ? 'from the sweep cache' : null;
+  if (!from) return 'Loaded';
   return result.truncatedFrom
-    ? `Načteno ${from} (zkráceno z ${result.truncatedFrom})`
-    : `Načteno ${from}`;
+    ? `Loaded ${from} (truncated from ${result.truncatedFrom})`
+    : `Loaded ${from}`;
 }
 
 const storeBtn = document.getElementById('storeBtn');
@@ -2038,7 +2092,7 @@ if (storeBtn) storeBtn.addEventListener('click', () => {
   USE_STORE = !USE_STORE;
   try { localStorage.setItem(STORE_KEY, USE_STORE ? '1' : '0'); } catch {}
   refreshStoreChip();
-  showStatus(USE_STORE ? 'Store zapnut.' : 'Store vypnut — chová se jako dřív.');
+  showStatus(USE_STORE ? 'Store on.' : 'Store off — behaves as it did before.');
 });
 refreshStoreChip();
 
