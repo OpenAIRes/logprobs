@@ -16,6 +16,7 @@ regenerated file would hold. verify_store.py asserts exactly that.
 
 from __future__ import annotations
 
+import math
 import os
 import time
 from collections import Counter
@@ -72,6 +73,11 @@ VIEWS = ('prefixes', 'completions')
 # the only place EOS could appear -- is never reported.
 ENDS = ('stop', 'length', 'open')
 
+# Per-token detail shipped for one row's extension. The row's totals always cover
+# the whole thing; this only bounds the payload, since the single longest
+# extension in the default prefixes top 200 adds 4095 tokens on its own.
+DETAIL_CAP = 400
+
 # How a completions ranking may be ordered. Σ logprob is the default and the only
 # one the prefixes view can offer: there the ranking IS the search order, so
 # reordering the n-best by something else would just be "the best mean among the
@@ -90,7 +96,7 @@ SORTS = {
 }
 
 DEFAULTS = dict(top=200, min_n=1, prefix=None, model=None, chosen_only=False,
-                max_alts=8, sort='sum', ends=None)
+                max_alts=8, sort='sum', ends=None, extend=False)
 
 
 class RecordStore:
@@ -158,6 +164,97 @@ class RecordStore:
                 continue
             ends[path] = choice.get('finish_reason') or 'length'
         return ends
+
+    def _node_at(self, tokens, root):
+        node = root
+        for tok in tokens:
+            node = node.children.get(tok)
+            if node is None:
+                return None
+        return node
+
+    def extend_tokens(self, tokens: List[str], root, limit: int = 4096) -> List[str]:
+        """Follow the model's own argmax from here to the furthest end on record.
+
+        The rule is the node's `top_logprobs` -- the distribution the API actually
+        reported for the next token -- and NOT simply the highest-scoring child.
+        The two agree at 168,979 of 168,992 nodes, but where they disagree the
+        child is right about a different context: the trie is keyed by token path,
+        and a path reached as someone's PROMPT is not the same context as the same
+        path GENERATED from an empty prompt, because an empty prompt is served with
+        an implicit <|endoftext|> the trie does not model. Exactly one node is
+        reached both ways -- ('
+',) -- and following its best child walks off into
+        another record's Java, while following its top_logprobs continues the
+        greedy path this tool shows everywhere else.
+        """
+        node = self._node_at(tokens, root)
+        if node is None:
+            return []
+        out: List[str] = []
+        while node.children and len(out) < limit:
+            pick = None
+            tl = node.top_logprobs or {}
+            if tl:
+                best = max(tl.items(), key=lambda kv: kv[1])[0]
+                child = node.children.get(best)
+                if child is not None and child.logprob is not None:
+                    pick = best
+            if pick is None:
+                kids = [(t, c) for t, c in node.children.items() if c.logprob is not None]
+                if not kids:
+                    break
+                pick = max(kids, key=lambda kv: kv[1].logprob)[0]
+            out.append(pick)
+            node = node.children[pick]
+        return out
+
+    def add_extensions(self, entries: List[Dict], root, max_alts: int = 8) -> int:
+        """Attach each row's continuation, and report how many distinct strings result.
+
+        The row itself is left alone. Extending changes the score -- over the
+        default top 200 it reorders 11,325 of 19,900 pairs -- so the ranked object
+        has to stay the prefix, or the list would claim a best-first order it no
+        longer has. The extension rides along in its own field, with its own
+        totals, and `same_as_rank` marks a row whose full string an earlier row
+        already reached: 200 prefixes collapse onto 93 strings, one of them
+        reached 22 times, and hiding that would read as 200 findings.
+        """
+        first_seen: Dict[str, int] = {}
+        for e in entries:
+            toks = [t['token'] for t in e['tokens']]
+            added = self.extend_tokens(toks, root)
+            if not added:
+                # Already at an end on record. Re-walking a 4096-token path to
+                # learn that cost 4.3 s over ten greedy siblings, all of which
+                # add nothing.
+                detail, full, total = e['tokens'], toks, e['sum_logprob']
+            else:
+                full = toks + added
+                detail = walk_detail(root, full, max_alts)
+                if len(detail) != len(full):
+                    detail, full, added = e['tokens'], toks, []
+                total = detail[-1]['cumulative'] if detail else 0.0
+            n = len(full)
+            text = ''.join(full)
+            shown = detail[len(toks):]
+            e['extension'] = {
+                'added_n': len(added),
+                'n': n,
+                'sum_logprob': total,
+                'mean_logprob': total / n if n else 0.0,
+                'perplexity': math.exp(-total / n) if n else None,
+                'text': text,
+                # The totals above describe the WHOLE extension; only the per-token
+                # detail is capped, because one row can add 4095 tokens and shipping
+                # each with its top-k alternatives would run to megabytes per row.
+                'tokens': shown[:DETAIL_CAP],
+                'detail_truncated': len(shown) > DETAIL_CAP,
+                'end': self.ends.get(tuple(full), 'open'),
+                'same_as_rank': first_seen.get(text),
+            }
+            first_seen.setdefault(text, e.get('rank'))
+        return len(first_seen)
 
     @staticmethod
     def _normalize_ends(value) -> Optional[frozenset]:
@@ -276,6 +373,11 @@ class RecordStore:
             entries = build_prefix_entries(root, self.sweep_by_prompt, args,
                                            ends_index=self.ends, stats=search)
             ranking = 'sum_logprob desc (best-first / uniform-cost over token trie)'
+        # After the cap: only the rows actually shown need a continuation, and the
+        # ranked object stays the prefix -- see add_extensions for why it must.
+        distinct = self.add_extensions(entries, root, args.max_alts) if args.extend else None
+        if args.extend:
+            ranking += ' (rows extended for display; the RANKING is still the prefix)'
         return {
             'generated_from': ', '.join(self.sources),
             'model_filter': args.model,
@@ -292,6 +394,10 @@ class RecordStore:
             # a filter over a finite list and is always complete.
             'search_pops': search.get('pops'),
             'truncated_by_budget': bool(search.get('budget_exhausted')),
+            'extend': bool(args.extend),
+            # How many distinct strings the extended rows collapse onto. Far fewer
+            # than the row count, and saying so is the point.
+            'distinct_extended': distinct,
             'count': len(entries),
             'entries': entries,
         }
@@ -430,7 +536,7 @@ class RecordStore:
 
     def greedy_alternatives(self, prompt: str = '', model: str = 'gpt-3.5-turbo-instruct',
                             top: int = 20, sort: str = 'cost',
-                            max_alts: int = 8, ends=None) -> Dict:
+                            max_alts: int = 8, ends=None, extend: bool = False) -> Dict:
         """The greedy path and its next-best siblings: one-token departures from it.
 
         "Second best by the greedy criterion" is the cheapest single-token
@@ -460,7 +566,8 @@ class RecordStore:
         if cache_key in self._alts_cache:
             greedy, candidates, missing = self._alts_cache[cache_key]
             return self._rank_alts(prompt, model, sort, top, greedy, candidates,
-                                   missing, ends)
+                                   missing, ends, extend, root_for_extend=self.trie(model),
+                                   max_alts=max_alts)
 
         greedy = self.greedy(prompt=prompt, model=model)
         if not greedy['n'] or not greedy['first_id']:
@@ -541,7 +648,8 @@ class RecordStore:
         # over a 4096-token path is ~82k probes, and only the swept positions have
         # a continuation. Sorting and capping are cheap, so only the build is cached.
         self._alts_cache[cache_key] = (greedy, entries, missing)
-        return self._rank_alts(prompt, model, sort, top, greedy, entries, missing, ends)
+        return self._rank_alts(prompt, model, sort, top, greedy, entries, missing, ends,
+                               extend, root_for_extend=root, max_alts=max_alts)
 
     # cost first, and it is the default: the greedy criterion is what makes a
     # sibling "second best", and the other keys answer a different question.
@@ -554,7 +662,7 @@ class RecordStore:
     }
 
     def _rank_alts(self, prompt, model, sort, top, greedy, candidates, missing,
-                   ends=None) -> Dict:
+                   ends=None, extend=False, root_for_extend=None, max_alts=8) -> Dict:
         key, label = self.ALT_SORTS.get(sort) or self.ALT_SORTS['cost']
         entries = sorted(candidates, key=key)
         # After the sort and before the cap, as everywhere else: filtering the
@@ -566,6 +674,8 @@ class RecordStore:
             entries = entries[:top]
         # Copy before stamping rank: the candidate list is shared between requests.
         entries = [{**e, 'rank': r} for r, e in enumerate(entries, 1)]
+        distinct = (self.add_extensions(entries, root_for_extend, max_alts)
+                    if extend and root_for_extend is not None else None)
         return {
             'view': 'greedy_alternatives',
             'prompt': prompt,
@@ -583,6 +693,8 @@ class RecordStore:
             'departures_ranked': len(candidates) - 1,
             'ends': sorted(ends) if ends else None,
             'end_counts': dict(Counter(e.get('end') for e in entries)),
+            'extend': bool(extend),
+            'distinct_extended': distinct,
             'count': len(entries),
             'entries': entries,
         }

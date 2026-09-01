@@ -144,6 +144,7 @@ class Handler(SimpleHTTPRequestHandler):
                     # into the scope. Absent means all of them, which is what
                     # every existing link means, so none of them change.
                     ends=one('ends') or None,
+                    extend=_bool(one('extend')),
                 ))
 
             if route == '/api/record':
@@ -167,6 +168,7 @@ class Handler(SimpleHTTPRequestHandler):
                     sort=one('sort', 'cost'),
                     max_alts=_int(one('max_alts'), 8),
                     ends=one('ends') or None,
+                    extend=_bool(one('extend')),
                 ))
 
             if route == '/api/walk':

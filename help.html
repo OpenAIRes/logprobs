@@ -267,6 +267,37 @@
         the trie only ever contains tokens some call actually generated, so there are
         <b>no open leaves</b>.</dd>
     </dl>
+    <h3>extend</h3>
+    <p>A separate axis from the three above, not a fourth kind of ending. A prefix row
+      normally stops where the enumeration stopped, even though the database holds
+      continuations of it. Tick <b>extend</b> and each row is followed on from there —
+      taking the model's own argmax at every step — to the furthest end on record.</p>
+    <p>The rule is the node's <code>top_logprobs</code>, the distribution the API actually
+      reported for the next token, not simply the highest-scoring child in the trie. The
+      two agree at <b>168,979 of 168,992</b> nodes. Where they disagree the child belongs
+      to a different context: the trie is keyed by token path, and a path reached as
+      someone's <em>prompt</em> is not the same context as the same path <em>generated</em>
+      from an empty prompt, because an empty prompt is served with an implicit
+      <code>&lt;|endoftext|&gt;</code> that the trie does not model. Exactly one node —
+      <code>("
+",)</code> — is reached both ways.</p>
+    <div class="note">
+      <p><b>The ranking still belongs to the prefix.</b> Extending changes the score, and
+        over the default top 200 ranking by the extended sum would reorder <b>11,325 of
+        19,900 pairs</b>. So the row keeps its own Σ logprob as the ranked value and the
+        extension's total is shown beneath it, after an arrow. A list ordered by one
+        number while showing another would be worse than no feature.</p>
+      <p><b>Rows collapse.</b> 200 prefixes extend onto <b>93 distinct strings</b>, one of
+        them reached 22 times — every prefix of the same continuation lands on it. Rows
+        that repeat an earlier row's string are marked <code>=n</code> with that row's
+        rank rather than hidden, because 200 rows showing 93 answers should look like it.
+        The top three completions all extend to the same string, at Σ −19.7152.</p>
+      <p>An extension always lands on a real end: 188 <code>length</code> and 12
+        <code>stop</code> over the default 200, never <code>open</code>, because the trie
+        has no open leaves. Per-token detail is capped at 400 tokens per row — the totals
+        always cover the whole extension — since one row alone adds 4095.</p>
+    </div>
+
     <p>Scope applies to every view that produces a <em>list</em> of strings: Completions,
       Prefixes, and the greedy path with its siblings. It does not apply to the greedy
       path on its own — with one result there is exactly one string and nothing to

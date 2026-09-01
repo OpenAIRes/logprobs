@@ -58,6 +58,8 @@
   .ends code { font-size: .95em; }
   .ends label b { color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
   .ends label em { color: var(--ink-dim); font-style: normal; }
+  /* Not a fourth kind of ending -- a separate axis, so it is ruled off. */
+  .ends label.sep { border-top: 1px solid var(--line); padding-top: .35rem; margin-top: .15rem; }
   .ends label.off { opacity: .45; cursor: default; }
   .hint { font-size: .78125rem; color: var(--ink-faint); line-height: 1.5; }
   .hint.on { color: var(--accent); }
@@ -151,6 +153,10 @@
           <label id="endOpenLabel"><input type="checkbox" class="endBox" value="open" checked><span><b>open</b>
             — <em>a prefix.</em> Nothing recorded ends here; the trie continues below and the
             enumeration stopped.</span></label>
+          <label id="endExtendLabel" class="sep"><input type="checkbox" id="lExtend"><span><b>extend</b>
+            — a different question: leave each row where it is, or follow the model's own
+            argmax on from it to the furthest end on record. The ranking stays over the
+            prefix either way.</span></label>
         </div>
       </div>
       <div class="opt" id="wEndsHint"><span></span><span class="hint" id="endsHint"></span></div>
@@ -276,6 +282,8 @@ async function sync() {
   const openBox = endBoxes().find(b => b.value === 'open');
   openBox.disabled = view === 'completions' || greedy;
   el('endOpenLabel').classList.toggle('off', openBox.disabled);
+  // One string has nothing to extend past: the token browser shows all of it.
+  el('endExtendLabel').hidden = single();
   el('endsHint').textContent =
     greedy
       ? 'Rank 1 is the greedy path; the siblings are recorded continuations, so each '
@@ -356,6 +364,7 @@ function listUrl() {
     if (el('lSort').value !== 'cost') p.set('sort', el('lSort').value);
     const gEnds = endsValue();
     if (!single() && gEnds.length && !endsIsAll()) p.set('ends', gEnds.join(','));
+    if (!single() && el('lExtend').checked) p.set('extend', '1');
     return '/dijkstra.html?' + p.toString();
   }
   if (RANKED(view)) {
@@ -365,6 +374,7 @@ function listUrl() {
     // and existing links keep meaning exactly what they meant.
     const ends = endsValue();
     if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
+    if (el('lExtend').checked) p.set('extend', '1');
   } else {
     if (el('lBase').value) p.set('base_id', el('lBase').value);
     if (view === 'walk') {
@@ -436,6 +446,7 @@ function endsValue() {
 function endsIsAll() {
   return endBoxes().filter(b => !b.disabled).every(b => b.checked);
 }
+el('lExtend').addEventListener('change', sync);
 for (const box of endBoxes()) {
   box.addEventListener('change', () => {
     // All boxes off asks for nothing; put the one just cleared back.

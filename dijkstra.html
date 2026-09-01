@@ -63,6 +63,14 @@
   .c-sweep .end.stop { color: var(--good); }
   .c-sweep .end.length { color: var(--mid); }
   .c-sweep .end.open { color: var(--ink-faint); font-weight: 400; }
+  /* The continuation is shown but is NOT what the row was ranked by, so it reads
+     as a different kind of text rather than more of the same. */
+  .tok.ext { opacity: .62; }
+  .extmark { color: var(--accent); font-weight: 600; padding: 0 .1rem; }
+  .more { color: var(--ink-faint); font-size: .71875rem; }
+  .subnum { display: block; font-size: .6875rem; color: var(--ink-faint);
+    font-family: ui-monospace, Menlo, monospace; }
+  .dup { color: var(--ink-faint); font-size: .71875rem; }
   #endsWrap { display: inline-flex; gap: .55rem; align-items: center; }
   #endsWrap label { display: inline-flex; gap: .2rem; align-items: center;
     font-family: ui-monospace, Menlo, monospace; cursor: pointer; }
@@ -238,6 +246,7 @@ fetch('/api/stats', { cache: 'no-store' })
       <label title="finished — the model emitted EOS. The only ending that is not a prefix."><input type="checkbox" class="endBox" value="stop" checked> stop</label>
       <label title="a prefix — max_tokens ran out; the model had not finished"><input type="checkbox" class="endBox" value="length" checked> length</label>
       <label title="a prefix — nothing recorded ends here; the trie continues below"><input type="checkbox" class="endBox" value="open" checked> open</label>
+      <label id="extendWrap" title="follow the model's own argmax from each row to the furthest end on record. The ranking stays over the prefix."><input type="checkbox" id="extendBox"> extend</label>
     </span>
     <label for="prefixIn" id="prefixWrap">starts with:
       <input type="text" id="prefixIn" placeholder="e.g. I have" spellcheck="false">
@@ -394,7 +403,10 @@ const END_TITLE = {
       + 'enumeration stopped.',
 };
 function endBadge(e) {
-  const end = e.end || e.finish_reason;
+  // With the row extended, the ending shown is the extension's -- an 'open'
+  // prefix that was followed to a record end is no longer open.
+  const end = (e.extension && e.extension.added_n ? e.extension.end : null)
+    || e.end || e.finish_reason;
   if (!end) return '';
   return `<span class="end ${end}" title="${END_TITLE[end] || ''}">${end}</span>`;
 }
@@ -429,17 +441,31 @@ function buildRow(e) {
   const row = document.createElement('div');
   row.className = 'row';
 
-  const toks = e.tokens.map((t, i) =>
-    `<span class="tok${t.source === 'alt' ? ' alt' : ''}" data-i="${i}"
+  const tokSpan = (t, i, extra) =>
+    `<span class="tok${t.source === 'alt' ? ' alt' : ''}${extra}" data-i="${i}"
            style="background:${tokColor(t.logprob)}"
-           title="${plain(t.token)}  logP=${fmt(t.logprob)}">${escapeToken(t.token)}</span>`
-  ).join('');
+           title="${plain(t.token)}  logP=${fmt(t.logprob)}">${escapeToken(t.token)}</span>`;
+
+  const x = e.extension;
+  /* The continuation is appended to the row but stays visibly separate: it is not
+     what the row was ranked by, and over the default top 200 ranking by the
+     extended sum would reorder 11,325 of 19,900 pairs. */
+  const toks = e.tokens.map((t, i) => tokSpan(t, i, '')).join('')
+    + (x && x.added_n
+        ? '<span class="extmark" title="everything after this point is the continuation, '
+          + 'not part of what was ranked">›</span>'
+          + x.tokens.map((t, i) => tokSpan(t, e.tokens.length + i, ' ext')).join('')
+          + (x.detail_truncated
+              ? `<span class="more"> …${x.added_n - x.tokens.length} more</span>` : '')
+        : '');
 
   row.innerHTML = `
-    <div class="rank">${e.rank}</div>
+    <div class="rank">${e.rank}${x && x.same_as_rank
+      ? `<span class="dup" title="an earlier row already extends to this same string">=${x.same_as_rank}</span>` : ''}</div>
     <div class="text">${toks}</div>
-    <div class="cell num c-n">${e.n}</div>
-    <div class="cell num key">${fmt(e.sum_logprob)}</div>
+    <div class="cell num c-n">${e.n}${x && x.added_n ? `<span class="subnum">+${x.added_n}</span>` : ''}</div>
+    <div class="cell num key">${fmt(e.sum_logprob)}${x && x.added_n
+      ? `<span class="subnum" title="the whole string; the ranking uses the value above">→ ${fmt(x.sum_logprob, 2)}</span>` : ''}</div>
     <div class="cell num c-mean">${fmt(e.mean_logprob)}</div>
     <div class="cell num c-ppl">${fmt(e.perplexity, 2)}</div>
     ${devCell(e)}
@@ -624,6 +650,8 @@ function endsValue() {
 function endsIsAll() {
   return endBoxes().filter(b => !b.disabled).every(b => b.checked);
 }
+const EXTEND_KEY = 'dijkstra_extend';
+const extendBox = document.getElementById('extendBox');
 /* The toolbar follows the view: a starts-with filter is meaningless over a grid,
    a base selector over a ranking. Hidden controls do not reach the query. */
 function applyViewControls() {
@@ -836,6 +864,9 @@ function render(db) {
       — ${Object.entries(db.end_counts).map(([k, v]) => `${v}&nbsp;${k}`).join(', ') || 'nothing'}</div>` : ''}
     ${db.truncated_by_budget ? `<div class="warn">the trie search hit its ${db.search_pops}-step
       budget before filling the list, so more matching strings may exist below the last row</div>` : ''}
+    ${db.extend ? `<div>rows extended: <b>${db.distinct_extended}</b> distinct strings from
+      ${db.entries.length} rows — the ranking is still over the prefix, and extending would
+      reorder it</div>` : ''}
     <div>records in store: <b>${db.source_records}</b></div>
     <div>results computed: <b>${db.entries.length}</b></div>
     <div>sources: <b>${db.generated_from}</b></div>
@@ -899,6 +930,14 @@ loadSort();
     try { localStorage.setItem(ENDS_KEY, endsValue().join(',')); } catch {}
     load();
   }));
+
+  let ext = PARAMS.get('extend');
+  if (ext === null) { try { ext = localStorage.getItem(EXTEND_KEY); } catch {} }
+  extendBox.checked = ext === '1' || ext === 'true';
+  extendBox.addEventListener('change', () => {
+    try { localStorage.setItem(EXTEND_KEY, extendBox.checked ? '1' : '0'); } catch {}
+    load();
+  });
 }
 
 function queryUrl() {
@@ -919,6 +958,7 @@ function queryUrl() {
     if (PARAMS.get('prompt')) p.set('prompt', PARAMS.get('prompt'));
     const g = endsValue();
     if (g.length && !endsIsAll()) p.set('ends', g.join(','));
+    if (extendBox.checked) p.set('extend', '1');
     return '/api/greedy_alternatives?' + p.toString();
   }
   const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });
@@ -928,6 +968,7 @@ function queryUrl() {
   // then keeps the fast path (and old links) exactly as they were.
   const ends = endsValue();
   if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
+  if (extendBox.checked) p.set('extend', '1');
   return '/api/query?' + p.toString();
 }
 
