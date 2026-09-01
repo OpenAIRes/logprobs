@@ -380,7 +380,14 @@ class RecordStore:
                     'sort': sort, 'entries': [], 'count': 0, 'source_records': len(self.records),
                     'greedy': greedy, 'missing_continuation': 0}
 
-        root = self.trie(None)
+        # trie(model), not trie(None). The unfiltered trie merges every model, and
+        # a node keeps whatever record filled it first -- so the '8' at position 4
+        # of the porchlight path was scored -1.6943 from a davinci-002 record
+        # instead of -1.8337 from gpt-3.5-turbo-instruct's own top_logprobs, and
+        # every sum downstream of it was wrong by 0.1394. The same string then had
+        # two different Σ depending on which view computed it. lookup() in this
+        # very function already filters by model; walk_detail bypassed it.
+        root = self.trie(model)
         base = self.by_id[greedy['first_id']]
         lp = (base.get('choices') or [{}])[0].get('logprobs') or {}
         toks = list(lp.get('tokens') or [])
