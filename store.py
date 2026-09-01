@@ -235,6 +235,103 @@ class RecordStore:
             'cells': sum(len(v) for v in cells.values()),
         }
 
+    def greedy(self, prompt: str = '', model: str = 'gpt-3.5-turbo-instruct',
+               max_steps: Optional[int] = None) -> Dict:
+        """The greedy path: what temperature 0 produces from this prompt.
+
+        This is the canonical string, and it is a PATH, not a ranking -- there is
+        nothing to sort, because at every position there is exactly one argmax.
+        Reaching it by ordering completions by length happens to work on this data
+        and is the wrong question; it would break the moment a longer string
+        existed that was not the greedy one.
+
+        Records are chained: each hop's generated text is appended to the prompt
+        and the store asked again, so a path can run past any single call. It
+        stops where no record answers, and says which prompt it would need.
+
+        The temperature-0 premise is not assumed, it is checked. Every generated
+        token should be the argmax of its own top_logprobs; argmax_checked and
+        argmax_ok report whether that held on this path. Across all 8492 records
+        it holds for 179171 of 179171 tokens, but a -9999 sentinel (a sampled
+        token missing from top_logprobs even at 20) is exactly the shape a
+        violation would take, so the check earns its keep.
+        """
+        tokens: List[str] = []
+        logprobs: List[float] = []
+        tops: List[Dict] = []
+        hops: List[Dict] = []
+        argmax_checked = argmax_ok = 0
+        text = prompt
+        last_finish = None
+
+        while max_steps is None or len(tokens) < max_steps:
+            rec = self.lookup(text, model=model, max_tokens=None)
+            if rec is None:
+                break
+            choice = (rec.get('choices') or [{}])[0]
+            lp = choice.get('logprobs') or {}
+            toks = list(lp.get('tokens') or [])
+            if not toks:
+                break
+            tls = list(lp.get('token_logprobs') or [])
+            tps = [dict(t or {}) for t in (lp.get('top_logprobs') or [])]
+
+            # A hop can overshoot the budget -- one record holds 4096 tokens -- so
+            # cut it here. Without this, max_steps=20 returned the whole 4096 and
+            # the parameter silently meant nothing.
+            if max_steps is not None:
+                room = max_steps - len(tokens)
+                toks, tls, tps = toks[:room], tls[:room], tps[:room]
+                if not toks:
+                    break
+
+            for i, tok in enumerate(toks):
+                if i < len(tps) and tps[i]:
+                    argmax_checked += 1
+                    if max(tps[i].items(), key=lambda kv: kv[1])[0] == tok:
+                        argmax_ok += 1
+
+            tokens += toks
+            logprobs += tls
+            tops += tps
+            # If the hop was cut by max_steps, the record's own finish_reason no
+            # longer describes where this path ends -- it ends because we said so.
+            truncated_here = len(toks) < len(lp.get('tokens') or [])
+            last_finish = 'max_steps' if truncated_here else choice.get('finish_reason')
+            hops.append({'id': rec.get('id'), 'tokens': len(toks),
+                         'finish_reason': last_finish,
+                         'truncated': truncated_here,
+                         'max_tokens': (rec.get('request') or {}).get('max_tokens')})
+            text += ''.join(toks)
+            if max_steps is not None and len(tokens) >= max_steps:
+                break
+
+        scored = [v for v in logprobs if isinstance(v, (int, float))]
+        total = sum(scored)
+        n = len(tokens)
+        import math
+        return {
+            'view': 'greedy',
+            'prompt': prompt,
+            'model': model,
+            'n': n,
+            'sum_logprob': total,
+            'mean_logprob': (total / n) if n else None,
+            'perplexity': math.exp(-total / n) if n else None,
+            'text': ''.join(tokens),
+            'hops': hops,
+            'first_id': hops[0]['id'] if hops else None,
+            'argmax_checked': argmax_checked,
+            'argmax_ok': argmax_ok,
+            # A path that ended on `length` was cut by max_tokens, not by the
+            # model; one that ended on `stop` is genuinely finished.
+            'finish_reason': last_finish,
+            'complete': last_finish == 'stop',
+            'needs_call': None if last_finish == 'stop' else {
+                'prompt': text, 'prompt_chars': len(text),
+            },
+        }
+
     def walk(self, base_id: Optional[str] = None, steps: int = 20, extend: int = 20,
              model: str = 'gpt-3.5-turbo-instruct', forward_only: bool = False) -> Dict:
         """Greedy walk: repeatedly apply the cheapest single-token deviation.

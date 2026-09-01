@@ -148,6 +148,13 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({'error': 'no record with that id'}, 404)
                 return self.send_json(rec)
 
+            if route == '/api/greedy':
+                return self.send_json(self.store.greedy(
+                    prompt=(query.get('prompt') or [''])[0],
+                    model=one('model', 'gpt-3.5-turbo-instruct'),
+                    max_steps=_int(one('max_steps')),
+                ))
+
             if route == '/api/walk':
                 return self.send_json(self.store.walk(
                     base_id=one('base_id') or None,

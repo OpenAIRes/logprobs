@@ -91,6 +91,24 @@
   <section id="views">
     <h2>Views</h2>
     <dl>
+      <dt>Greedy path <span class="std">greedy decoding, temperature 0</span></dt>
+      <dd>What the model actually produces from a prompt: at every position the single
+        most probable next token. This is <b>a path, not a ranking</b> — there is nothing
+        to sort, because at each step there is exactly one argmax. It is the default view
+        because it answers the default question: what does this model say to this prompt.
+        <p>Records are <b>chained</b>: each hop's generated text is appended to the
+        prompt and the store asked again, so a path can run past any single call. From
+        the empty prompt that is one record and 4096 tokens; from
+        <code>I have</code> it is two records and 40.</p>
+        <p>The temperature-0 premise is <b>checked, not assumed</b>. Every generated
+        token should be the argmax of its own <code>top_logprobs</code>, and the view
+        reports whether that held. Across all 8492 records it holds for 179171 of 179171
+        tokens — but a <code>−9999</code> sentinel is exactly the shape a violation would
+        take, so the check is worth its cost.</p>
+        <p>A path that ends on <code>finish_reason: length</code> was cut by
+        <code>max_tokens</code> and could go further; one that ends on <code>stop</code>
+        is the whole string the model wanted to write.</p></dd>
+
       <dt>Completions <span class="std">whole sequences</span></dt>
       <dd>One entry per recorded call: the whole string that call produced, prompt
         included. Ranked by cumulative logprob, descending.
@@ -139,8 +157,12 @@
         like an answer and is not one.
         <p><b>Σ logprob</b> favours short strings, because every extra token can only
         subtract. <b>mean logprob</b> is length-independent. <b>length</b> puts the
-        longest first, which is how you ask for a string at its full generated
-        extent.</p>
+        longest first.</p>
+        <p>None of these is how you ask for <i>the</i> string a prompt produces — that
+        is the <b>Greedy path</b> view. Sorting completions by length happens to surface
+        the greedy string on this data, and would stop doing so the moment a longer
+        string existed that was not the greedy one. Ranking answers "which strings are
+        probable"; greedy decoding answers "what does the model say".</p>
         <p>The sort is applied <b>before</b> the results cap, which matters more than it
         sounds: the 4096-token unconditional root has the best mean logprob of all 8128
         entries (−0.0127) and sits at rank <b>7786</b> by Σ logprob. Sorting after a cap
@@ -234,6 +256,10 @@
       <tr><td><b>Cheapest-deviation walk</b></td>
           <td>Pay for the next regeneration the walk stopped at — one call per step</td>
           <td><code>sweep_alternatives.py</code>, or step it in the token browser</td></tr>
+      <tr><td><b>Greedy path</b></td>
+          <td>Pay for the continuation past where the records stop — the view names the
+              prompt it would need</td>
+          <td>Token browser, or <code>stream_logprobs2.py</code></td></tr>
       <tr><td><b>Single string</b></td>
           <td>Click a token to follow an alternative; the call happens only if no
               record answers it</td>
@@ -273,6 +299,7 @@
       <tr><td>logprob</td><td>log-probability</td><td>natural log of a probability; ≤ 0</td></tr>
       <tr><td>Σ logprob</td><td>cumulative / sequence log-probability</td><td>log P of the whole string</td></tr>
       <tr><td>greedy, chosen</td><td>argmax, greedy decoding</td><td>the most probable token at that position</td></tr>
+      <tr><td>greedy path</td><td>greedy decode, temperature-0 output</td><td>always take the argmax; one string per prompt</td></tr>
       <tr><td>alternatives</td><td>top-k / <code>top_logprobs</code></td><td>the k highest-ranked tokens at a position</td></tr>
       <tr><td>prefix</td><td>prefix, hypothesis</td><td>a path from the start through the token trie</td></tr>
       <tr><td>best-first</td><td>uniform-cost search, Dijkstra</td><td>expand the cheapest frontier node first</td></tr>

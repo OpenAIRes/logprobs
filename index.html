@@ -34,6 +34,9 @@
   .view:has(input:checked) { border-color: var(--accent); background: var(--hover); }
   .view input { margin: .3rem 0 0; }
   .view b { font-weight: 600; font-size: .9375rem; }
+  .view .tag { display: inline; font-size: .6875rem; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--accent); background: var(--chip);
+    border-radius: 4px; padding: .1em .35em; margin-left: .4em; }
   .view span { display: block; font-size: .8125rem; color: var(--ink-dim); line-height: 1.5; }
 
   .opts { display: grid; gap: .55rem; }
@@ -70,7 +73,8 @@
     <div class="lede">
       One database of <code>gpt-3.5-turbo-instruct</code> calls, several views over it.
       Pick what to rank and how many results you want —
-      <b>ask for 1 and you get that string token by token</b> instead of a list.
+      The default is the <b>greedy path</b>: what temperature 0 actually produces.
+      Ask a ranking for 1 result and you likewise get that string token by token.
       <a href="/help.html">What do these options mean?</a>
     </div>
   </header>
@@ -80,7 +84,15 @@
   <div class="panel form">
     <div class="views" role="radiogroup" aria-label="View">
       <label class="view">
-        <input type="radio" name="view" value="completions" checked>
+        <input type="radio" name="view" value="greedy" checked>
+        <div><b>Greedy path</b> <span class="tag">temperature 0</span>
+          <span>What the model actually produces from a prompt: at every position the
+            single most probable next token (argmax). One string, no ranking involved —
+            there is nothing to sort, because at each step there is exactly one answer.
+            Records are chained, so the path can run past any single call.</span></div>
+      </label>
+      <label class="view">
+        <input type="radio" name="view" value="completions">
         <div><b>Completions</b>
           <span>One entry per recorded call: the whole string it produced, prompt included.
             Ranked by cumulative logprob (Σ logprob), descending.</span></div>
@@ -107,6 +119,10 @@
     </div>
 
     <div class="opts">
+      <label class="opt" id="wPromptWrap" hidden><span>starting prompt</span>
+        <input type="text" id="lPrompt" placeholder="(empty = unconditional)" spellcheck="false">
+      </label>
+      <div class="opt" id="wGreedyInfo" hidden><span></span><span class="hint" id="greedyInfo"></span></div>
       <label class="opt" id="wSort"><span>ranked by</span>
         <select id="lSort">
           <option value="sum">Σ logprob — cumulative, descending</option>
@@ -155,7 +171,9 @@
 const el = id => document.getElementById(id);
 const viewOf = () => document.querySelector('input[name=view]:checked').value;
 const RANKED = v => v === 'prefixes' || v === 'completions';
-const single = () => RANKED(viewOf()) && el('lTop').value === '1';
+/* Greedy is always one string, so it always goes to the token browser -- results
+   does not apply to it at all. */
+const single = () => viewOf() === 'greedy' || (RANKED(viewOf()) && el('lTop').value === '1');
 
 /* --- store status --------------------------------------------------------- */
 fetch('/api/stats', { cache: 'no-store' })
@@ -199,15 +217,18 @@ async function ensureBases() {
 async function sync() {
   const view = viewOf();
   const ranked = RANKED(view);
+  const greedy = view === 'greedy';
   el('wTop').hidden = !ranked;
   el('wTopHint').hidden = !ranked;
   // Prefixes are ranked by the search order itself, so there is nothing to choose.
   el('wSort').hidden = view !== 'completions';
   el('wPrefix').hidden = !ranked;
-  el('wBase').hidden = ranked;
+  el('wBase').hidden = ranked || greedy;
   el('wSteps').hidden = view !== 'walk';
   el('wFwd').hidden = view !== 'walk';
   el('wModel').hidden = !single();
+  el('wPromptWrap').hidden = !greedy;
+  el('wGreedyInfo').hidden = !greedy;
 
   el('topHint').textContent = single()
     ? 'One result is a single string, so it opens in the token browser: every token with its '
@@ -215,8 +236,44 @@ async function sync() {
     : 'A list, one string per row. Click a row to see its per-token detail.';
   el('topHint').classList.toggle('on', single());
 
-  if (!ranked) await ensureBases();
+  if (!ranked && !greedy) await ensureBases();
   el('target').textContent = single() ? '/logprobs.html' : listUrl();
+  if (greedy) describeGreedy();
+}
+
+/* The greedy path is fully determined by the prompt, so it can be described
+   before it is opened -- including whether the temperature-0 premise held. */
+let greedySeq = 0;
+async function describeGreedy() {
+  const seq = ++greedySeq;
+  const info = el('greedyInfo');
+  info.textContent = 'resolving the path…';
+  try {
+    const p = new URLSearchParams({ prompt: el('lPrompt').value, model: el('lModel').value });
+    const g = await (await fetch('/api/greedy?' + p, { cache: 'no-store' })).json();
+    if (seq !== greedySeq) return;
+    if (!g.n) {
+      info.textContent = 'No record starts this path, so nothing can be shown without a call.';
+      info.classList.remove('on');
+      el('target').textContent = '/logprobs.html';
+      return;
+    }
+    const argmax = g.argmax_checked === g.argmax_ok
+      ? `all ${g.argmax_checked} tokens verified argmax`
+      : `${g.argmax_ok} of ${g.argmax_checked} verified argmax — premise violated`;
+    const ends = g.complete
+      ? 'the model stopped on its own, so this is the whole string'
+      : `cut at max_tokens (finish_reason ${g.finish_reason}), so it could go further`;
+    info.textContent = `${g.n} tokens · Σ logprob ${g.sum_logprob.toFixed(4)} · mean `
+      + `${g.mean_logprob.toFixed(4)} · perplexity ${g.perplexity.toFixed(4)} · `
+      + `${g.hops.length} record${g.hops.length === 1 ? '' : 's'} · ${argmax} · ${ends}`;
+    info.classList.toggle('on', g.argmax_checked !== g.argmax_ok);
+    el('target').textContent = g.first_id
+      ? '/logprobs.html?id=' + g.first_id : '/logprobs.html';
+  } catch {
+    if (seq !== greedySeq) return;
+    info.textContent = 'The store is not answering, so the path cannot be resolved.';
+  }
 }
 
 function listUrl() {
@@ -252,10 +309,25 @@ function handOverPreferences() {
    record to open -- there the token browser starts at the root, which is the
    same thing one level up. */
 async function openSingle() {
+  let id = null;
+  if (viewOf() === 'greedy') {
+    // The greedy path is resolved by walking argmax records, not by ranking
+    // anything, so it has its own endpoint. Its first hop is where the token
+    // browser should land.
+    try {
+      const q = new URLSearchParams({ prompt: el('lPrompt').value, model: el('lModel').value });
+      const g = await (await fetch('/api/greedy?' + q, { cache: 'no-store' })).json();
+      id = g.first_id || null;
+    } catch { /* store down: fall through to the local default tree */ }
+    const out = new URLSearchParams({ model: el('lModel').value });
+    if (id) out.set('id', id);
+    else if (el('lPrompt').value) out.set('prompt', el('lPrompt').value);
+    location.href = '/logprobs.html?' + out.toString();
+    return;
+  }
   const p = new URLSearchParams({ view: viewOf(), top: '1' });
   if (el('lPrefix').value) p.set('prefix', el('lPrefix').value);
   if (viewOf() === 'completions') p.set('sort', el('lSort').value);
-  let id = null;
   try {
     const db = await (await fetch('/api/query?' + p, { cache: 'no-store' })).json();
     id = (db.entries || [])[0]?.id || null;
@@ -272,6 +344,11 @@ for (const id of ['lTop', 'lSort', 'lBase', 'lSteps', 'lFwd', 'lModel']) {
   el(id).addEventListener('change', sync);
 }
 el('lPrefix').addEventListener('input', sync);
+let promptTimer = null;
+el('lPrompt').addEventListener('input', () => {
+  clearTimeout(promptTimer);
+  promptTimer = setTimeout(sync, 350);   // one /api/greedy per pause, not per key
+});
 
 el('go').addEventListener('click', async () => {
   if (single()) return openSingle();
