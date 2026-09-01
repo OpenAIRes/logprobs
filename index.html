@@ -253,19 +253,27 @@ async function sync() {
      notion of. */
   if (!greedy && el('lSort').value === 'cost') el('lSort').value = 'sum';
   if (greedy && !sortTouched) el('lSort').value = 'cost';
-  el('wEnds').hidden = !ranked;
-  el('wEndsHint').hidden = !ranked;
-  /* A completion is a recorded call, so it always carries an API finish reason
-     and can never be 'open'. Disabling the box says that; leaving it tickable
-     and silently returning nothing would not. */
+  /* Every view that produces a LIST of strings has a scope. The greedy path on
+     its own does not -- there is exactly one string, so there is nothing to
+     select from -- but its siblings are a list like any other. */
+  const scoped = (ranked || greedy) && !(greedy && single());
+  el('wEnds').hidden = !scoped;
+  el('wEndsHint').hidden = !scoped;
+  /* Only a prefix can be 'open'. A completion and a greedy sibling are both
+     recorded calls, so they always carry an API finish reason. Disabling the box
+     says that; leaving it tickable and silently returning nothing would not. */
   const openBox = endBoxes().find(b => b.value === 'open');
-  openBox.disabled = view === 'completions';
+  openBox.disabled = view === 'completions' || greedy;
   el('endOpenLabel').classList.toggle('off', openBox.disabled);
-  el('endsHint').textContent = view === 'completions'
-    ? 'Completions are recorded calls, so every one ends on the API’s verdict. '
-      + 'Only 219 of 8492 records ended on EOS.'
-    : 'Σ logprob is only comparable within one kind of ending. Untick "open" and the '
-      + 'prefix ranking turns into the same set of strings the completions view lists.';
+  el('endsHint').textContent =
+    greedy
+      ? 'Rank 1 is the greedy path; the siblings are recorded continuations, so each '
+        + 'ends on the API’s verdict. 359 of the 363 end on length, 4 on EOS.'
+      : view === 'completions'
+        ? 'Completions are recorded calls, so every one ends on the API’s verdict. '
+          + 'Only 219 of 8492 records ended on EOS.'
+        : 'Σ logprob is only comparable within one kind of ending. Untick "open" and the '
+          + 'prefix ranking turns into the same set of strings the completions view lists.';
   el('wPrefix').hidden = !ranked;
   el('wBase').hidden = ranked || greedy;
   el('wSteps').hidden = view !== 'walk';
@@ -334,6 +342,8 @@ function listUrl() {
   if (view === 'greedy') {
     if (el('lPrompt').value) p.set('prompt', el('lPrompt').value);
     if (el('lSort').value !== 'cost') p.set('sort', el('lSort').value);
+    const gEnds = endsValue();
+    if (!single() && gEnds.length && !endsIsAll()) p.set('ends', gEnds.join(','));
     return '/dijkstra.html?' + p.toString();
   }
   if (RANKED(view)) {
@@ -342,7 +352,7 @@ function listUrl() {
     // Everything ticked means the same as no filter, so the parameter stays off
     // and existing links keep meaning exactly what they meant.
     const ends = endsValue();
-    if (ends.length && ends.length < endBoxes().length) p.set('ends', ends.join(','));
+    if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
   } else {
     if (el('lBase').value) p.set('base_id', el('lBase').value);
     if (view === 'walk') {
@@ -407,6 +417,12 @@ let sortTouched = false;
 function endBoxes() { return [...document.querySelectorAll('.endBox')]; }
 function endsValue() {
   return endBoxes().filter(b => b.checked && !b.disabled).map(b => b.value);
+}
+/* "Everything" means every box the view can actually offer. Counting the
+   disabled ones too would put ends=stop,length in every greedy link, where it
+   says nothing -- a greedy sibling can never be open in the first place. */
+function endsIsAll() {
+  return endBoxes().filter(b => !b.disabled).every(b => b.checked);
 }
 for (const box of endBoxes()) {
   box.addEventListener('change', () => {

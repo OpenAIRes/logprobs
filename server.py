@@ -166,6 +166,7 @@ class Handler(SimpleHTTPRequestHandler):
                     top=min(_int(one('top'), 20) or 20, MAX_TOP),
                     sort=one('sort', 'cost'),
                     max_alts=_int(one('max_alts'), 8),
+                    ends=one('ends') or None,
                 ))
 
             if route == '/api/walk':

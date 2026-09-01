@@ -617,6 +617,11 @@ function endBoxes() { return [...document.querySelectorAll('.endBox')]; }
 function endsValue() {
   return endBoxes().filter(b => b.checked && !b.disabled).map(b => b.value);
 }
+/* "Everything" means every box the view can actually offer, so a view where
+   'open' is impossible does not get a pointless ends= on every query. */
+function endsIsAll() {
+  return endBoxes().filter(b => !b.disabled).every(b => b.checked);
+}
 /* The toolbar follows the view: a starts-with filter is meaningless over a grid,
    a base selector over a ranking. Hidden controls do not reach the query. */
 function applyViewControls() {
@@ -626,12 +631,15 @@ function applyViewControls() {
   // Only a ranking over strings has a scope to choose. A completion is a
   // recorded call, so it can never be 'open' -- disabling the box says why,
   // where silently returning nothing would not.
-  document.getElementById('endsWrap').hidden = !(VIEW === 'completions' || VIEW === 'prefixes');
+  document.getElementById('endsWrap').hidden =
+    !(VIEW === 'completions' || VIEW === 'prefixes' || VIEW === 'greedy');
   const openBox = endBoxes().find(b => b.value === 'open');
   if (openBox) {
-    openBox.disabled = VIEW === 'completions';
-    openBox.parentElement.title = VIEW === 'completions'
-      ? 'a completion is a recorded call, so it always has an API finish reason'
+    // Only a prefix can be 'open': a completion and a greedy sibling are both
+    // recorded calls and always carry the API's verdict.
+    openBox.disabled = VIEW === 'completions' || VIEW === 'greedy';
+    openBox.parentElement.title = openBox.disabled
+      ? 'a recorded call always has an API finish reason, so it is never open'
       : 'nothing recorded ends here; the end is an artefact of enumerating the trie';
   }
   // Prefixes come out of a sum-ordered heap; the ranking IS the search order.
@@ -907,6 +915,8 @@ function queryUrl() {
   if (VIEW === 'greedy') {
     const p = new URLSearchParams({ top: limitSel.value || '20', sort: sortSel.value });
     if (PARAMS.get('prompt')) p.set('prompt', PARAMS.get('prompt'));
+    const g = endsValue();
+    if (g.length && !endsIsAll()) p.set('ends', g.join(','));
     return '/api/greedy_alternatives?' + p.toString();
   }
   const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });
@@ -915,7 +925,7 @@ function queryUrl() {
   // Everything ticked means the same as no filter, and leaving the parameter off
   // then keeps the fast path (and old links) exactly as they were.
   const ends = endsValue();
-  if (ends.length && ends.length < endBoxes().length) p.set('ends', ends.join(','));
+  if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
   return '/api/query?' + p.toString();
 }
 

@@ -254,9 +254,16 @@
 
       <dt><code>open</code> <span class="std">prefix, partial hypothesis</span></dt>
       <dd>Nothing recorded ends here at all; the string stops where the trie enumeration
-        stopped. Only a row in the Prefixes view can be this — a completion is a recorded
-        call and always carries the API's verdict.</dd>
+        stopped. Only a row in the Prefixes view can be this — a completion and a greedy
+        sibling are both recorded calls and always carry the API's verdict, so the box is
+        disabled in those views rather than silently returning nothing.</dd>
     </dl>
+    <p>Scope applies to every view that produces a <em>list</em> of strings: Completions,
+      Prefixes, and the greedy path with its siblings. It does not apply to the greedy
+      path on its own — with one result there is exactly one string and nothing to
+      select from. Of the 363 greedy siblings, <b>359 end on length and 4 on EOS</b>;
+      ticking only <code>stop</code> is how you ask which single-token departures lead
+      somewhere the model actually finishes. The cheapest that does costs <b>1.0327</b>.</p>
     <div class="note">
       <p><b>Why it is a control and not just a label.</b> Σ logprob over a one-token
         prefix beats Σ over anything longer, so a ranking that mixes the three is
