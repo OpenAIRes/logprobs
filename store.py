@@ -51,9 +51,16 @@ VIEWS = ('prefixes', 'completions')
 # one the prefixes view can offer: there the ranking IS the search order, so
 # reordering the n-best by something else would just be "the best mean among the
 # n best by sum", which reads as an answer and is not one.
+# perplexity = e^(-mean logprob) is a strictly monotone transform of the mean, so
+# ordering by ascending perplexity is the SAME ordering as by descending mean --
+# verified over all 363 greedy siblings, identical rank for rank. It is offered
+# under its own name because that is the standard way to report the per-token
+# measure, and 'mean' stays as an accepted alias so older links keep working;
+# what is deliberately not done is shipping both as if they were two criteria.
 SORTS = {
     'sum': (lambda e: -e['sum_logprob'], 'sum_logprob desc'),
-    'mean': (lambda e: -e['mean_logprob'], 'mean_logprob desc (length-independent)'),
+    'ppl': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
+    'mean': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
     'length': (lambda e: (-e['n'], -e['sum_logprob']), 'length desc, then sum_logprob desc'),
 }
 
@@ -166,9 +173,11 @@ class RecordStore:
         # mean among the top N by sum". That is not hypothetical: the 4096-token
         # root has the best mean logprob of all 8128 entries (-0.0127) and sits at
         # rank 7786 by sum, so a cap of 5000 would hide the very answer asked for.
-        sort_key, _ = SORTS[args.sort if args.sort in SORTS else 'sum']
-        if args.sort != 'sum':
-            entries = sorted(entries, key=sort_key)
+        # build_completion_entries already returned them sum-ordered, so only a
+        # different key needs work.
+        chosen = args.sort if args.sort in SORTS else 'sum'
+        if chosen != 'sum':
+            entries = sorted(entries, key=SORTS[chosen][0])
         entries = apply_prefix(entries, args.prefix)
         if args.top:
             entries = entries[:args.top]
@@ -435,10 +444,13 @@ class RecordStore:
         self._alts_cache[cache_key] = (greedy, entries, missing)
         return self._rank_alts(prompt, model, sort, top, greedy, entries, missing)
 
+    # cost first, and it is the default: the greedy criterion is what makes a
+    # sibling "second best", and the other keys answer a different question.
     ALT_SORTS = {
         'cost': (lambda e: (e['cost'], -e['sum_logprob']), 'deviation cost asc (the greedy criterion)'),
         'sum': (lambda e: -e['sum_logprob'], 'sum_logprob desc'),
-        'mean': (lambda e: -e['mean_logprob'], 'mean_logprob desc'),
+        'ppl': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
+        'mean': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
         'length': (lambda e: (-e['n'], -e['sum_logprob']), 'length desc'),
     }
 

@@ -208,7 +208,7 @@ fetch('/api/stats', { cache: 'no-store' })
       <select id="sortSel">
         <option value="cost" hidden>deviation cost</option>
         <option value="sum">Σ logprob</option>
-        <option value="mean">mean logprob</option>
+        <option value="ppl">perplexity</option>
         <option value="length">length</option>
       </select>
     </label>
@@ -498,12 +498,13 @@ function setupLimitControl() {
 
 dataSel.addEventListener('change', async () => {
   VIEW = dataSel.value;
+  loadSort();                  // this view's own remembered sort, or its default
   applyViewControls();
   if (VIEW === 'sweep' || VIEW === 'walk') await ensureBases();
   load();
 });
 sortSel.addEventListener('change', () => {
-  try { localStorage.setItem(SORT_KEY, sortSel.value); } catch {}
+  try { localStorage.setItem(sortKeyFor(VIEW), sortSel.value); } catch {}
   load();
 });
 baseSel.addEventListener('change', load);
@@ -797,13 +798,20 @@ else { try { prefixIn.value = localStorage.getItem(PREFIX_KEY) || ''; } catch {}
 setupLimitControl();
 if (PARAMS.get('forward_only') === '1') fwdIn.checked = true;
 if (PARAMS.get('steps')) stepsIn.value = PARAMS.get('steps');
+/* Remembered per view. One shared key meant greedy inherited whatever the last
+   completions ranking used, so "second best" came out ordered by Σ logprob --
+   which is a different question from the greedy criterion. Each view's own
+   default applies until this view's sort is set explicitly. */
 const SORT_KEY = 'dijkstra_sort';
-{
-  // ?sort= wins over the remembered value, so a link opens the ranking it names.
+const DEFAULT_SORT = { greedy: 'cost', completions: 'sum', prefixes: 'sum' };
+function sortKeyFor(view) { return SORT_KEY + ':' + view; }
+function loadSort() {
   let want = PARAMS.get('sort');
-  if (!want) { try { want = localStorage.getItem(SORT_KEY); } catch {} }
-  if (want && [...sortSel.options].some(o => o.value === want)) sortSel.value = want;
+  if (!want) { try { want = localStorage.getItem(sortKeyFor(VIEW)); } catch {} }
+  if (!want) want = DEFAULT_SORT[VIEW] || 'sum';
+  if ([...sortSel.options].some(o => o.value === want)) sortSel.value = want;
 }
+loadSort();
 
 function queryUrl() {
   if (VIEW === 'sweep') {

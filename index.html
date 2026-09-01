@@ -127,7 +127,7 @@
         <select id="lSort">
           <option value="cost" id="optCost">deviation cost — the greedy criterion</option>
           <option value="sum">Σ logprob — cumulative, descending</option>
-          <option value="mean">mean logprob — per token, length-independent</option>
+          <option value="ppl">perplexity — per token, ascending</option>
           <option value="length">length — longest first</option>
         </select>
       </label>
@@ -227,8 +227,12 @@ async function sync() {
   el('wSort').hidden = !(view === 'completions' || greedy);
   // Only the greedy family can be ordered by what a departure costs.
   el('optCost').hidden = !greedy;
+  /* The sort belongs to the view, not to the page: deviation cost IS the greedy
+     criterion, so greedy starts there rather than inheriting whatever the last
+     ranking used, and a ranking can never be left on 'cost', which it has no
+     notion of. */
   if (!greedy && el('lSort').value === 'cost') el('lSort').value = 'sum';
-  if (greedy && !['cost','sum','mean','length'].includes(el('lSort').value)) el('lSort').value = 'cost';
+  if (greedy && !sortTouched) el('lSort').value = 'cost';
   el('wPrefix').hidden = !ranked;
   el('wBase').hidden = ranked || greedy;
   el('wSteps').hidden = view !== 'walk';
@@ -265,7 +269,7 @@ async function describeGreedy() {
     if (!g.n) {
       info.textContent = 'No record starts this path, so nothing can be shown without a call.';
       info.classList.remove('on');
-      el('target').textContent = '/logprobs.html';
+      if (single()) el('target').textContent = '/logprobs.html';
       return;
     }
     const argmax = g.argmax_checked === g.argmax_ok
@@ -278,8 +282,13 @@ async function describeGreedy() {
       + `${g.mean_logprob.toFixed(4)} · perplexity ${g.perplexity.toFixed(4)} · `
       + `${g.hops.length} record${g.hops.length === 1 ? '' : 's'} · ${argmax} · ${ends}`;
     info.classList.toggle('on', g.argmax_checked !== g.argmax_ok);
-    el('target').textContent = g.first_id
-      ? '/logprobs.html?id=' + g.first_id : '/logprobs.html';
+    // Only the single-string case lands in the token browser. With more results
+    // asked for, the destination is the sibling list and sync() already set it --
+    // overwriting it here showed a link the Open button would not follow.
+    if (single()) {
+      el('target').textContent = g.first_id
+        ? '/logprobs.html?id=' + g.first_id : '/logprobs.html';
+    }
   } catch {
     if (seq !== greedySeq) return;
     info.textContent = 'The store is not answering, so the path cannot be resolved.';
@@ -355,7 +364,14 @@ async function openSingle() {
 for (const node of document.querySelectorAll('input[name=view]')) {
   node.addEventListener('change', sync);
 }
-for (const id of ['lTop', 'lSort', 'lBase', 'lSteps', 'lFwd', 'lModel']) {
+/* Whether the sort was chosen deliberately in this view, so switching views can
+   reset it to that view's default without overriding an explicit choice. */
+let sortTouched = false;
+el('lSort').addEventListener('change', () => { sortTouched = true; sync(); });
+for (const node of document.querySelectorAll('input[name=view]')) {
+  node.addEventListener('change', () => { sortTouched = false; });
+}
+for (const id of ['lTop', 'lBase', 'lSteps', 'lFwd', 'lModel']) {
   el(id).addEventListener('change', sync);
 }
 el('lPrefix').addEventListener('input', sync);

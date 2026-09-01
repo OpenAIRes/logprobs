@@ -173,8 +173,18 @@
         something else would give "the best mean among the n best by sum", which reads
         like an answer and is not one.
         <p><b>Σ logprob</b> favours short strings, because every extra token can only
-        subtract. <b>mean logprob</b> is length-independent. <b>length</b> puts the
-        longest first.</p>
+        subtract. <b>perplexity</b> is length-independent. <b>length</b> puts the longest
+        first. In the greedy view there is also <b>deviation cost</b>, and it is the
+        default there, because giving up the fewest nats at the point of departure is
+        precisely what makes a sibling the second best <i>by the greedy criterion</i>.</p>
+        <div class="note">
+          <p>Perplexity and mean logprob are <b>the same ordering</b>, not two criteria.
+            Perplexity is e<sup>−mean</sup>, a strictly monotone transform, so ascending
+            perplexity is descending mean rank for rank — verified across all 363 greedy
+            siblings. Only perplexity is offered, because it is the standard way to report
+            the per-token measure; <code>?sort=mean</code> still works and means the same
+            thing.</p>
+        </div>
         <p>None of these is how you ask for <i>the</i> string a prompt produces — that
         is the <b>Greedy path</b> view. Sorting completions by length happens to surface
         the greedy string on this data, and would stop doing so the moment a longer
