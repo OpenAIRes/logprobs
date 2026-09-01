@@ -241,22 +241,31 @@
     <p>Every ranked row is a string, but not every string ends for the same reason,
       and the reason decides whether two rows can be compared at all. The
       <b>scope</b> checkboxes select which endings fall into the list.</p>
+    <p><b>Only <code>stop</code> is a finished string.</b> The other two are both prefixes
+      of something longer, and they differ only in whose cut it was — our
+      <code>max_tokens</code>, or our enumeration of the trie. Nothing about the string
+      itself distinguishes them.</p>
     <dl>
       <dt><code>stop</code> <span class="std">EOS-terminated, complete generation</span></dt>
       <dd>The model emitted <code>&lt;|endoftext|&gt;</code> and the call returned
         <code>finish_reason: "stop"</code>. The string is finished, so its Σ logprob is a
         final quantity. <b>219 of 8492 records</b> — 2.6%.</dd>
 
-      <dt><code>length</code> <span class="std">length-truncated</span></dt>
+      <dt><code>length</code> <span class="std">length-truncated — a prefix</span></dt>
       <dd><code>max_tokens</code> ran out mid-string. Σ logprob is a partial sum that
         would only get more negative if the string continued. <b>8273 of 8492 records</b>
-        — 97.4%, so nearly the whole corpus.</dd>
+        — 97.4%, so nearly the whole corpus. This always means the ceiling and nothing
+        else: of the 8232 distinct length-ended paths, <b>none stopped before its
+        <code>max_tokens</code></b>.</dd>
 
-      <dt><code>open</code> <span class="std">prefix, partial hypothesis</span></dt>
+      <dt><code>open</code> <span class="std">partial hypothesis — also a prefix</span></dt>
       <dd>Nothing recorded ends here at all; the string stops where the trie enumeration
         stopped. Only a row in the Prefixes view can be this — a completion and a greedy
         sibling are both recorded calls and always carry the API's verdict, so the box is
-        disabled in those views rather than silently returning nothing.</dd>
+        disabled in those views rather than silently returning nothing. Every one of the
+        <b>168,669</b> open nodes is an interior node with the trie continuing below it:
+        the trie only ever contains tokens some call actually generated, so there are
+        <b>no open leaves</b>.</dd>
     </dl>
     <p>Scope applies to every view that produces a <em>list</em> of strings: Completions,
       Prefixes, and the greedy path with its siblings. It does not apply to the greedy
@@ -276,6 +285,11 @@
         top 200 by Σ&rdquo;, which is a different question. Searching for
         <code>stop</code> alone walks 176,649 trie nodes to find all 197 of them; if a
         search ever hits its step budget, the page says the list may be incomplete.</p>
+      <p><b>How close a <code>length</code> string came to finishing is not knowable.</b>
+        <code>top_logprobs</code> gives the distribution <em>before</em> each generated
+        token, so the distribution after the last one — the only place EOS could have
+        shown up — is never reported. A truncated string could have been one token from
+        the end or a thousand; the data does not say.</p>
       <p>EOS is never itself a listed token — it is stripped from
         <code>logprobs.tokens</code>, so the one position that would prove termination is
         the one the API does not report. It does appear in <code>top_logprobs</code> at
@@ -382,9 +396,9 @@
       <tr><td>prefix</td><td>prefix, hypothesis</td><td>a path from the start through the token trie</td></tr>
       <tr><td>greedy path</td><td>the greedy decode, 1-best output</td><td>what argmax-at-every-step produces</td></tr>
       <tr><td>scope, end</td><td><code>finish_reason</code></td><td>what decided where the string stops</td></tr>
-      <tr><td><code>stop</code></td><td>EOS-terminated, complete generation</td><td>the model ended it itself</td></tr>
-      <tr><td><code>length</code></td><td>length-truncated</td><td><code>max_tokens</code> ran out</td></tr>
-      <tr><td><code>open</code></td><td>partial hypothesis</td><td>nothing recorded ends here</td></tr>
+      <tr><td><code>stop</code></td><td>EOS-terminated, complete generation</td><td>the model ended it — the only non-prefix</td></tr>
+      <tr><td><code>length</code></td><td>length-truncated</td><td>a prefix; <code>max_tokens</code> ran out</td></tr>
+      <tr><td><code>open</code></td><td>partial hypothesis</td><td>a prefix; nothing recorded ends here</td></tr>
       <tr><td>best-first</td><td>uniform-cost search, Dijkstra</td><td>expand the cheapest frontier node first</td></tr>
       <tr><td>list of prefixes</td><td>n-best / k-best list</td><td>the n highest-scoring sequences</td></tr>
       <tr><td>frontier</td><td>frontier, open set, beam</td><td>candidates found but not yet expanded</td></tr>

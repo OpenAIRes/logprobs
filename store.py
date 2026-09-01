@@ -54,12 +54,22 @@ VIEWS = ('prefixes', 'completions')
 # ranking systematically favours the short prefixes, which is exactly what the
 # default prefixes view does: 195 of its top 200 rows are 'open'.
 #
+# Only 'stop' is a finished string. The other two are both PREFIXES of something
+# longer, differing only in whose cut it was -- nothing about the string itself
+# separates them:
+#
 #   stop    the model emitted EOS. 219 of 8492 records, and the only ones whose
 #           score is a finished quantity.
-#   length  our max_tokens ran out. 8273 of 8492 -- so 97.4% of the corpus is a
-#           string cut off mid-thought, not a string the model finished.
-#   open    nothing recorded ends here; the end is an artefact of enumerating the
-#           trie. Only a prefix row can be this.
+#   length  our max_tokens ran out. 8273 of 8492 -- 97.4% of the corpus. Always
+#           the ceiling and nothing else: of 8232 distinct length-ended paths,
+#           none stopped before its max_tokens.
+#   open    our enumeration stopped. All 168,669 of these are interior nodes with
+#           the trie continuing below; the trie only holds tokens some call
+#           actually generated, so there are no open leaves. Prefix rows only.
+#
+# How close a 'length' string came to finishing cannot be recovered: top_logprobs
+# is the distribution BEFORE each generated token, so the one after the last --
+# the only place EOS could appear -- is never reported.
 ENDS = ('stop', 'length', 'open')
 
 # How a completions ranking may be ordered. Σ logprob is the default and the only

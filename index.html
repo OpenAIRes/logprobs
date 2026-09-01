@@ -57,6 +57,7 @@
   .ends label > span { min-width: 0; }
   .ends code { font-size: .95em; }
   .ends label b { color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
+  .ends label em { color: var(--ink-dim); font-style: normal; }
   .ends label.off { opacity: .45; cursor: default; }
   .hint { font-size: .78125rem; color: var(--ink-faint); line-height: 1.5; }
   .hint.on { color: var(--accent); }
@@ -142,11 +143,14 @@
              row and turned <code>max_tokens</code> into a cell of its own. -->
         <div class="ends">
           <label><input type="checkbox" class="endBox" value="stop" checked><span><b>stop</b>
-            — the model emitted EOS. The string is finished, so its Σ logprob is final.</span></label>
+            — <em>finished.</em> The model emitted EOS, so Σ logprob is final. The only
+            ending that is not a prefix.</span></label>
           <label><input type="checkbox" class="endBox" value="length" checked><span><b>length</b>
-            — <code>max_tokens</code> ran out. Cut off mid-thought; Σ is a partial sum.</span></label>
+            — <em>a prefix.</em> <code>max_tokens</code> ran out; the model had not finished.
+            Σ is a partial sum.</span></label>
           <label id="endOpenLabel"><input type="checkbox" class="endBox" value="open" checked><span><b>open</b>
-            — nothing recorded ends here. The end is where the enumeration stopped.</span></label>
+            — <em>a prefix.</em> Nothing recorded ends here; the trie continues below and the
+            enumeration stopped.</span></label>
         </div>
       </div>
       <div class="opt" id="wEndsHint"><span></span><span class="hint" id="endsHint"></span></div>
@@ -279,7 +283,8 @@ async function sync() {
       : view === 'completions'
         ? 'Completions are recorded calls, so every one ends on the API’s verdict. '
           + 'Only 219 of 8492 records ended on EOS.'
-        : 'Σ logprob is only comparable within one kind of ending. Untick "open" and the '
+        : 'Only "stop" is a finished string; the other two are prefixes, and they differ '
+          + 'in whose cut it was — our max_tokens, or our enumeration. Untick "open" and the '
           + 'prefix ranking turns into the same set of strings the completions view lists.';
   el('wPrefix').hidden = !ranked;
   el('wBase').hidden = ranked || greedy;

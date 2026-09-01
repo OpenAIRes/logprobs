@@ -235,9 +235,9 @@ fetch('/api/stats', { cache: 'no-store' })
     </label>
     <label id="fwdWrap" hidden><input type="checkbox" id="fwdIn"> forward only</label>
     <span id="endsWrap">scope:
-      <label title="the model emitted EOS — the string is finished, so its Σ is final"><input type="checkbox" class="endBox" value="stop" checked> stop</label>
-      <label title="our max_tokens ran out — the string is cut off mid-thought"><input type="checkbox" class="endBox" value="length" checked> length</label>
-      <label title="nothing recorded ends here; the end is an artefact of enumerating the trie"><input type="checkbox" class="endBox" value="open" checked> open</label>
+      <label title="finished — the model emitted EOS. The only ending that is not a prefix."><input type="checkbox" class="endBox" value="stop" checked> stop</label>
+      <label title="a prefix — max_tokens ran out; the model had not finished"><input type="checkbox" class="endBox" value="length" checked> length</label>
+      <label title="a prefix — nothing recorded ends here; the trie continues below"><input type="checkbox" class="endBox" value="open" checked> open</label>
     </span>
     <label for="prefixIn" id="prefixWrap">starts with:
       <input type="text" id="prefixIn" placeholder="e.g. I have" spellcheck="false">
@@ -387,9 +387,11 @@ function renderRowHint(detailEl) {
    over an 'open' prefix is a partial sum that can only get worse, over a 'stop'
    string it is final, so two rows are only comparable when this matches. */
 const END_TITLE = {
-  stop: 'the model emitted EOS — finished, so Σ logprob is final',
-  length: 'cut off when max_tokens ran out — Σ logprob is a partial sum',
-  open: 'nothing recorded ends here — the end is where the enumeration stopped',
+  stop: 'finished — the model emitted EOS, so Σ logprob is final. '
+      + 'The only ending that is not a prefix.',
+  length: 'a prefix — max_tokens ran out; the model had not finished. Σ is a partial sum.',
+  open: 'a prefix — nothing recorded ends here; the trie continues below and the '
+      + 'enumeration stopped.',
 };
 function endBadge(e) {
   const end = e.end || e.finish_reason;
@@ -640,7 +642,7 @@ function applyViewControls() {
     openBox.disabled = VIEW === 'completions' || VIEW === 'greedy';
     openBox.parentElement.title = openBox.disabled
       ? 'a recorded call always has an API finish reason, so it is never open'
-      : 'nothing recorded ends here; the end is an artefact of enumerating the trie';
+      : 'a prefix — nothing recorded ends here; the trie continues below';
   }
   // Prefixes come out of a sum-ordered heap; the ranking IS the search order.
   document.getElementById('sortWrap').hidden = !(VIEW === 'completions' || VIEW === 'greedy');
