@@ -248,8 +248,8 @@ fetch('/api/stats', { cache: 'no-store' })
     </label>
     <label id="fwdWrap" hidden><input type="checkbox" id="fwdIn"> forward only</label>
     <label id="scopeWrap" for="scopeRange">how complete:
-      <input type="range" id="scopeRange" min="0" max="3" step="1" value="0" style="width:5.5rem;vertical-align:middle">
-      <b id="scopeName" style="font-family:ui-monospace,Menlo,monospace">any</b>
+      <input type="range" id="scopeRange" min="0" max="2" step="1" value="0" style="width:5.5rem;vertical-align:middle" title="prefix (everything, 176,649) &rarr; no continuation on record (7,915) &rarr; complete (197). Nested: sliding right only narrows.">
+      <b id="scopeName" style="font-family:ui-monospace,Menlo,monospace">prefix</b>
     </label>
     <span id="endsWrap">scope:
       <label title="finished — the model emitted EOS. The only ending that is not a prefix."><input type="checkbox" class="endBox" value="stop" checked> stop</label>
@@ -685,17 +685,16 @@ const NODES_KEY = 'dijkstra_nodes';
 function nodeBoxes() { return [...document.querySelectorAll('.nodeBox')]; }
 function nodesValue() { return nodeBoxes().filter(b => b.checked).map(b => b.value); }
 
-/* One prefix-to-complete axis. The three stops partition the reachable prefixes
-   exactly -- 168,734 + 7,718 + 197 = 176,649 -- and position 0 is off, since the
-   three are exclusive and "no filter" is the default. It drives the boxes rather
-   than replacing them: "every dead end" is a span of two stops, not a stop, so
-   the boxes stay the truth and the slider jumps between the useful corners. */
+/* One prefix-to-complete axis with three NESTED stops -- 176,649 > 7,915 > 197,
+   each a subset of the one to its left -- so sliding right only ever narrows and
+   the leftmost is simply no filter. It drives the boxes rather than replacing
+   them: they can still say things the axis has no stop for, such as `continues`
+   on its own, and then the slider dims and reads `combination`. */
 const ENDS_ALL = ['stop', 'length', 'open'];
 const NODES_ALL = ['continues', 'leaf'];
 const SCOPE_STOPS = [
-  { name: 'any', ends: null, nodes: null },
-  { name: 'prefix', ends: null, nodes: ['continues'] },
-  { name: 'unfinished', ends: ['length'], nodes: ['leaf'] },
+  { name: 'prefix', ends: null, nodes: null },
+  { name: 'no continuation', ends: null, nodes: ['leaf'] },
   { name: 'complete', ends: ['stop'], nodes: null },
 ];
 const scopeRange = document.getElementById('scopeRange');

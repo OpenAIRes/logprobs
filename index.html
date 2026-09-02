@@ -58,15 +58,17 @@
   .ends code { font-size: .95em; }
   .ends label b { color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
   .ends label em { color: var(--ink-dim); font-style: normal; }
-  /* One axis with three stops that partition the reachable prefixes exactly --
-     168,734 + 7,718 + 197 = 176,649 -- plus an off position, because the three
-     are exclusive and "everything" is the page default. */
+  /* One axis, three NESTED stops: 176,649 > 7,915 > 197, each a subset of the one
+     to its left. Sliding right narrows, so the leftmost is simply everything and
+     there is no separate off position. The middle has no visible name because
+     there is no good short one; it carries a title and names itself in the hint
+     once selected. */
   .scope { display: grid; gap: .3rem; }
   .scope input[type=range] { width: 100%; max-width: 26rem; margin: 0; }
   /* The boxes say something the axis has no stop for, so the handle is shown as
      not standing for anything rather than pointing at the wrong stop. */
   .scope input[type=range].off { opacity: .4; }
-  .stops { display: grid; grid-template-columns: repeat(4, 1fr); max-width: 26rem;
+  .stops { display: grid; grid-template-columns: repeat(3, 1fr); max-width: 26rem;
     font-size: .71875rem; color: var(--ink-faint); }
   .stops span { display: grid; justify-items: center; text-align: center; }
   .stops span:first-child { justify-items: start; text-align: left; }
@@ -156,13 +158,12 @@
       <div class="opt" id="wGreedyInfo" hidden><span></span><span class="hint" id="greedyInfo"></span></div>
       <div class="opt" id="wScope"><span>how complete</span>
         <div class="scope">
-          <input type="range" id="lScope" min="0" max="3" step="1" value="0"
+          <input type="range" id="lScope" min="0" max="2" step="1" value="0"
                  aria-label="how complete a string the row is">
           <div class="stops">
-            <span data-v="0"><b>any</b><i>no filter</i></span>
-            <span data-v="1"><b>prefix</b><i>168,734</i></span>
-            <span data-v="2"><b>unfinished</b><i>7,718</i></span>
-            <span data-v="3"><b>complete</b><i>197</i></span>
+            <span data-v="0"><b>prefix</b><i>176,649</i></span>
+            <span data-v="1" title="No continuation on record: the 197 complete strings plus the 7,718 prefixes whose continuation we do not have."><b>·</b><i>7,915</i></span>
+            <span data-v="2"><b>complete</b><i>197</i></span>
           </div>
           <div class="hint" id="scopeHint"></div>
         </div>
@@ -534,17 +535,19 @@ let sortTouched = false;
    because "every dead end" (unfinished + complete) is a span, not a stop, so the
    boxes below stay the truth and this only jumps between the useful corners. */
 const ENDS_ALL = ['stop', 'length', 'open'];
+/* Nested, not exclusive: each stop is a subset of the one to its left, so sliding
+   right only ever narrows. 176,649 > 7,915 > 197. */
 const SCOPE_STOPS = [
-  { ends: null, nodes: null,
-    why: 'Every prefix in the trie, however it ends.' },
-  { ends: null, nodes: ['continues'],
-    why: 'The database holds a continuation, so the string is provably a prefix '
-       + 'of something we already have.' },
-  { ends: ['length'], nodes: ['leaf'],
-    why: 'A dead end the model had not finished: nothing further on record, and '
-       + 'it stopped because max_tokens ran out. A prefix of something we do not have.' },
-  { ends: ['stop'], nodes: null,
-    why: 'The model emitted EOS. The only rows that are not prefixes of anything.' },
+  { name: 'prefix', ends: null, nodes: null,
+    why: 'Everything, prefixes included — 176,649 strings. There is rarely a '
+       + 'reason to want the prefixes and not the rest, so this end of the axis is '
+       + 'simply no filter.' },
+  { name: 'no continuation on record', ends: null, nodes: ['leaf'],
+    why: 'No continuation on record — 7,915 strings: the 197 the model finished, '
+       + 'plus the 7,718 that are prefixes whose continuation we do not have.' },
+  { name: 'complete', ends: ['stop'], nodes: null,
+    why: 'The model emitted EOS — 197 strings, the only ones that are not '
+       + 'prefixes of anything.' },
 ];
 function scopeStop() { return Number(el('lScope').value) || 0; }
 function applyScopeStop() {

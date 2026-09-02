@@ -267,31 +267,28 @@
         the trie only ever contains tokens some call actually generated, so there are
         <b>no open leaves</b>.</dd>
     </dl>
-    <h3>how complete — one axis, three stops</h3>
-    <p>The slider is the front door to the boxes below. Its three stops
-      <b>partition the reachable prefixes exactly</b> — nothing overlaps, nothing is
-      left out:</p>
+    <h3>prefix &rarr; complete — one axis, three nested stops</h3>
+    <p>The slider is the front door to the boxes below. Its stops are <b>nested</b>: each
+      one is a subset of the stop to its left, so sliding right only ever narrows.</p>
     <table>
       <tr><th>stop</th><th>what it is</th><th>count</th></tr>
-      <tr><td><b>prefix</b></td><td>the database holds a continuation, so the string is
-        provably a prefix of something we already have</td><td>168,734</td></tr>
-      <tr><td><b>unfinished</b></td><td>a dead end the model had not finished: nothing
-        further on record, and it stopped because <code>max_tokens</code> ran out — a
-        prefix of something we do <em>not</em> have</td><td>7,718</td></tr>
-      <tr><td><b>complete</b></td><td>the model emitted EOS; the only rows that are not
-        prefixes of anything</td><td>197</td></tr>
-      <tr><td colspan="2" style="text-align:right">sum</td><td><b>176,649</b> = every
-        reachable prefix</td></tr>
+      <tr><td><b>prefix</b></td><td>everything, prefixes included. There is rarely a
+        reason to want the prefixes and <em>not</em> the rest, so this end of the axis
+        is simply no filter.</td><td>176,649</td></tr>
+      <tr><td>&middot; <span class="std">no continuation on record</span></td>
+        <td>nothing further on record: the 197 the model finished, plus the 7,718 that
+        are prefixes whose continuation we do not have</td><td>7,915</td></tr>
+      <tr><td><b>complete</b></td><td>the model emitted EOS; the only strings that are
+        not prefixes of anything</td><td>197</td></tr>
     </table>
-    <p>Position 0 is <b>any</b>, i.e. off. It has to exist because the three stops are
-      mutually exclusive and no filter is the page default.</p>
+    <p>The middle stop carries no visible name — there is no good short one — so it
+      shows only its count, names itself on hover, and spells itself out in the line
+      under the slider once selected.</p>
     <div class="note">
-      <p><b>The slider drives the boxes; it does not replace them.</b> Some useful
-        selections are a <em>span</em> of stops rather than a stop — &ldquo;every dead
-        end&rdquo; is unfinished + complete, 7,915 — and one handle cannot say that. So
-        the boxes stay the truth and the slider jumps between the three corners. Set the
-        boxes to something off the axis and the slider dims and reads
-        <code>combination</code>, rather than pointing at a stop it does not mean.</p>
+      <p><b>The slider drives the boxes; it does not replace them.</b> They can still say
+        things the axis has no stop for — <code>continues</code> on its own, say, or
+        <code>open</code> alone — and then the slider dims and reads
+        <code>combination</code> rather than pointing at a stop it does not mean.</p>
     </div>
 
     <h3>continues / dead end</h3>
