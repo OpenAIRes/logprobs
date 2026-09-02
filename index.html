@@ -58,6 +58,22 @@
   .ends code { font-size: .95em; }
   .ends label b { color: var(--ink-dim); font-family: ui-monospace, Menlo, monospace; }
   .ends label em { color: var(--ink-dim); font-style: normal; }
+  /* One axis with three stops that partition the reachable prefixes exactly --
+     168,734 + 7,718 + 197 = 176,649 -- plus an off position, because the three
+     are exclusive and "everything" is the page default. */
+  .scope { display: grid; gap: .3rem; }
+  .scope input[type=range] { width: 100%; max-width: 26rem; margin: 0; }
+  /* The boxes say something the axis has no stop for, so the handle is shown as
+     not standing for anything rather than pointing at the wrong stop. */
+  .scope input[type=range].off { opacity: .4; }
+  .stops { display: grid; grid-template-columns: repeat(4, 1fr); max-width: 26rem;
+    font-size: .71875rem; color: var(--ink-faint); }
+  .stops span { display: grid; justify-items: center; text-align: center; }
+  .stops span:first-child { justify-items: start; text-align: left; }
+  .stops span:last-child { justify-items: end; text-align: right; }
+  .stops b { color: var(--ink-faint); font-weight: 500; }
+  .stops i { font-style: normal; font-family: ui-monospace, Menlo, monospace; }
+  .stops span.on b, .stops span.on i { color: var(--accent); font-weight: 600; }
   /* Not a fourth kind of ending -- a separate axis, so it is ruled off. */
   .ends label.sep { border-top: 1px solid var(--line); padding-top: .35rem; margin-top: .15rem; }
   .ends label.off { opacity: .45; cursor: default; }
@@ -138,7 +154,20 @@
         <input type="text" id="lPrompt" placeholder="(empty = unconditional)" spellcheck="false">
       </label>
       <div class="opt" id="wGreedyInfo" hidden><span></span><span class="hint" id="greedyInfo"></span></div>
-      <div class="opt" id="wEnds"><span>scope</span>
+      <div class="opt" id="wScope"><span>how complete</span>
+        <div class="scope">
+          <input type="range" id="lScope" min="0" max="3" step="1" value="0"
+                 aria-label="how complete a string the row is">
+          <div class="stops">
+            <span data-v="0"><b>any</b><i>no filter</i></span>
+            <span data-v="1"><b>prefix</b><i>168,734</i></span>
+            <span data-v="2"><b>unfinished</b><i>7,718</i></span>
+            <span data-v="3"><b>complete</b><i>197</i></span>
+          </div>
+          <div class="hint" id="scopeHint"></div>
+        </div>
+      </div>
+      <div class="opt" id="wEnds"><span>or by hand</span>
 <!-- Exactly two element children per label. Free text inside a grid container
              is wrapped in its own anonymous grid item, so "input + <b> + text" is three
              items in a two-column grid, not two -- which put the description on its own
@@ -301,6 +330,8 @@ async function sync() {
      which both string rankings sit on. */
   el('endContLabel').hidden = !ranked;
   el('endLeafLabel').hidden = !ranked;
+  el('wScope').hidden = !ranked;
+  paintScope();
   el('endsHint').textContent =
     greedy
       ? 'Rank 1 is the greedy path; the siblings are recorded continuations, so each '
@@ -497,6 +528,53 @@ for (const node of document.querySelectorAll('input[name=view]')) {
 /* Whether the sort was chosen deliberately in this view, so switching views can
    reset it to that view's default without overriding an explicit choice. */
 let sortTouched = false;
+/* One prefix-to-complete axis, as three stops that partition the reachable
+   prefixes exactly: 168,734 + 7,718 + 197 = 176,649. Position 0 is off, because
+   the three are mutually exclusive and "no filter" is the page default -- and
+   because "every dead end" (unfinished + complete) is a span, not a stop, so the
+   boxes below stay the truth and this only jumps between the useful corners. */
+const ENDS_ALL = ['stop', 'length', 'open'];
+const SCOPE_STOPS = [
+  { ends: null, nodes: null,
+    why: 'Every prefix in the trie, however it ends.' },
+  { ends: null, nodes: ['continues'],
+    why: 'The database holds a continuation, so the string is provably a prefix '
+       + 'of something we already have.' },
+  { ends: ['length'], nodes: ['leaf'],
+    why: 'A dead end the model had not finished: nothing further on record, and '
+       + 'it stopped because max_tokens ran out. A prefix of something we do not have.' },
+  { ends: ['stop'], nodes: null,
+    why: 'The model emitted EOS. The only rows that are not prefixes of anything.' },
+];
+function scopeStop() { return Number(el('lScope').value) || 0; }
+function applyScopeStop() {
+  const s = SCOPE_STOPS[scopeStop()];
+  for (const b of endBoxes()) b.checked = !s.ends || s.ends.includes(b.value);
+  for (const b of nodeBoxes()) b.checked = !s.nodes || s.nodes.includes(b.value);
+}
+/* Which stop the boxes currently amount to, or null when they say something the
+   axis cannot -- "every dead end", say, or open on its own. */
+function stopFromBoxes() {
+  const e = endsValue().slice().sort().join(','), n = nodesValue().slice().sort().join(',');
+  for (let i = 0; i < SCOPE_STOPS.length; i++) {
+    const s = SCOPE_STOPS[i];
+    const se = (s.ends || ENDS_ALL).slice().sort().join(',');
+    const sn = (s.nodes || ['continues', 'leaf']).slice().sort().join(',');
+    if (e === se && n === sn) return i;
+  }
+  return null;
+}
+function paintScope() {
+  const at = stopFromBoxes();
+  if (at !== null) el('lScope').value = String(at);
+  el('lScope').classList.toggle('off', at === null);
+  const stops = [...document.querySelectorAll('.stops span')];
+  stops.forEach(sp => sp.classList.toggle('on', at !== null && Number(sp.dataset.v) === at));
+  el('scopeHint').textContent = at !== null
+    ? SCOPE_STOPS[at].why
+    : 'The boxes below say something this axis has no stop for, so the slider is '
+      + 'showing nothing rather than the wrong thing.';
+}
 function nodeBoxes() { return [...document.querySelectorAll('.nodeBox')]; }
 function nodesValue() { return nodeBoxes().filter(b => b.checked).map(b => b.value); }
 function endBoxes() { return [...document.querySelectorAll('.endBox')]; }
@@ -511,6 +589,7 @@ function endsIsAll() {
 }
 el('lExtend').addEventListener('change', sync);
 el('lRecovered').addEventListener('change', sync);
+el('lScope').addEventListener('input', () => { applyScopeStop(); sync(); });
 for (const box of endBoxes()) {
   box.addEventListener('change', () => {
     // All boxes off asks for nothing; put the one just cleared back.

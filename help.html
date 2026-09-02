@@ -267,6 +267,33 @@
         the trie only ever contains tokens some call actually generated, so there are
         <b>no open leaves</b>.</dd>
     </dl>
+    <h3>how complete — one axis, three stops</h3>
+    <p>The slider is the front door to the boxes below. Its three stops
+      <b>partition the reachable prefixes exactly</b> — nothing overlaps, nothing is
+      left out:</p>
+    <table>
+      <tr><th>stop</th><th>what it is</th><th>count</th></tr>
+      <tr><td><b>prefix</b></td><td>the database holds a continuation, so the string is
+        provably a prefix of something we already have</td><td>168,734</td></tr>
+      <tr><td><b>unfinished</b></td><td>a dead end the model had not finished: nothing
+        further on record, and it stopped because <code>max_tokens</code> ran out — a
+        prefix of something we do <em>not</em> have</td><td>7,718</td></tr>
+      <tr><td><b>complete</b></td><td>the model emitted EOS; the only rows that are not
+        prefixes of anything</td><td>197</td></tr>
+      <tr><td colspan="2" style="text-align:right">sum</td><td><b>176,649</b> = every
+        reachable prefix</td></tr>
+    </table>
+    <p>Position 0 is <b>any</b>, i.e. off. It has to exist because the three stops are
+      mutually exclusive and no filter is the page default.</p>
+    <div class="note">
+      <p><b>The slider drives the boxes; it does not replace them.</b> Some useful
+        selections are a <em>span</em> of stops rather than a stop — &ldquo;every dead
+        end&rdquo; is unfinished + complete, 7,915 — and one handle cannot say that. So
+        the boxes stay the truth and the slider jumps between the three corners. Set the
+        boxes to something off the axis and the slider dims and reads
+        <code>combination</code>, rather than pointing at a stop it does not mean.</p>
+    </div>
+
     <h3>continues / dead end</h3>
     <p>Whether the database holds anything <em>past</em> this string. A separate axis
       from how the string ended, and the two cross — which is the whole reason it needs

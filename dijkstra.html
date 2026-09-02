@@ -65,6 +65,9 @@
   .c-sweep .end.open { color: var(--ink-faint); font-weight: 400; }
   .c-sweep .cont { color: var(--accent); padding-left: .15rem; }
   #endsWrap .nodeLbl { color: var(--ink-dim); }
+  #scopeRange.off { opacity: .4; }
+  #scopeName { color: var(--accent); }
+  #scopeName.off { color: var(--ink-faint); }
   /* The continuation is shown but is NOT what the row was ranked by, so it reads
      as a different kind of text rather than more of the same. */
   .tok.ext { opacity: .62; }
@@ -244,6 +247,10 @@ fetch('/api/stats', { cache: 'no-store' })
       <input type="number" id="stepsIn" value="20" min="1" max="200" step="1" style="width:4.5rem">
     </label>
     <label id="fwdWrap" hidden><input type="checkbox" id="fwdIn"> forward only</label>
+    <label id="scopeWrap" for="scopeRange">how complete:
+      <input type="range" id="scopeRange" min="0" max="3" step="1" value="0" style="width:5.5rem;vertical-align:middle">
+      <b id="scopeName" style="font-family:ui-monospace,Menlo,monospace">any</b>
+    </label>
     <span id="endsWrap">scope:
       <label title="finished — the model emitted EOS. The only ending that is not a prefix."><input type="checkbox" class="endBox" value="stop" checked> stop</label>
       <label title="a prefix — max_tokens ran out; the model had not finished"><input type="checkbox" class="endBox" value="length" checked> length</label>
@@ -677,6 +684,43 @@ const recoveredBox = document.getElementById('recoveredBox');
 const NODES_KEY = 'dijkstra_nodes';
 function nodeBoxes() { return [...document.querySelectorAll('.nodeBox')]; }
 function nodesValue() { return nodeBoxes().filter(b => b.checked).map(b => b.value); }
+
+/* One prefix-to-complete axis. The three stops partition the reachable prefixes
+   exactly -- 168,734 + 7,718 + 197 = 176,649 -- and position 0 is off, since the
+   three are exclusive and "no filter" is the default. It drives the boxes rather
+   than replacing them: "every dead end" is a span of two stops, not a stop, so
+   the boxes stay the truth and the slider jumps between the useful corners. */
+const ENDS_ALL = ['stop', 'length', 'open'];
+const NODES_ALL = ['continues', 'leaf'];
+const SCOPE_STOPS = [
+  { name: 'any', ends: null, nodes: null },
+  { name: 'prefix', ends: null, nodes: ['continues'] },
+  { name: 'unfinished', ends: ['length'], nodes: ['leaf'] },
+  { name: 'complete', ends: ['stop'], nodes: null },
+];
+const scopeRange = document.getElementById('scopeRange');
+const scopeName = document.getElementById('scopeName');
+function applyScopeStop() {
+  const s = SCOPE_STOPS[Number(scopeRange.value) || 0];
+  for (const b of endBoxes()) b.checked = !s.ends || s.ends.includes(b.value);
+  for (const b of nodeBoxes()) b.checked = !s.nodes || s.nodes.includes(b.value);
+}
+function stopFromBoxes() {
+  const e = endsValue().slice().sort().join(','), n = nodesValue().slice().sort().join(',');
+  for (let i = 0; i < SCOPE_STOPS.length; i++) {
+    const s = SCOPE_STOPS[i];
+    if (e === (s.ends || ENDS_ALL).slice().sort().join(',')
+     && n === (s.nodes || NODES_ALL).slice().sort().join(',')) return i;
+  }
+  return null;
+}
+function paintScope() {
+  const at = stopFromBoxes();
+  if (at !== null) scopeRange.value = String(at);
+  scopeRange.classList.toggle('off', at === null);
+  scopeName.classList.toggle('off', at === null);
+  scopeName.textContent = at !== null ? SCOPE_STOPS[at].name : 'combination';
+}
 /* The toolbar follows the view: a starts-with filter is meaningless over a grid,
    a base selector over a ranking. Hidden controls do not reach the query. */
 function applyViewControls() {
@@ -691,6 +735,7 @@ function applyViewControls() {
   // Only the trie search walks token by token, so only it can be restricted to
   // paths that were generated rather than recovered.
   document.getElementById('recoveredWrap').hidden = VIEW !== 'prefixes';
+  document.getElementById('scopeWrap').hidden = document.getElementById('endsWrap').hidden;
   const openBox = endBoxes().find(b => b.value === 'open');
   if (openBox) {
     // Only a prefix can be 'open': a completion and a greedy sibling are both
@@ -965,6 +1010,7 @@ loadSort();
     // table with no hint why. Put the one just cleared back.
     if (!endsValue().length) { b.checked = true; return; }
     try { localStorage.setItem(ENDS_KEY, endsValue().join(',')); } catch {}
+    paintScope();
     load();
   }));
 
@@ -994,8 +1040,20 @@ loadSort();
   nodeBoxes().forEach(b => b.addEventListener('change', () => {
     if (!nodesValue().length) { b.checked = true; return; }
     try { localStorage.setItem(NODES_KEY, nodesValue().join(',')); } catch {}
+    paintScope();
     load();
   }));
+
+  scopeRange.addEventListener('input', () => {
+    applyScopeStop();
+    try {
+      localStorage.setItem(ENDS_KEY, endsValue().join(','));
+      localStorage.setItem(NODES_KEY, nodesValue().join(','));
+    } catch {}
+    paintScope();
+    load();
+  });
+  paintScope();
 }
 
 function queryUrl() {
