@@ -670,7 +670,8 @@ class RecordStore:
 
     def greedy_alternatives(self, prompt: str = '', model: str = 'gpt-3.5-turbo-instruct',
                             top: int = 20, sort: str = 'cost',
-                            max_alts: int = 8, ends=None, extend: bool = False) -> Dict:
+                            max_alts: int = 8, ends=None, extend: bool = False,
+                            nodes=None) -> Dict:
         """The greedy path and its next-best siblings: one-token departures from it.
 
         "Second best by the greedy criterion" is the cheapest single-token
@@ -696,12 +697,13 @@ class RecordStore:
         # Not part of the cache key: the cached value is the unranked, unfiltered
         # candidate set, and sort/top/ends are all applied to a copy of it.
         ends = self._normalize_ends(ends)
+        nodes = self._normalize_nodes(nodes)
         cache_key = (prompt, model, max_alts)
         if cache_key in self._alts_cache:
             greedy, candidates, missing = self._alts_cache[cache_key]
             return self._rank_alts(prompt, model, sort, top, greedy, candidates,
                                    missing, ends, extend, root_for_extend=self.trie(model),
-                                   max_alts=max_alts)
+                                   max_alts=max_alts, nodes=nodes)
 
         greedy = self.greedy(prompt=prompt, model=model)
         if not greedy['n'] or not greedy['first_id']:
@@ -745,6 +747,7 @@ class RecordStore:
             # Same field name every view uses. A sibling is always a real recorded
             # continuation, so it carries the API's verdict and is never 'open'.
             'end': (base.get('choices') or [{}])[0].get('finish_reason') or 'length',
+            'node_kind': self.node_kind(toks[:len(greedy_detail)], root),
         }]
 
         missing = 0
@@ -773,6 +776,7 @@ class RecordStore:
                     'id': rec.get('id'),
                     'finish_reason': (rec.get('choices') or [{}])[0].get('finish_reason'),
                     'end': (rec.get('choices') or [{}])[0].get('finish_reason') or 'length',
+                    'node_kind': self.node_kind(path, root),
                     # What the greedy path scores at this same length, so the row can
                     # be compared against it rather than only against its siblings.
                     'greedy_sum_at_n': cum[len(path) - 1] if len(path) <= len(cum) else None,
@@ -783,7 +787,7 @@ class RecordStore:
         # a continuation. Sorting and capping are cheap, so only the build is cached.
         self._alts_cache[cache_key] = (greedy, entries, missing)
         return self._rank_alts(prompt, model, sort, top, greedy, entries, missing, ends,
-                               extend, root_for_extend=root, max_alts=max_alts)
+                               extend, root_for_extend=root, max_alts=max_alts, nodes=nodes)
 
     # cost first, and it is the default: the greedy criterion is what makes a
     # sibling "second best", and the other keys answer a different question.
@@ -796,7 +800,8 @@ class RecordStore:
     }
 
     def _rank_alts(self, prompt, model, sort, top, greedy, candidates, missing,
-                   ends=None, extend=False, root_for_extend=None, max_alts=8) -> Dict:
+                   ends=None, extend=False, root_for_extend=None, max_alts=8,
+                   nodes=None) -> Dict:
         key, label = self.ALT_SORTS.get(sort) or self.ALT_SORTS['cost']
         entries = sorted(candidates, key=key)
         # After the sort and before the cap, as everywhere else: filtering the
@@ -804,6 +809,11 @@ class RecordStore:
         # cheapest", which is not the question the checkbox asks.
         if ends:
             entries = [e for e in entries if e.get('end') in ends]
+        if nodes:
+            entries = [e for e in entries if e.get('node_kind') in nodes]
+        # What the cap was applied to, so the page can say "20 of N" here as well
+        # as in the two rankings.
+        available = len(entries)
         if top:
             entries = entries[:top]
         # Copy before stamping rank: the candidate list is shared between requests.
@@ -825,8 +835,11 @@ class RecordStore:
             # number is large by design and not a sign of missing data.
             'departures_without_record': missing,
             'departures_ranked': len(candidates) - 1,
+            'available': available,
             'ends': sorted(ends) if ends else None,
             'end_counts': dict(Counter(e.get('end') for e in entries)),
+            'nodes': sorted(nodes) if nodes else None,
+            'node_counts': dict(Counter(e.get('node_kind') for e in entries)),
             'extend': bool(extend),
             'distinct_extended': distinct,
             'count': len(entries),

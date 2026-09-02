@@ -248,7 +248,7 @@ fetch('/api/stats', { cache: 'no-store' })
     </label>
     <label id="fwdWrap" hidden><input type="checkbox" id="fwdIn"> forward only</label>
     <label id="scopeWrap" for="scopeRange">how complete:
-      <input type="range" id="scopeRange" min="0" max="2" step="1" value="0" style="width:5.5rem;vertical-align:middle" title="prefix (everything, 176,649) &rarr; no continuation on record (7,915) &rarr; complete (197). Nested: sliding right only narrows.">
+      <input type="range" id="scopeRange" min="0" max="2" step="1" value="0" style="width:5.5rem;vertical-align:middle" title="prefix (everything) &rarr; no continuation on record &rarr; complete. Nested: sliding right only narrows. The count for the stop you pick is in the header line.">
       <b id="scopeName" style="font-family:ui-monospace,Menlo,monospace">prefix</b>
     </label>
     <span id="endsWrap">scope:
@@ -705,11 +705,15 @@ function applyScopeStop() {
   for (const b of nodeBoxes()) b.checked = !s.nodes || s.nodes.includes(b.value);
 }
 function stopFromBoxes() {
+  // Baselines from the boxes the view offers, not from every value: `open` is
+  // disabled on greedy, so comparing against all three never matched there.
+  const allEnds = endBoxes().filter(b => !b.disabled).map(b => b.value).sort().join(',');
+  const allNodes = nodeBoxes().filter(b => !b.disabled).map(b => b.value).sort().join(',');
   const e = endsValue().slice().sort().join(','), n = nodesValue().slice().sort().join(',');
   for (let i = 0; i < SCOPE_STOPS.length; i++) {
     const s = SCOPE_STOPS[i];
-    if (e === (s.ends || ENDS_ALL).slice().sort().join(',')
-     && n === (s.nodes || NODES_ALL).slice().sort().join(',')) return i;
+    if (e === (s.ends ? s.ends.slice().sort().join(',') : allEnds)
+     && n === (s.nodes ? s.nodes.slice().sort().join(',') : allNodes)) return i;
   }
   return null;
 }
@@ -734,7 +738,9 @@ function applyViewControls() {
   // Only the trie search walks token by token, so only it can be restricted to
   // paths that were generated rather than recovered.
   document.getElementById('recoveredWrap').hidden = VIEW !== 'prefixes';
+  // The slider belongs wherever the scope boxes do, greedy included.
   document.getElementById('scopeWrap').hidden = document.getElementById('endsWrap').hidden;
+  for (const l of document.querySelectorAll('.nodeLbl')) l.hidden = false;
   const openBox = endBoxes().find(b => b.value === 'open');
   if (openBox) {
     // Only a prefix can be 'open': a completion and a greedy sibling are both
@@ -1074,6 +1080,8 @@ function queryUrl() {
     const g = endsValue();
     if (g.length && !endsIsAll()) p.set('ends', g.join(','));
     if (extendBox.checked) p.set('extend', '1');
+    const gn = nodesValue();
+    if (gn.length === 1) p.set('nodes', gn[0]);
     return '/api/greedy_alternatives?' + p.toString();
   }
   const p = new URLSearchParams({ view: VIEW, top: limitSel.value || '200' });

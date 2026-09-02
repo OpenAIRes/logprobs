@@ -160,10 +160,14 @@
         <div class="scope">
           <input type="range" id="lScope" min="0" max="2" step="1" value="0"
                  aria-label="how complete a string the row is">
+<!-- No counts baked into the labels: 176,649 / 7,915 / 197 are trie-wide, so
+               they would be wrong the moment the view is completions or greedy. The
+               live count for the selected stop goes in the line below, which asks the
+               store for exactly the settings on screen. -->
           <div class="stops">
-            <span data-v="0"><b>prefix</b><i>176,649</i></span>
-            <span data-v="1" title="No continuation on record: the 197 complete strings plus the 7,718 prefixes whose continuation we do not have."><b>·</b><i>7,915</i></span>
-            <span data-v="2"><b>complete</b><i>197</i></span>
+            <span data-v="0" title="Everything, prefixes included."><b>prefix</b></span>
+            <span data-v="1" title="No continuation on record: the strings the model finished, plus the prefixes whose continuation we do not have."><b>·</b></span>
+            <span data-v="2" title="The model emitted EOS."><b>complete</b></span>
           </div>
           <div class="hint" id="scopeHint"></div>
         </div>
@@ -329,9 +333,12 @@ async function sync() {
   el('endRecoveredLabel').hidden = view !== 'prefixes';
   /* Whether the database continues past a string is a question about the trie,
      which both string rankings sit on. */
-  el('endContLabel').hidden = !ranked;
-  el('endLeafLabel').hidden = !ranked;
-  el('wScope').hidden = !ranked;
+  /* The slider and the continuation boxes belong wherever the scope group does.
+     Tying them to `ranked` alone hid the page's headline control on the default
+     view, which is greedy -- the same mistake the ends boxes had. */
+  el('endContLabel').hidden = !scoped;
+  el('endLeafLabel').hidden = !scoped;
+  el('wScope').hidden = !scoped;
   paintScope();
   el('endsHint').textContent =
     greedy
@@ -372,19 +379,21 @@ async function sync() {
 let availSeq = 0;
 async function describeAvailable() {
   const view = viewOf();
-  if (view !== 'prefixes' && view !== 'completions') {
+  const greedy = view === 'greedy';
+  if (view !== 'prefixes' && view !== 'completions' && !(greedy && !single())) {
     el('wAvail').hidden = true;
     return;
   }
   const mine = ++availSeq;
-  const p = new URLSearchParams({ view, top: '1' });
+  const p = new URLSearchParams(greedy ? { top: '1' } : { view, top: '1' });
   const ends = endsValue();
   if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
   if (view === 'prefixes' && !el('lRecovered').checked) p.set('chosen_only', '1');
   const nodeSel = nodesValue();
   if (nodeSel.length === 1) p.set('nodes', nodeSel[0]);
   try {
-    const db = await (await fetch('/api/query?' + p, { cache: 'no-store' })).json();
+    const route = greedy ? '/api/greedy_alternatives?' : '/api/query?';
+    const db = await (await fetch(route + p, { cache: 'no-store' })).json();
     if (mine !== availSeq) return;             // a later edit already asked
     const want = Number(el('lTop').value) || 1;
     const n = (db.available || 0).toLocaleString('en-US');
@@ -455,6 +464,8 @@ function listUrl() {
     const gEnds = endsValue();
     if (!single() && gEnds.length && !endsIsAll()) p.set('ends', gEnds.join(','));
     if (!single() && el('lExtend').checked) p.set('extend', '1');
+    const gNodes = nodesValue();
+    if (!single() && gNodes.length === 1) p.set('nodes', gNodes[0]);
     return '/dijkstra.html?' + p.toString();
   }
   if (RANKED(view)) {
@@ -539,15 +550,14 @@ const ENDS_ALL = ['stop', 'length', 'open'];
    right only ever narrows. 176,649 > 7,915 > 197. */
 const SCOPE_STOPS = [
   { name: 'prefix', ends: null, nodes: null,
-    why: 'Everything, prefixes included — 176,649 strings. There is rarely a '
-       + 'reason to want the prefixes and not the rest, so this end of the axis is '
-       + 'simply no filter.' },
+    why: 'Everything, prefixes included. There is rarely a reason to want the '
+       + 'prefixes and not the rest, so this end of the axis is simply no filter.' },
   { name: 'no continuation on record', ends: null, nodes: ['leaf'],
-    why: 'No continuation on record — 7,915 strings: the 197 the model finished, '
-       + 'plus the 7,718 that are prefixes whose continuation we do not have.' },
+    why: 'No continuation on record: the strings the model finished, plus the '
+       + 'prefixes whose continuation we do not have.' },
   { name: 'complete', ends: ['stop'], nodes: null,
-    why: 'The model emitted EOS — 197 strings, the only ones that are not '
-       + 'prefixes of anything.' },
+    why: 'The model emitted EOS — the only strings that are not prefixes '
+       + 'of anything.' },
 ];
 function scopeStop() { return Number(el('lScope').value) || 0; }
 function applyScopeStop() {
@@ -555,14 +565,22 @@ function applyScopeStop() {
   for (const b of endBoxes()) b.checked = !s.ends || s.ends.includes(b.value);
   for (const b of nodeBoxes()) b.checked = !s.nodes || s.nodes.includes(b.value);
 }
+/* The middle stop has no printed name, so the selected stop is named in the line
+   under the slider -- that is where its identity lives. */
 /* Which stop the boxes currently amount to, or null when they say something the
    axis cannot -- "every dead end", say, or open on its own. */
 function stopFromBoxes() {
+  /* Baselines come from the boxes a view actually OFFERS, not from every value
+     there is. Comparing a stop's "all endings" against all three never matched on
+     greedy, where `open` is disabled -- so the slider read `combination` on its
+     own default. */
+  const allEnds = endBoxes().filter(b => !b.disabled).map(b => b.value).sort().join(',');
+  const allNodes = nodeBoxes().filter(b => !b.disabled).map(b => b.value).sort().join(',');
   const e = endsValue().slice().sort().join(','), n = nodesValue().slice().sort().join(',');
   for (let i = 0; i < SCOPE_STOPS.length; i++) {
     const s = SCOPE_STOPS[i];
-    const se = (s.ends || ENDS_ALL).slice().sort().join(',');
-    const sn = (s.nodes || ['continues', 'leaf']).slice().sort().join(',');
+    const se = s.ends ? s.ends.slice().sort().join(',') : allEnds;
+    const sn = s.nodes ? s.nodes.slice().sort().join(',') : allNodes;
     if (e === se && n === sn) return i;
   }
   return null;

@@ -176,6 +176,7 @@ class Handler(SimpleHTTPRequestHandler):
                     max_alts=_int(one('max_alts'), 8),
                     ends=one('ends') or None,
                     extend=_bool(one('extend')),
+                    nodes=one('nodes') or None,
                 ))
 
             if route == '/api/walk':
