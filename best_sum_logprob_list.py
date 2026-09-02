@@ -49,7 +49,7 @@ def rank_by_sum(root: TrieNode, top: int, min_n: int = 1, chosen_only: bool = Fa
                 stats: Optional[Dict] = None) -> List[Dict]:
     """Best-first enumeration of the trie by cumulative logprob.
 
-    `accept(tokens)` decides which popped prefixes are RECORDED; expansion is
+    `accept(tokens, node)` decides which popped prefixes are RECORDED; expansion is
     unaffected by it, so the cap counts matching entries and the search still
     visits everything in descending-sum order. That is what makes a filter like
     "only strings the model itself ended" honest: filtering the top N after the
@@ -84,8 +84,10 @@ def rank_by_sum(root: TrieNode, top: int, min_n: int = 1, chosen_only: bool = Fa
         cum_sum = -neg_sum
         n = len(tokens)
 
-        if n >= min_n and (accept is None or accept(tokens)):
-            results.append({"tokens": list(tokens), "sum": cum_sum, "n": n, "mean": cum_sum / n})
+        if n >= min_n and (accept is None or accept(tokens, node)):
+            results.append({"tokens": list(tokens), "sum": cum_sum, "n": n,
+                            "mean": cum_sum / n,
+                            "node_kind": "continues" if node.children else "leaf"})
 
         for tok, child in node.children.items():
             if _usable(child, chosen_only):

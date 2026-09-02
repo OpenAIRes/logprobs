@@ -148,6 +148,10 @@ class Handler(SimpleHTTPRequestHandler):
                     # every existing link means, so none of them change.
                     ends=one('ends') or None,
                     extend=_bool(one('extend')),
+                    # nodes=continues,leaf -- whether the database holds anything
+                    # past the string. Crosses with ends: 494 length-ended paths
+                    # were later continued, so this is not "untick open".
+                    nodes=one('nodes') or None,
                 ))
 
             if route == '/api/record':

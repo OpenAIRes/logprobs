@@ -153,6 +153,11 @@
           <label id="endOpenLabel"><input type="checkbox" class="endBox" value="open" checked><span><b>open</b>
             — <em>a prefix.</em> Nothing recorded ends here; the trie continues below and the
             enumeration stopped.</span></label>
+          <label id="endContLabel" class="sep"><input type="checkbox" class="nodeBox" value="continues" checked><span><b>continues</b>
+            — the database holds something past this string. <b>168,734</b> prefixes.</span></label>
+          <label id="endLeafLabel"><input type="checkbox" class="nodeBox" value="leaf" checked><span><b>dead end</b>
+            — nothing further on record. <b>7,915</b>, and every one of them is where some
+            call stopped: 7,738 on <code>length</code>, 199 on EOS.</span></label>
           <label id="endRecoveredLabel" class="sep"><input type="checkbox" id="lRecovered" checked><span><b>recovered tokens</b>
             — include tokens known only from <code>top_logprobs</code>. Not a mild filter:
             untick it for paths every token of which some call actually generated, and
@@ -292,6 +297,10 @@ async function sync() {
   el('endExtendLabel').hidden = single();
   // Only the trie search walks token by token, so only it can be restricted.
   el('endRecoveredLabel').hidden = view !== 'prefixes';
+  /* Whether the database continues past a string is a question about the trie,
+     which both string rankings sit on. */
+  el('endContLabel').hidden = !ranked;
+  el('endLeafLabel').hidden = !ranked;
   el('endsHint').textContent =
     greedy
       ? 'Rank 1 is the greedy path; the siblings are recorded continuations, so each '
@@ -340,6 +349,8 @@ async function describeAvailable() {
   const ends = endsValue();
   if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
   if (view === 'prefixes' && !el('lRecovered').checked) p.set('chosen_only', '1');
+  const nodeSel = nodesValue();
+  if (nodeSel.length === 1) p.set('nodes', nodeSel[0]);
   try {
     const db = await (await fetch('/api/query?' + p, { cache: 'no-store' })).json();
     if (mine !== availSeq) return;             // a later edit already asked
@@ -423,6 +434,8 @@ function listUrl() {
     if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
     if (el('lExtend').checked) p.set('extend', '1');
     if (view === 'prefixes' && !el('lRecovered').checked) p.set('chosen_only', '1');
+    const nodes = nodesValue();
+    if (nodes.length === 1) p.set('nodes', nodes[0]);
   } else {
     if (el('lBase').value) p.set('base_id', el('lBase').value);
     if (view === 'walk') {
@@ -484,6 +497,8 @@ for (const node of document.querySelectorAll('input[name=view]')) {
 /* Whether the sort was chosen deliberately in this view, so switching views can
    reset it to that view's default without overriding an explicit choice. */
 let sortTouched = false;
+function nodeBoxes() { return [...document.querySelectorAll('.nodeBox')]; }
+function nodesValue() { return nodeBoxes().filter(b => b.checked).map(b => b.value); }
 function endBoxes() { return [...document.querySelectorAll('.endBox')]; }
 function endsValue() {
   return endBoxes().filter(b => b.checked && !b.disabled).map(b => b.value);
@@ -500,6 +515,12 @@ for (const box of endBoxes()) {
   box.addEventListener('change', () => {
     // All boxes off asks for nothing; put the one just cleared back.
     if (!endsValue().length) { box.checked = true; return; }
+    sync();
+  });
+}
+for (const box of nodeBoxes()) {
+  box.addEventListener('change', () => {
+    if (!nodesValue().length) { box.checked = true; return; }
     sync();
   });
 }

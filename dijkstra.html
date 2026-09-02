@@ -63,6 +63,8 @@
   .c-sweep .end.stop { color: var(--good); }
   .c-sweep .end.length { color: var(--mid); }
   .c-sweep .end.open { color: var(--ink-faint); font-weight: 400; }
+  .c-sweep .cont { color: var(--accent); padding-left: .15rem; }
+  #endsWrap .nodeLbl { color: var(--ink-dim); }
   /* The continuation is shown but is NOT what the row was ranked by, so it reads
      as a different kind of text rather than more of the same. */
   .tok.ext { opacity: .62; }
@@ -247,6 +249,8 @@ fetch('/api/stats', { cache: 'no-store' })
       <label title="a prefix — max_tokens ran out; the model had not finished"><input type="checkbox" class="endBox" value="length" checked> length</label>
       <label title="a prefix — nothing recorded ends here; the trie continues below"><input type="checkbox" class="endBox" value="open" checked> open</label>
       <label id="extendWrap" title="follow the model's own argmax from each row to the furthest end on record. The ranking stays over the prefix."><input type="checkbox" id="extendBox"> extend</label>
+      <label class="nodeLbl" title="the database holds something past this string — 168,734 prefixes"><input type="checkbox" class="nodeBox" value="continues" checked> continues</label>
+      <label class="nodeLbl" title="nothing further on record — 7,915 prefixes, every one of them where some call stopped"><input type="checkbox" class="nodeBox" value="leaf" checked> dead end</label>
       <label id="recoveredWrap" title="include tokens known only from top_logprobs. Untick for paths every token of which some call actually generated — which is not a mild filter: 176,649 reachable prefixes become 4,174, because one recovered token anywhere blocks everything below it."><input type="checkbox" id="recoveredBox" checked> recovered</label>
     </span>
     <label for="prefixIn" id="prefixWrap">starts with:
@@ -403,6 +407,14 @@ const END_TITLE = {
   open: 'a prefix — nothing recorded ends here; the trie continues below and the '
       + 'enumeration stopped.',
 };
+/* A row that the database continues past. Not the same as how it ended: 494
+   length-ended paths were later taken as another call's prompt and carried on. */
+function contMark(e) {
+  if (e.node_kind !== 'continues') return '';
+  return '<span class="cont" title="the database holds a continuation of this string — '
+    + 'tick only “dead end” to exclude rows like this">⋯</span>';
+}
+
 function endBadge(e) {
   // With the row extended, the ending shown is the extension's -- an 'open'
   // prefix that was followed to a record end is no longer open.
@@ -434,8 +446,9 @@ function devCell(e) {
       : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}${
       e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : ''}`;
   }
-  if (!badge && !rest) return '';
-  return `<div class="c-sweep">${badge}${badge && rest ? ' ' : ''}${rest}</div>`;
+  const mark = contMark(e);
+  if (!badge && !rest && !mark) return '';
+  return `<div class="c-sweep">${badge}${mark}${(badge || mark) && rest ? ' ' : ''}${rest}</div>`;
 }
 
 function buildRow(e) {
@@ -661,6 +674,9 @@ const EXTEND_KEY = 'dijkstra_extend';
 const extendBox = document.getElementById('extendBox');
 const RECOVERED_KEY = 'dijkstra_recovered';
 const recoveredBox = document.getElementById('recoveredBox');
+const NODES_KEY = 'dijkstra_nodes';
+function nodeBoxes() { return [...document.querySelectorAll('.nodeBox')]; }
+function nodesValue() { return nodeBoxes().filter(b => b.checked).map(b => b.value); }
 /* The toolbar follows the view: a starts-with filter is meaningless over a grid,
    a base selector over a ranking. Hidden controls do not reach the query. */
 function applyViewControls() {
@@ -883,6 +899,8 @@ function render(db) {
         ? `, the other ${db.unreachable - db.unreachable_unscored} because they hold a
            recovered token and this setting excludes those` : ''}` : ''}</div>` : ''}
     ${db.chosen_only_note ? `<div>tokens: <b>${db.chosen_only_note}</b></div>` : ''}
+    ${db.node_counts ? `<div>continuation: <b>${db.nodes ? db.nodes.join(' + ') : 'either'}</b>
+      — ${Object.entries(db.node_counts).map(([k, v]) => `${v}&nbsp;${k}`).join(', ') || 'nothing'}</div>` : ''}
     ${db.extend ? `<div>rows extended: <b>${db.distinct_extended}</b> distinct strings from
       ${db.entries.length} rows — the ranking is still over the prefix, and extending would
       reorder it</div>` : ''}
@@ -965,6 +983,19 @@ loadSort();
     try { localStorage.setItem(RECOVERED_KEY, recoveredBox.checked ? '1' : '0'); } catch {}
     load();
   });
+
+  let nd = PARAMS.get('nodes');
+  if (!nd) { try { nd = localStorage.getItem(NODES_KEY); } catch {} }
+  if (nd) {
+    const set = new Set(nd.split(','));
+    nodeBoxes().forEach(b => { b.checked = set.has(b.value); });
+    if (!nodesValue().length) nodeBoxes().forEach(b => { b.checked = true; });
+  }
+  nodeBoxes().forEach(b => b.addEventListener('change', () => {
+    if (!nodesValue().length) { b.checked = true; return; }
+    try { localStorage.setItem(NODES_KEY, nodesValue().join(',')); } catch {}
+    load();
+  }));
 }
 
 function queryUrl() {
@@ -997,6 +1028,8 @@ function queryUrl() {
   if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
   if (extendBox.checked) p.set('extend', '1');
   if (VIEW === 'prefixes' && !recoveredBox.checked) p.set('chosen_only', '1');
+  const nodes = nodesValue();
+  if (nodes.length === 1) p.set('nodes', nodes[0]);
   return '/api/query?' + p.toString();
 }
 

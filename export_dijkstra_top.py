@@ -220,9 +220,18 @@ def build_prefix_entries(root, sweep_by_prompt, args, ends_index=None,
     """
     ends_index = ends_index or {}
     allow = getattr(args, "ends", None)
+    kinds = getattr(args, "nodes", None)
     accept = None
-    if allow:
-        accept = lambda toks: ends_index.get(toks, "open") in allow
+    if allow or kinds:
+        def accept(toks, node):
+            if allow and ends_index.get(toks, "open") not in allow:
+                return False
+            # "Do we have a continuation?" is a property of the NODE, not of how
+            # the string ended: 494 length-ended paths were later continued past
+            # by another call, so unticking `open` alone still lists them.
+            if kinds and ("leaf" if not node.children else "continues") not in kinds:
+                return False
+            return True
     ranked = rank_by_sum(root, args.top, args.min_n, args.chosen_only,
                          accept=accept, max_pops=MAX_POPS, stats=stats)
 
@@ -238,6 +247,7 @@ def build_prefix_entries(root, sweep_by_prompt, args, ends_index=None,
             "text": "".join(r["tokens"]),
             "tokens": detail,
             "end": ends_index.get(tuple(r["tokens"]), "open"),
+            "node_kind": r.get("node_kind"),
         }
         # deepest prompt path that is a prefix of this entry and was itself a
         # sweep call — that is the branch point this prefix descends from

@@ -267,6 +267,30 @@
         the trie only ever contains tokens some call actually generated, so there are
         <b>no open leaves</b>.</dd>
     </dl>
+    <h3>continues / dead end</h3>
+    <p>Whether the database holds anything <em>past</em> this string. A separate axis
+      from how the string ended, and the two cross — which is the whole reason it needs
+      its own boxes:</p>
+    <table>
+      <tr><th></th><th>continues</th><th>dead end</th></tr>
+      <tr><td><code>open</code></td><td>168,669</td><td>0</td></tr>
+      <tr><td><code>length</code></td><td><b>494</b></td><td>7,738</td></tr>
+      <tr><td><code>stop</code></td><td>0</td><td>199</td></tr>
+    </table>
+    <p>An <code>open</code> node has a continuation by construction. But <b>494</b>
+      <code>length</code> paths do too: the call stopped at <code>max_tokens</code>, and
+      then a later call took that whole text as its <em>prompt</em> and carried on. So
+      &ldquo;don't list prefixes we have a continuation for&rdquo; is <em>not</em>
+      unticking <code>open</code> — that still leaves those 494. Untick
+      <b>continues</b> instead.</p>
+    <p>A row the database continues past is marked <code>⋯</code> next to its ending.
+      Both sides are populous — 168,734 against 7,915 reachable — which is why this is a
+      pair and <b>recovered</b> below is a single box.</p>
+    <p><b>Not the same as <code>extend</code>.</b> Extend does not filter; it
+      <em>moves</em> each row to its dead end. Twenty rows with extend on are twenty
+      extended prefixes that happen to end at a dead end; twenty rows with only
+      <b>dead end</b> ticked are the twenty best dead ends.</p>
+
     <h3>recovered tokens</h3>
     <p>A token gets into the trie only if some call generated it. Its
       log-probability, though, may come from either place: the call that generated

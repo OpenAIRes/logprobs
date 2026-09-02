@@ -83,7 +83,8 @@ def store_for(sources: List[str]) -> RecordStore:
 
 # Purely additive entry fields introduced after the frozen exports were written.
 ADDED_SINCE_EXPORT = frozenset({
-    'end',      # what decided the string's end: stop / length / open
+    'end',        # what decided the string's end: stop / length / open
+    'node_kind',  # whether the database holds a continuation: continues / leaf
 })
 
 

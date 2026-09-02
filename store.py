@@ -73,6 +73,20 @@ VIEWS = ('prefixes', 'completions')
 # the only place EOS could appear -- is never reported.
 ENDS = ('stop', 'length', 'open')
 
+# Whether the database holds anything past this string. A SEPARATE axis from how
+# the string ended, and the two cross: every 'open' node has a continuation by
+# construction, but 494 'length' paths do too -- a later call took that text as
+# its prompt and carried on -- so "no continuation" is not "untick open".
+#
+#             has children   leaf
+#   open           168,669       0
+#   length             494   7,738
+#   stop                 0     199
+#
+# Unlike the recovered/generated split, both sides here are populous, which is
+# why this one is a pair of boxes and that one is a single box.
+NODE_KINDS = ('continues', 'leaf')
+
 # Per-token detail shipped for one row's extension. The row's totals always cover
 # the whole thing; this only bounds the payload, since the single longest
 # extension in the default prefixes top 200 adds 4095 tokens on its own.
@@ -96,7 +110,7 @@ SORTS = {
 }
 
 DEFAULTS = dict(top=200, min_n=1, prefix=None, model=None, chosen_only=False,
-                max_alts=8, sort='sum', ends=None, extend=False)
+                max_alts=8, sort='sum', ends=None, extend=False, nodes=None)
 
 
 class RecordStore:
@@ -212,7 +226,7 @@ class RecordStore:
         return out
 
     def trie_counts(self, model: Optional[str] = None, chosen_only: bool = False,
-                    ends=None) -> Dict:
+                    ends=None, nodes=None) -> Dict:
         """How many prefixes exist, how many the search can reach, how many match.
 
         The list can never show them all -- 176,649 rows would be hundreds of
@@ -227,7 +241,7 @@ class RecordStore:
         an unscored node the running sum no longer counts from the root. 22 such
         nodes block 429 below them.
         """
-        key = (model, bool(chosen_only), ends)
+        key = (model, bool(chosen_only), ends, nodes)
         if key in self._counts_cache:
             return self._counts_cache[key]
 
@@ -244,9 +258,11 @@ class RecordStore:
                 reachable += 1
             stack.extend((c, ok) for c in node.children.values())
 
-        # Reachable end-paths, counted per reason by walking the 8,431 known ends
-        # rather than carrying a path tuple for all 177,100 nodes.
-        by_end = Counter()
+        # Reachable end-paths as an (ending x has-continuation) cross-tab, counted
+        # by walking the 8,431 known ends rather than carrying a path tuple for all
+        # 177,100 nodes. Every remaining reachable node is 'open', and an open node
+        # always has children, so that cell takes the balance and open-leaf is 0.
+        cells = Counter()
         for path, reason in self.ends.items():
             node = root
             for tok in path:
@@ -255,16 +271,24 @@ class RecordStore:
                     node = None
                     break
             if node is not None:
-                by_end[reason] += 1
-        by_end['open'] = reachable - sum(by_end.values())
+                cells[(reason, 'continues' if node.children else 'leaf')] += 1
+        cells[('open', 'continues')] = reachable - sum(cells.values())
+
+        by_end = Counter()
+        by_kind = Counter()
+        for (reason, kind), v in cells.items():
+            by_end[reason] += v
+            by_kind[kind] += v
 
         out = {
             'total': total,
             'reachable': reachable,
             'unreachable': total - reachable,
             'by_end': dict(by_end),
-            'matching': (reachable if not ends
-                         else sum(v for k, v in by_end.items() if k in ends)),
+            'by_kind': dict(by_kind),
+            'matching': sum(v for (reason, kind), v in cells.items()
+                            if (not ends or reason in ends)
+                            and (not nodes or kind in nodes)),
         }
         self._counts_cache[key] = out
         return out
@@ -315,6 +339,24 @@ class RecordStore:
             }
             first_seen.setdefault(text, e.get('rank'))
         return len(first_seen)
+
+    @staticmethod
+    def _normalize_nodes(value) -> Optional[frozenset]:
+        """None / empty / both -> no filter, so the search keeps its fast path."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = [p.strip() for p in value.split(',')]
+        wanted = frozenset(v for v in value if v in NODE_KINDS)
+        if not wanted:
+            raise ValueError(f'nodes must name at least one of {NODE_KINDS}')
+        return None if wanted == frozenset(NODE_KINDS) else wanted
+
+    def node_kind(self, tokens, root) -> Optional[str]:
+        node = self._node_at(tokens, root)
+        if node is None:
+            return None
+        return 'continues' if node.children else 'leaf'
 
     @staticmethod
     def _normalize_ends(value) -> Optional[frozenset]:
@@ -409,6 +451,10 @@ class RecordStore:
         # top N by sum", which is a different question from the one asked.
         if args.ends:
             entries = [e for e in entries if e.get('end') in args.ends]
+        if args.nodes:
+            root = self.trie(args.model)
+            entries = [e for e in entries
+                       if self.node_kind([t['token'] for t in e['tokens']], root) in args.nodes]
         entries = apply_prefix(entries, args.prefix)
         # Everything the cap was applied to, so the view can say what fraction of
         # it is on screen instead of looking like the whole answer.
@@ -418,7 +464,12 @@ class RecordStore:
             entries = entries[:args.top]
         # Copy before stamping rank: the cached list is shared between requests,
         # and a filtered view must not renumber the entries another one is reading.
-        return [{**e, 'rank': i} for i, e in enumerate(entries, 1)]
+        # node_kind is stamped here rather than in the cached ranking because it
+        # is a question about the trie, and only the shown rows need the answer.
+        trie = self.trie(args.model)
+        return [{**e, 'rank': i,
+                 'node_kind': self.node_kind([t['token'] for t in e['tokens']], trie)}
+                for i, e in enumerate(entries, 1)]
 
     def query(self, view: str = 'prefixes', **kwargs) -> Dict:
         if view not in VIEWS:
@@ -426,8 +477,9 @@ class RecordStore:
         args = SimpleNamespace(**{**DEFAULTS,
                                   **{k: v for k, v in kwargs.items() if k in DEFAULTS}})
         args.ends = self._normalize_ends(args.ends)
+        args.nodes = self._normalize_nodes(args.nodes)
         root = self.trie(args.model)
-        counts = (self.trie_counts(args.model, args.chosen_only, args.ends)
+        counts = (self.trie_counts(args.model, args.chosen_only, args.ends, args.nodes)
                   if view == 'prefixes' else None)
         search: Dict = {}
         if view == 'completions':
@@ -456,6 +508,8 @@ class RecordStore:
             # None means every kind of ending, which is the pre-existing behaviour.
             'ends': sorted(args.ends) if args.ends else None,
             'end_counts': dict(Counter(e.get('end') for e in entries)),
+            'nodes': sorted(args.nodes) if args.nodes else None,
+            'node_counts': dict(Counter(e.get('node_kind') for e in entries)),
             # Only the trie search can run out of budget; a completions ranking is
             # a filter over a finite list and is always complete.
             'search_pops': search.get('pops'),
