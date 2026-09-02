@@ -926,7 +926,12 @@ function renderExtend(db) {
 function render(db) {
   DB = db;
   window.__db = db;   // handy for poking at the data from the console
-  document.getElementById('srcName').textContent = SOURCE_LABEL;
+  /* The route the data on screen actually came from. It used to be set once at
+     startup, so every view claimed /api/query -- greedy and walk and the grid
+     included, none of which read that route. A provenance label that names the
+     wrong source is worse than none. */
+  document.getElementById('srcName').textContent =
+    LEGACY_FILE || db.__route || '/api/query';
   dataSel.value = VIEW;
   renderExtend(db);
 
@@ -977,7 +982,7 @@ function render(db) {
 const PARAMS = new URLSearchParams(location.search);
 const LEGACY_FILE = PARAMS.get('file');
 let VIEW = PARAMS.get('view') || 'prefixes';
-let SOURCE_LABEL = LEGACY_FILE || '/api/query';
+
 
 // ?prefix= wins over the remembered value, so a link can be sent
 const urlPrefix = PARAMS.get('prefix');
@@ -1114,6 +1119,10 @@ async function load() {
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const db = await r.json();
     if (seq !== inflight) return;      // typing faster than the store answers
+    // The route that actually produced THIS payload. Recomputing it at render
+    // time read the current VIEW instead, so a response arriving after a switch
+    // was labelled with the view the user had just moved to.
+    db.__route = url.split('?')[0];
     errEl.style.display = 'none';
     // The link must stay shareable, but switching views must not reload the page.
     if (!LEGACY_FILE) {

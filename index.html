@@ -53,9 +53,9 @@
      reaching, and these are for the combinations it has no stop for. */
   .byhand summary { font-size: .78125rem; color: var(--ink-faint); cursor: pointer; }
   .byhand[open] summary { margin-bottom: .4rem; }
-  /* An author `display: grid` beats the UA rule that hides a closed details'
-     children, so the boxes stayed laid out (245px tall) while the disclosure
-     said they were shut. Hide them explicitly. */
+  /* A closed <details> hides its children via a UA rule that an author
+     `display: grid` outranks, so the boxes stayed laid out while the disclosure
+     said they were shut. */
   .byhand:not([open]) .ends { display: none; }
   .ends { display: grid; gap: .3rem; }
   .ends label { display: grid; grid-template-columns: auto minmax(0, 1fr);

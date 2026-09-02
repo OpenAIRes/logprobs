@@ -1,3 +1,14 @@
+/* Anything carrying the hidden attribute is hidden, full stop.
+
+   [hidden] is a UA rule of the lowest specificity, so one author rule like
+   `.controls label { display: flex }` silently defeats it -- and then JS that
+   sets el.hidden = true leaves the control on screen. That has now happened
+   twice: the walk-only `base`, `steps` and `forward only` stayed in the
+   toolbar on every view, and the scope boxes stayed 245px tall inside a closed
+   <details>. One !important here is cheaper than remembering it at every rule
+   that sets display. */
+[hidden] { display: none !important; }
+
 /* Shared look for the whole set: index, logprobs, dijkstra, builder.
 
    The three viewers grew separately and each carried its own palette, its own
