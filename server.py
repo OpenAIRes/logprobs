@@ -137,6 +137,9 @@ class Handler(SimpleHTTPRequestHandler):
                     min_n=_int(one('min_n'), 1),
                     prefix=one('prefix') or None,
                     model=one('model') or None,
+                    # chosen_only is not the mild filter it sounds like: a path must
+                    # be chosen ALL the way down, and the root has one chosen child
+                    # out of 21, so it takes the trie from 176,649 reachable to 4,174.
                     chosen_only=_bool(one('chosen_only')),
                     max_alts=_int(one('max_alts'), 8),
                     sort=one('sort', 'sum'),
@@ -234,6 +237,11 @@ def serve(port: int, host: str = '127.0.0.1') -> None:
         started = _t.time()
         store.greedy_alternatives(top=1)
         print(f'  greedy siblings warmed in {_t.time() - started:.1f}s')
+        # One walk over 177k nodes; cached, but 1.4 s is too long to sit behind
+        # the first page load.
+        started = _t.time()
+        store.trie_counts()
+        print(f'  prefix counts warmed in {_t.time() - started:.1f}s')
 
     threading.Thread(target=warm, daemon=True).start()
 

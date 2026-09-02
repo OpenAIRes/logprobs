@@ -247,6 +247,7 @@ fetch('/api/stats', { cache: 'no-store' })
       <label title="a prefix — max_tokens ran out; the model had not finished"><input type="checkbox" class="endBox" value="length" checked> length</label>
       <label title="a prefix — nothing recorded ends here; the trie continues below"><input type="checkbox" class="endBox" value="open" checked> open</label>
       <label id="extendWrap" title="follow the model's own argmax from each row to the furthest end on record. The ranking stays over the prefix."><input type="checkbox" id="extendBox"> extend</label>
+      <label id="recoveredWrap" title="include tokens known only from top_logprobs. Untick for paths every token of which some call actually generated — which is not a mild filter: 176,649 reachable prefixes become 4,174, because one recovered token anywhere blocks everything below it."><input type="checkbox" id="recoveredBox" checked> recovered</label>
     </span>
     <label for="prefixIn" id="prefixWrap">starts with:
       <input type="text" id="prefixIn" placeholder="e.g. I have" spellcheck="false">
@@ -527,11 +528,17 @@ function renderRows() {
   tableEl.classList.toggle('has-sweep', anySweep);
   document.getElementById('thSweep').hidden = !anySweep;
 
-  // Results are not records: 500 prefixes can come out of 401 calls, so "500 of
-  // 401" would be misleading. Both numbers say what they are.
+  /* Results are not records: 500 prefixes can come out of 401 calls, so "500 of
+     401" would be misleading. Both numbers say what they are -- and `available`
+     is the third, because a prefixes view shows a sliver (200 of 176,649) and
+     without saying so it reads as the whole answer. */
+  const avail = DB.available != null && DB.available > slice.length
+    ? ` of ${DB.available.toLocaleString('en-US')}` : '';
+  const unreach = DB.unreachable
+    ? ` · ${DB.unreachable.toLocaleString('en-US')} unreachable` : '';
   shownEl.textContent = q
     ? `${slice.length} results match "${plain(q)}" · ${DB.source_records} records in store`
-    : `${slice.length} results · ${DB.source_records} records in store`;
+    : `${slice.length}${avail} results${unreach} · ${DB.source_records} records in store`;
   shownEl.classList.toggle('filtered', !!q);
   tableEl.hidden = false;
 }
@@ -652,6 +659,8 @@ function endsIsAll() {
 }
 const EXTEND_KEY = 'dijkstra_extend';
 const extendBox = document.getElementById('extendBox');
+const RECOVERED_KEY = 'dijkstra_recovered';
+const recoveredBox = document.getElementById('recoveredBox');
 /* The toolbar follows the view: a starts-with filter is meaningless over a grid,
    a base selector over a ranking. Hidden controls do not reach the query. */
 function applyViewControls() {
@@ -663,6 +672,9 @@ function applyViewControls() {
   // where silently returning nothing would not.
   document.getElementById('endsWrap').hidden =
     !(VIEW === 'completions' || VIEW === 'prefixes' || VIEW === 'greedy');
+  // Only the trie search walks token by token, so only it can be restricted to
+  // paths that were generated rather than recovered.
+  document.getElementById('recoveredWrap').hidden = VIEW !== 'prefixes';
   const openBox = endBoxes().find(b => b.value === 'open');
   if (openBox) {
     // Only a prefix can be 'open': a completion and a greedy sibling are both
@@ -864,6 +876,13 @@ function render(db) {
       — ${Object.entries(db.end_counts).map(([k, v]) => `${v}&nbsp;${k}`).join(', ') || 'nothing'}</div>` : ''}
     ${db.truncated_by_budget ? `<div class="warn">the trie search hit its ${db.search_pops}-step
       budget before filling the list, so more matching strings may exist below the last row</div>` : ''}
+    ${db.available != null ? `<div>shown: <b>${db.count}</b> of <b>${db.available}</b>${
+      db.trie_total ? ` matching · ${db.trie_total} prefixes in the trie, ${db.unreachable}
+      unreachable — ${db.unreachable_unscored} of them because a path may not pass a token
+      with no known logprob${db.unreachable > db.unreachable_unscored
+        ? `, the other ${db.unreachable - db.unreachable_unscored} because they hold a
+           recovered token and this setting excludes those` : ''}` : ''}</div>` : ''}
+    ${db.chosen_only_note ? `<div>tokens: <b>${db.chosen_only_note}</b></div>` : ''}
     ${db.extend ? `<div>rows extended: <b>${db.distinct_extended}</b> distinct strings from
       ${db.entries.length} rows — the ranking is still over the prefix, and extending would
       reorder it</div>` : ''}
@@ -938,6 +957,14 @@ loadSort();
     try { localStorage.setItem(EXTEND_KEY, extendBox.checked ? '1' : '0'); } catch {}
     load();
   });
+
+  let rec = PARAMS.get('chosen_only');
+  if (rec !== null) recoveredBox.checked = !(rec === '1' || rec === 'true');
+  else { try { const v = localStorage.getItem(RECOVERED_KEY); if (v !== null) recoveredBox.checked = v === '1'; } catch {} }
+  recoveredBox.addEventListener('change', () => {
+    try { localStorage.setItem(RECOVERED_KEY, recoveredBox.checked ? '1' : '0'); } catch {}
+    load();
+  });
 }
 
 function queryUrl() {
@@ -969,6 +996,7 @@ function queryUrl() {
   const ends = endsValue();
   if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
   if (extendBox.checked) p.set('extend', '1');
+  if (VIEW === 'prefixes' && !recoveredBox.checked) p.set('chosen_only', '1');
   return '/api/query?' + p.toString();
 }
 

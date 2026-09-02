@@ -111,6 +111,7 @@ class RecordStore:
         self._tries: Dict[Optional[str], object] = {}
         self._completions_cache: Dict[tuple, List[Dict]] = {}
         self._alts_cache: Dict[tuple, tuple] = {}
+        self._counts_cache: Dict[tuple, Dict] = {}
         self.load_seconds = 0.0
         self.missing: List[str] = []
 
@@ -137,6 +138,7 @@ class RecordStore:
         self._tries.clear()
         self._completions_cache.clear()
         self._alts_cache.clear()
+        self._counts_cache.clear()
         self.load_seconds = time.time() - started
         return self
 
@@ -207,6 +209,64 @@ class RecordStore:
                 pick = max(kids, key=lambda kv: kv[1].logprob)[0]
             out.append(pick)
             node = node.children[pick]
+        return out
+
+    def trie_counts(self, model: Optional[str] = None, chosen_only: bool = False,
+                    ends=None) -> Dict:
+        """How many prefixes exist, how many the search can reach, how many match.
+
+        The list can never show them all -- 176,649 rows would be hundreds of
+        megabytes -- so the honest thing is to say what fraction it is showing.
+        Without this the default view looks like 200 answers when it is 200 of
+        176,649, and a `results` cap of 5000 still only reaches 2.8%.
+
+        `unreachable` is not a filter anyone chose. build_trie fills a node's
+        logprob from a generated token or its parent's top_logprobs, so a sweep's
+        deviated token sits unscored whenever the position it deviates at was only
+        ever a prompt position -- and a path may not pass through it, because past
+        an unscored node the running sum no longer counts from the root. 22 such
+        nodes block 429 below them.
+        """
+        key = (model, bool(chosen_only), ends)
+        if key in self._counts_cache:
+            return self._counts_cache[key]
+
+        root = self.trie(model)
+        usable = (lambda n: n.logprob is not None and n.source == 'chosen')             if chosen_only else (lambda n: n.logprob is not None)
+
+        total = reachable = 0
+        stack = [(c, True) for c in root.children.values()]
+        while stack:
+            node, ok = stack.pop()
+            total += 1
+            ok = ok and usable(node)
+            if ok:
+                reachable += 1
+            stack.extend((c, ok) for c in node.children.values())
+
+        # Reachable end-paths, counted per reason by walking the 8,431 known ends
+        # rather than carrying a path tuple for all 177,100 nodes.
+        by_end = Counter()
+        for path, reason in self.ends.items():
+            node = root
+            for tok in path:
+                node = node.children.get(tok)
+                if node is None or not usable(node):
+                    node = None
+                    break
+            if node is not None:
+                by_end[reason] += 1
+        by_end['open'] = reachable - sum(by_end.values())
+
+        out = {
+            'total': total,
+            'reachable': reachable,
+            'unreachable': total - reachable,
+            'by_end': dict(by_end),
+            'matching': (reachable if not ends
+                         else sum(v for k, v in by_end.items() if k in ends)),
+        }
+        self._counts_cache[key] = out
         return out
 
     def add_extensions(self, entries: List[Dict], root, max_alts: int = 8) -> int:
@@ -318,7 +378,7 @@ class RecordStore:
 
     # -- views ----------------------------------------------------------------
 
-    def _completions(self, args) -> List[Dict]:
+    def _completions(self, args, stats: Optional[Dict] = None) -> List[Dict]:
         """Completions ranked, with prefix and top applied on a cached ranking.
 
         build_completion_entries walks every record's whole token path, which took
@@ -350,6 +410,10 @@ class RecordStore:
         if args.ends:
             entries = [e for e in entries if e.get('end') in args.ends]
         entries = apply_prefix(entries, args.prefix)
+        # Everything the cap was applied to, so the view can say what fraction of
+        # it is on screen instead of looking like the whole answer.
+        if stats is not None:
+            stats['available'] = len(entries)
         if args.top:
             entries = entries[:args.top]
         # Copy before stamping rank: the cached list is shared between requests,
@@ -363,9 +427,11 @@ class RecordStore:
                                   **{k: v for k, v in kwargs.items() if k in DEFAULTS}})
         args.ends = self._normalize_ends(args.ends)
         root = self.trie(args.model)
+        counts = (self.trie_counts(args.model, args.chosen_only, args.ends)
+                  if view == 'prefixes' else None)
         search: Dict = {}
         if view == 'completions':
-            entries = self._completions(args)
+            entries = self._completions(args, search)
             ranking = (SORTS.get(args.sort) or SORTS['sum'])[1]                 + ' over whole strings (prompt + completion)'
         else:
             # The heap search is by sum, so that is the only honest ranking here.
@@ -395,6 +461,20 @@ class RecordStore:
             'search_pops': search.get('pops'),
             'truncated_by_budget': bool(search.get('budget_exhausted')),
             'extend': bool(args.extend),
+            'chosen_only_note': ('paths whose every token some call actually generated'
+                                 if args.chosen_only else None),
+            # What the cap was applied to, and what exists at all. A prefixes view
+            # never shows more than a sliver, and it should say so rather than let
+            # 200 rows read as 200 answers.
+            'available': (search.get('available') if view == 'completions'
+                          else counts['matching']),
+            'trie_total': None if view == 'completions' else counts['total'],
+            'unreachable': None if view == 'completions' else counts['unreachable'],
+            # Split, because the two causes are not the same thing and one of them
+            # is a setting. Calling 172,926 excluded-by-chosen_only nodes
+            # "unscored" would be plainly false: they are scored, just recovered.
+            'unreachable_unscored': (None if view == 'completions'
+                                     else self.trie_counts(args.model, False, None)['unreachable']),
             # How many distinct strings the extended rows collapse onto. Far fewer
             # than the row count, and saying so is the point.
             'distinct_extended': distinct,

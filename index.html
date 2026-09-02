@@ -153,6 +153,11 @@
           <label id="endOpenLabel"><input type="checkbox" class="endBox" value="open" checked><span><b>open</b>
             — <em>a prefix.</em> Nothing recorded ends here; the trie continues below and the
             enumeration stopped.</span></label>
+          <label id="endRecoveredLabel" class="sep"><input type="checkbox" id="lRecovered" checked><span><b>recovered tokens</b>
+            — include tokens known only from <code>top_logprobs</code>. Not a mild filter:
+            untick it for paths every token of which some call actually generated, and
+            <b>176,649</b> reachable prefixes become <b>4,174</b>, because one recovered
+            token anywhere blocks everything below it.</span></label>
           <label id="endExtendLabel" class="sep"><input type="checkbox" id="lExtend"><span><b>extend</b>
             — a different question: leave each row where it is, or follow the model's own
             argmax on from it to the furthest end on record. The ranking stays over the
@@ -160,6 +165,7 @@
         </div>
       </div>
       <div class="opt" id="wEndsHint"><span></span><span class="hint" id="endsHint"></span></div>
+      <div class="opt" id="wAvail" hidden><span></span><span class="hint" id="availHint"></span></div>
       <label class="opt" id="wSort"><span>ranked by</span>
         <select id="lSort">
           <option value="cost" id="optCost">deviation cost — the greedy criterion</option>
@@ -284,6 +290,8 @@ async function sync() {
   el('endOpenLabel').classList.toggle('off', openBox.disabled);
   // One string has nothing to extend past: the token browser shows all of it.
   el('endExtendLabel').hidden = single();
+  // Only the trie search walks token by token, so only it can be restricted.
+  el('endRecoveredLabel').hidden = view !== 'prefixes';
   el('endsHint').textContent =
     greedy
       ? 'Rank 1 is the greedy path; the siblings are recorded continuations, so each '
@@ -314,6 +322,45 @@ async function sync() {
   if (!ranked && !greedy) await ensureBases();
   el('target').textContent = single() ? '/logprobs.html' : listUrl();
   if (greedy) describeGreedy();
+  describeAvailable();
+}
+
+/* How many strings the chosen settings actually match, said before the list is
+   opened. There is no "all" to tick: the prefixes view matches 176,649 and no
+   cap can show them, so the only honest thing is the fraction. */
+let availSeq = 0;
+async function describeAvailable() {
+  const view = viewOf();
+  if (view !== 'prefixes' && view !== 'completions') {
+    el('wAvail').hidden = true;
+    return;
+  }
+  const mine = ++availSeq;
+  const p = new URLSearchParams({ view, top: '1' });
+  const ends = endsValue();
+  if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
+  if (view === 'prefixes' && !el('lRecovered').checked) p.set('chosen_only', '1');
+  try {
+    const db = await (await fetch('/api/query?' + p, { cache: 'no-store' })).json();
+    if (mine !== availSeq) return;             // a later edit already asked
+    const want = Number(el('lTop').value) || 1;
+    const n = (db.available || 0).toLocaleString('en-US');
+    el('availHint').textContent =
+      `${n} strings match. Asking for ${want.toLocaleString('en-US')}`
+      + (db.available > want ? `, so ${Math.round(1000 * want / db.available) / 10}% of them.` : '.')
+      /* Only the unscored ones are beyond every setting. Saying that of the
+         172,475 this very setting excludes would be false -- they are reachable,
+         just not with `recovered` unticked. */
+      + (db.unreachable_unscored
+          ? ` ${db.unreachable_unscored.toLocaleString('en-US')} prefixes are beyond every `
+            + `setting: a path may not pass a token with no known logprob.` : '')
+      + (db.unreachable > db.unreachable_unscored
+          ? ` A further ${(db.unreachable - db.unreachable_unscored).toLocaleString('en-US')} `
+            + `hold a recovered token and this setting excludes them.` : '');
+    el('wAvail').hidden = false;
+  } catch {
+    el('wAvail').hidden = true;                // store not answering; the page still works
+  }
 }
 
 /* The greedy path is fully determined by the prompt, so it can be described
@@ -375,6 +422,7 @@ function listUrl() {
     const ends = endsValue();
     if (ends.length && !endsIsAll()) p.set('ends', ends.join(','));
     if (el('lExtend').checked) p.set('extend', '1');
+    if (view === 'prefixes' && !el('lRecovered').checked) p.set('chosen_only', '1');
   } else {
     if (el('lBase').value) p.set('base_id', el('lBase').value);
     if (view === 'walk') {
@@ -447,6 +495,7 @@ function endsIsAll() {
   return endBoxes().filter(b => !b.disabled).every(b => b.checked);
 }
 el('lExtend').addEventListener('change', sync);
+el('lRecovered').addEventListener('change', sync);
 for (const box of endBoxes()) {
   box.addEventListener('change', () => {
     // All boxes off asks for nothing; put the one just cleared back.

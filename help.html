@@ -267,6 +267,44 @@
         the trie only ever contains tokens some call actually generated, so there are
         <b>no open leaves</b>.</dd>
     </dl>
+    <h3>recovered tokens</h3>
+    <p>A token gets into the trie only if some call generated it. Its
+      log-probability, though, may come from either place: the call that generated
+      it (<code>chosen</code>, 169,208 nodes) or another call's
+      <code>top_logprobs</code> listing it as an alternative (<code>alt</code>, 7,870).
+      Untick <b>recovered</b> and only the first kind may appear on a path.</p>
+    <div class="note">
+      <p><b>It is not a mild filter.</b> A path must qualify all the way down, and the
+        root has one <code>chosen</code> child out of 21 — so the reachable prefixes go
+        from <b>176,649 to 4,174</b>, a 97.6% cut, not the 7,870 the node count suggests.
+        The label carries the two numbers for that reason.</p>
+      <p>Only the Prefixes view offers it: it is the only view that walks token by token.
+        There is no matching &ldquo;only recovered&rdquo; option, because a path every one
+        of whose tokens is an alternative reaches just 416 nodes — a pair of boxes would
+        imply a symmetry that is not there.</p>
+    </div>
+
+    <h3>How many there are</h3>
+    <p>There is no box for &ldquo;all prefixes&rdquo;, and adding one would be a lie: the
+      three endings ticked already <em>means</em> all of them, and what stops you is the
+      <code>results</code> cap. The list says the fraction instead — both the start page,
+      before you open anything, and the header of the list itself.</p>
+    <table>
+      <tr><th></th><th>count</th></tr>
+      <tr><td>prefixes in the trie</td><td>177,100</td></tr>
+      <tr><td>reachable by the search</td><td>176,649</td></tr>
+      <tr><td>unreachable — a path may not pass a token with no known logprob</td><td>451</td></tr>
+      <tr><td>the most a query will return (<code>MAX_TOP</code>)</td><td>5,000 — 2.8%</td></tr>
+    </table>
+    <p>The 451 are not a setting anyone chose. <code>build_trie</code> fills a node's
+      log-probability from a generated token or from its parent's
+      <code>top_logprobs</code>, so a sweep's deviated token stays unscored whenever the
+      position it deviates at was only ever a <em>prompt</em> position — that node has no
+      alternatives table of its own. 22 such nodes block 429 below them, and past an
+      unscored node a running sum no longer counts from the root, so the search may not
+      cross one. Those 22 are exactly the difference between the 8,431 recorded endpoints
+      and the 8,409 a search can reach.</p>
+
     <h3>extend</h3>
     <p>A separate axis from the three above, not a fourth kind of ending. A prefix row
       normally stops where the enumeration stopped, even though the database holds
