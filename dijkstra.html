@@ -248,7 +248,8 @@ fetch('/api/stats', { cache: 'no-store' })
     </label>
     <label id="fwdWrap" hidden><input type="checkbox" id="fwdIn"> forward only</label>
     <label id="scopeWrap" for="scopeRange">how complete:
-      <input type="range" id="scopeRange" min="0" max="2" step="1" value="0" style="width:5.5rem;vertical-align:middle" title="prefix (everything) &rarr; no continuation on record &rarr; complete. Nested: sliding right only narrows. The count for the stop you pick is in the header line.">
+      <input type="range" id="scopeRange" min="0" max="2" step="1" value="0" list="scopeTicks" style="width:4.5rem;vertical-align:middle" title="prefix (everything) &rarr; no continuation on record &rarr; complete. Nested: sliding right only narrows. The count for the stop you pick is in the header line.">
+      <datalist id="scopeTicks"><option value="0"></option><option value="1"></option><option value="2"></option></datalist>
       <b id="scopeName" style="font-family:ui-monospace,Menlo,monospace">prefix</b>
     </label>
     <span id="endsWrap">scope:

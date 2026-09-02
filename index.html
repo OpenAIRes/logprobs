@@ -49,6 +49,14 @@
   /* One line per kind of ending, each carrying its own explanation: the point of
      the control is that the three are not interchangeable, so a bare row of
      three words would hide exactly what the reader has to know. */
+  /* Behind a disclosure: the stepper above already reaches the three points worth
+     reaching, and these are for the combinations it has no stop for. */
+  .byhand summary { font-size: .78125rem; color: var(--ink-faint); cursor: pointer; }
+  .byhand[open] summary { margin-bottom: .4rem; }
+  /* An author `display: grid` beats the UA rule that hides a closed details'
+     children, so the boxes stayed laid out (245px tall) while the disclosure
+     said they were shut. Hide them explicitly. */
+  .byhand:not([open]) .ends { display: none; }
   .ends { display: grid; gap: .3rem; }
   .ends label { display: grid; grid-template-columns: auto minmax(0, 1fr);
     gap: .45rem; align-items: baseline; color: var(--ink-faint);
@@ -64,12 +72,16 @@
      there is no good short one; it carries a title and names itself in the hint
      once selected. */
   .scope { display: grid; gap: .3rem; }
-  .scope input[type=range] { width: 100%; max-width: 26rem; margin: 0; }
+  /* Narrow, with a tick per stop: three positions spread over a wide track read
+     as a continuum, which is the one thing this control is not. */
+  .scope input[type=range] { width: 13rem; margin: 0; }
   /* The boxes say something the axis has no stop for, so the handle is shown as
      not standing for anything rather than pointing at the wrong stop. */
   .scope input[type=range].off { opacity: .4; }
-  .stops { display: grid; grid-template-columns: repeat(3, 1fr); max-width: 26rem;
+  .stops { display: grid; grid-template-columns: repeat(3, 1fr); width: 13rem;
     font-size: .71875rem; color: var(--ink-faint); }
+  .stops span::before { content: '|'; color: var(--line); font-size: .6875rem;
+    line-height: 1; }
   .stops span { display: grid; justify-items: center; text-align: center; }
   .stops span:first-child { justify-items: start; text-align: left; }
   .stops span:last-child { justify-items: end; text-align: right; }
@@ -159,7 +171,8 @@
       <div class="opt" id="wScope"><span>how complete</span>
         <div class="scope">
           <input type="range" id="lScope" min="0" max="2" step="1" value="0"
-                 aria-label="how complete a string the row is">
+                 list="scopeTicks" aria-label="how complete a string the row is">
+          <datalist id="scopeTicks"><option value="0"></option><option value="1"></option><option value="2"></option></datalist>
 <!-- No counts baked into the labels: 176,649 / 7,915 / 197 are trie-wide, so
                they would be wrong the moment the view is completions or greedy. The
                live count for the selected stop goes in the line below, which asks the
@@ -172,7 +185,8 @@
           <div class="hint" id="scopeHint"></div>
         </div>
       </div>
-      <div class="opt" id="wEnds"><span>or by hand</span>
+      <div class="opt" id="wEnds"><span></span>
+        <details class="byhand"><summary>set the endings by hand</summary>
 <!-- Exactly two element children per label. Free text inside a grid container
              is wrapped in its own anonymous grid item, so "input + <b> + text" is three
              items in a two-column grid, not two -- which put the description on its own
@@ -202,6 +216,7 @@
             argmax on from it to the furthest end on record. The ranking stays over the
             prefix either way.</span></label>
         </div>
+        </details>
       </div>
       <div class="opt" id="wEndsHint"><span></span><span class="hint" id="endsHint"></span></div>
       <div class="opt" id="wAvail" hidden><span></span><span class="hint" id="availHint"></span></div>

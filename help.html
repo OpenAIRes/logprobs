@@ -268,8 +268,12 @@
         <b>no open leaves</b>.</dd>
     </dl>
     <h3>prefix &rarr; complete — one axis, three nested stops</h3>
-    <p>The slider is the front door to the boxes below. Its stops are <b>nested</b>: each
-      one is a subset of the stop to its left, so sliding right only ever narrows.</p>
+    <p>A three-position <b>stepper</b> — a slider only in how it is drawn; the standard
+      name for a control with a few named, ordered choices is a <em>segmented control</em>.
+      It is deliberately narrow and ticked, because three positions spread over a wide
+      track read as a continuum, which is the one thing this is not. Its stops are
+      <b>nested</b>: each is a subset of the stop to its left, so stepping right only
+      ever narrows.</p>
     <table>
       <tr><th>stop</th><th>what it is</th><th>count</th></tr>
       <tr><td><b>prefix</b></td><td>everything, prefixes included. There is rarely a
@@ -289,10 +293,12 @@
       shows only its count, names itself on hover, and spells itself out in the line
       under the slider once selected.</p>
     <div class="note">
-      <p><b>The slider drives the boxes; it does not replace them.</b> They can still say
-        things the axis has no stop for — <code>continues</code> on its own, say, or
-        <code>open</code> alone — and then the slider dims and reads
-        <code>combination</code> rather than pointing at a stop it does not mean.</p>
+      <p><b>The stepper drives the boxes; it does not replace them.</b> They live behind
+        <em>set the endings by hand</em> because the stepper already reaches the three
+        points worth reaching. They can still say things the axis has no stop for —
+        <code>continues</code> on its own, say, or <code>open</code> alone — and then
+        the stepper dims and reads <code>combination</code> rather than pointing at a stop
+        it does not mean.</p>
     </div>
 
     <h3>continues / dead end</h3>
