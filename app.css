@@ -226,8 +226,8 @@ code {
    ones that change WHAT you are looking at. The rest lives behind `more`,
    because a strip of fourteen controls is a page you read, not a bar you use. */
 .sbar {
-  display: flex; align-items: center; gap: .9rem; flex-wrap: wrap;
-  padding: .5rem .9rem; margin: 0 0 1rem;
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  padding: .35rem .6rem; margin: 0 0 .8rem;
   background: var(--card); border: 1px solid var(--line);
   border-radius: 8px; box-shadow: var(--shadow);
   font-size: .8125rem;
@@ -240,8 +240,18 @@ code {
 .sscope input[type=range].off { opacity: .4; }
 .sscope b { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
 .sscope input[type=range].off + b { color: var(--ink-faint); }
-.smore, .stheme { padding: .2rem .55rem; font-size: .78125rem; }
-.stheme { font-variant-numeric: tabular-nums; min-width: 5.5rem; }
+/* Icon-only, square, no text: three glyphs is the whole strip. `on` is the
+   pressed look, which is the only thing saying whether colour is applied or the
+   panel is open. */
+.sicon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; padding: 0;
+  color: var(--ink-dim);
+}
+.sicon:hover { color: var(--ink); }
+.sicon.on { color: var(--card); background: var(--accent); border-color: var(--accent); }
+.spagestatus { color: var(--ink-faint); font-size: .78125rem; }
+.spagestatus:not(:empty) { margin-left: .6rem; }
 .sinfo { margin-left: auto; color: var(--ink-faint); font-size: .78125rem;
   font-variant-numeric: tabular-nums; }
 
@@ -270,10 +280,12 @@ code {
 body.tok-colour .tok,
 body.tok-colour .token { background: var(--tc, transparent); }
 
-/* The colour key. Both pages colour tokens by probability now, so it belongs to
-   the bar rather than to whichever page happened to have it. */
-.slegend { display: flex; align-items: center; gap: .4rem;
-  font-size: .71875rem; color: var(--ink-faint); }
-.slegend.off { opacity: .35; }
-.slegend .ramp { width: 64px; height: 7px; border-radius: 4px;
-  background: linear-gradient(90deg, var(--bad), var(--mid), rgba(45,160,110,.75)); }
+/* The colour key moved out of the strip: three icons is the whole strip, and the
+   scale is explained on the help page and in the button's own title. */
+
+/* A page's own controls, moved into the panel. They keep their own look; this
+   only stops them from being a row of their own. */
+#sPageExtra:not(:empty) { margin-top: .5rem; padding-top: .5rem;
+  border-top: 1px solid var(--line); }
+#sPageExtra #toolbar { display: flex; flex-wrap: wrap; gap: .5rem;
+  align-items: center; }

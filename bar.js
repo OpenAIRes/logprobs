@@ -34,6 +34,16 @@ window.tokColor = function tokColor(logprob) {
   return `rgba(190,70,75,${Math.max(0.12, a)})`;
 };
 
+/* Inline SVG at currentColor, 15px: no text on the strip, so each button has to
+   carry its meaning in the glyph alone. A palette for colour, sun and moon for
+   the palette itself, a gear for everything else. */
+const ICON = {
+  colour: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-1.2-1-1.7-1-2.7 0-.8.7-1.3 1.6-1.3H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="8" cy="10" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="10" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.6v2.2M12 19.2v2.2M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.4 19.6 6 18M18 6l1.6-1.6"/></svg>',
+};
+
 (() => {
   const STORE_KEY = 'bar_state';
 
@@ -199,17 +209,15 @@ window.tokColor = function tokColor(logprob) {
      you are looking at. */
   host.innerHTML = `
     <div class="sbar">
-      <label class="sfield scolour" title="shade each token by the probability the model gave it at that position">
-        <input type="checkbox" id="sColour"> colour
-      </label>
-      <!-- Just the ramp: the words for its ends pushed the bar onto a second
-           row, and the box beside it already says what the colours are. -->
-      <span class="slegend" id="sLegend" title="left = unlikely, right = near certain — the probability the model gave that token at that position">
-        <span class="ramp"></span>
-      </span>
-      <button type="button" class="stheme" id="sTheme"></button>
-      <button type="button" class="smore" id="sMore" aria-expanded="false" aria-controls="sPanel"></button>
+      <button type="button" class="sicon" id="sColour" aria-pressed="false"
+              title="Colour — shade each token by the probability the model gave it at that position">${ICON.colour}</button>
+      <button type="button" class="sicon" id="sTheme"></button>
+      <button type="button" class="sicon" id="sMore" aria-expanded="false" aria-controls="sPanel"
+              title="Settings">${ICON.gear}</button>
       <span class="sinfo" id="sInfo"></span>
+      <!-- Where a page hangs its own status line, so it needs no strip of its
+           own. The token browser's was the third row on screen. -->
+      <span class="spagestatus" id="sPageStatus"></span>
     </div>
     <div class="smorepanel" id="sPanel" hidden>
       <label class="sfield"><span>view</span>
@@ -237,7 +245,7 @@ window.tokColor = function tokColor(logprob) {
       <label class="sfield"><span>starts with</span>
         <input type="text" id="sPrefix" placeholder="e.g. I have" spellcheck="false" value="${state.prefix.replace(/"/g, '&quot;')}">
       </label>
-      <label class="sfield"><span>model</span>
+      <label class="sfield" id="sModelWrap"><span>model</span>
         <select id="sModel">
           ${['gpt-3.5-turbo-instruct', 'davinci-002', 'babbage-002']
             .map(m => opt(m, m, state.model)).join('')}
@@ -261,6 +269,9 @@ window.tokColor = function tokColor(logprob) {
       <div class="sfield" id="sEndsWrap"><span>endings</span>
         <span class="sends" id="sEnds"></span>
       </div>
+      <!-- Where a page hangs its own controls. The token browser's toolbar --
+           new tree, the caches, its model select -- was a third row on screen. -->
+      <div id="sPageExtra"></div>
       <!-- Help is in the nav above; a second link to it here was the same link
            twice on one screen. -->
       <div class="sfoot">
@@ -462,12 +473,12 @@ window.tokColor = function tokColor(logprob) {
      for its own sake. */
   function paintColour() {
     const on = !!state.colour;
-    el('sColour').checked = on;
+    el('sColour').setAttribute('aria-pressed', String(on));
+    el('sColour').classList.toggle('on', on);
     document.body.classList.toggle('tok-colour', on);
-    el('sLegend').classList.toggle('off', !on);
   }
-  el('sColour').addEventListener('change', () => {
-    state.colour = el('sColour').checked ? '1' : '';
+  el('sColour').addEventListener('click', () => {
+    state.colour = state.colour ? '' : '1';
     persist();
     paintColour();
     // Keep the address in step so a link still reproduces the screen.
@@ -483,19 +494,17 @@ window.tokColor = function tokColor(logprob) {
   });
   paintColour();
 
-  /* Three states, so a button that names the current one rather than a two-way
-     switch: `system` keeps following the machine, which is a real preference a
-     toggle would silently pin. */
-  const THEME_LABEL = { system: '◐ system', light: '☀ light', dark: '☾ dark' };
+  /* The glyph shows the palette you are IN, not the one a click would give you.
+     A button that pictures its own effect reads as a state indicator half the
+     time and as an action the other half, with no way to tell which at a glance. */
   function paintTheme() {
     const t = window.appTheme;
     if (!t) { el('sTheme').hidden = true; return; }
-    el('sTheme').textContent = THEME_LABEL[t.get()] || t.get();
-    el('sTheme').title = `palette: ${t.get()}`
-      + (t.get() === 'system' ? ` (currently ${t.resolved()})` : '')
-      + ' — click for the next of system, light, dark';
+    const dark = t.get() === 'dark';
+    el('sTheme').innerHTML = dark ? ICON.moon : ICON.sun;
+    el('sTheme').title = `Palette: ${dark ? 'dark' : 'light'} — click for ${dark ? 'light' : 'dark'}`;
   }
-  el('sTheme').addEventListener('click', () => { window.appTheme.cycle(); paintTheme(); });
+  el('sTheme').addEventListener('click', () => { window.appTheme.toggle(); paintTheme(); });
   window.addEventListener('themechange', paintTheme);
   paintTheme();
 
@@ -506,8 +515,8 @@ window.tokColor = function tokColor(logprob) {
   function paintMore() {
     panel.hidden = !open;
     more.setAttribute('aria-expanded', String(open));
-    // It now holds every query setting, not a handful of extras, so it says so.
-    more.textContent = open ? 'settings ▴' : 'settings ▾';
+    // Icon only, so the pressed look is what says whether it is open.
+    more.classList.toggle('on', open);
   }
   more.addEventListener('click', () => {
     open = !open;
@@ -524,5 +533,14 @@ window.tokColor = function tokColor(logprob) {
   repaint();
 
   // What the page can ask the bar, rather than reading its internals.
-  window.settingsBar = { state, query, destination, repaint, ready, suppressInfo, landedOnId };
+    /* A page moves its own controls into the panel instead of keeping a strip of
+     its own, and its status line onto the bar. Both were a whole extra row. */
+  function adopt(node, where) {
+    const slot = el(where === 'status' ? 'sPageStatus' : 'sPageExtra');
+    if (slot && node) slot.appendChild(node);
+  }
+  function hideField(id) { const e = el(id); if (e) e.hidden = true; }
+
+  window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
+                         adopt, hideField, landedOnId };
 })();

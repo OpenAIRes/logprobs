@@ -5,10 +5,10 @@
    which reads as a flicker on every navigation -- and the bar navigates on every
    change of a setting.
 
-   Three states, not two. `system` follows the OS and keeps following it while
-   it is chosen; `light` and `dark` override it. The distinction matters because
-   "the same as my machine" is a real preference, and a two-state toggle would
-   silently pin whatever the machine happened to say the first time.
+   Two states. The system setting decides the first visit and nothing after
+   that: a third `system` state is defensible but it makes the button say three
+   things, and this is a one-button control on a strip that is meant to be
+   glanceable.
 
    The value lives in localStorage rather than the URL: it is about the person
    reading, not about what is on screen, so a shared link should not carry it and
@@ -17,19 +17,17 @@
 */
 (() => {
   const KEY = 'app_theme';
-  const ORDER = ['system', 'light', 'dark'];
+  const ORDER = ['light', 'dark'];
   const query = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
 
-  let choice = 'system';
+  // No stored choice yet: take the machine's, once. From then on it is explicit.
+  let choice = query && query.matches ? 'dark' : 'light';
   try {
     const v = localStorage.getItem(KEY);
     if (ORDER.includes(v)) choice = v;
-  } catch { /* private mode: fall back to following the system */ }
+  } catch { /* private mode: the machine's setting stands for this session */ }
 
-  function resolved() {
-    if (choice !== 'system') return choice;
-    return query && query.matches ? 'dark' : 'light';
-  }
+  function resolved() { return choice; }
 
   function apply() {
     // Always explicit, so the CSS never has to guess and no rule depends on the
@@ -40,21 +38,17 @@
   }
 
   function set(next) {
-    choice = ORDER.includes(next) ? next : 'system';
+    choice = ORDER.includes(next) ? next : 'light';
     try { localStorage.setItem(KEY, choice); } catch {}
     apply();
-  }
-
-  // Following the system means following it as it changes, not just at load.
-  if (query && query.addEventListener) {
-    query.addEventListener('change', () => { if (choice === 'system') apply(); });
   }
 
   window.appTheme = {
     get: () => choice,
     resolved,
     set,
-    cycle: () => set(ORDER[(ORDER.indexOf(choice) + 1) % ORDER.length]),
+    toggle: () => set(choice === 'dark' ? 'light' : 'dark'),
+    cycle: () => set(choice === 'dark' ? 'light' : 'dark'),
     ORDER,
   };
 

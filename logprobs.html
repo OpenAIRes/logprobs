@@ -210,7 +210,7 @@ fetch('/api/stats', { cache: 'no-store' })
         </select>
       </label>
 
-      <button id="helpBtn" class="icon" title="Help — what each control does" aria-label="Help">?</button>
+      <button id="helpBtn" class="icon" hidden title="Help — what each control does" aria-label="Help">?</button>
     </div>
   </div>
 
@@ -2122,6 +2122,24 @@ if (sweepBtn) sweepBtn.addEventListener('click', async () => {
 });
 sweepUpdateCount();
 
+</script>
+<script>
+/* This page had a control strip of its own, which made three rows on screen:
+   the nav, the settings bar, and this. Its buttons are page actions rather than
+   query settings, so they move into the bar's panel rather than onto the strip,
+   and the status line goes on the strip where there is room. The bar's own
+   `model` row goes: this toolbar already has one, and two controls for one
+   setting is how the last round of desync bugs happened. */
+(() => {
+  const bar = window.settingsBar;
+  if (!bar || !bar.adopt) return;
+  const toolbar = document.getElementById('toolbar');
+  const status = document.getElementById('statusArea');
+  if (toolbar) { bar.adopt(toolbar, 'extra'); bar.hideField('sModelWrap'); }
+  if (status) bar.adopt(status, 'status');
+  const header = document.getElementById('header');
+  if (header && !header.children.length) header.hidden = true;
+})();
 </script>
 </body>
 </html>
