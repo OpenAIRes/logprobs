@@ -5,6 +5,9 @@
 <title>Logprobs — help</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/app.css">
+<!-- In <head> and blocking: resolving the palette after the body renders
+     shows the wrong one for a frame, and the bar navigates on every change. -->
+<script src="/theme.js"></script>
 <style>
   header { margin: .5rem 0 1.2rem; }
   h1 { margin: 0 0 .4rem; font-size: 1.6rem; letter-spacing: -.01em; font-weight: 620; }
@@ -265,6 +268,20 @@
         the trie only ever contains tokens some call actually generated, so there are
         <b>no open leaves</b>.</dd>
     </dl>
+    <h3>the bar</h3>
+    <p>One strip stays visible, and it holds only what is about <em>reading</em> what
+      is on screen: the colour scale and the palette. Everything that decides
+      <em>which</em> strings are on screen sits behind <b>settings</b> — those are
+      decisions, these are comfort. The count on the right is neither; it says what
+      you are looking at.</p>
+    <p><b>Palette</b> cycles <code>system</code> → <code>light</code> →
+      <code>dark</code>. Three states rather than two, because &ldquo;the same as my
+      machine&rdquo; is a real preference and a two-way switch would silently pin
+      whatever the machine happened to say at the time; on <code>system</code> it keeps
+      following the machine as that changes. It is the one setting kept out of the
+      address: it is about the person reading, not about what is on screen, so a
+      shared link should not force a stranger into someone else's palette.</p>
+
     <h3>colour</h3>
     <p>Off by default. Ticked, every token is shaded by the probability the model
       gave it at that position — green above 0.6, amber above 0.15, red below, with

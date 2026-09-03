@@ -192,8 +192,26 @@ window.tokColor = function tokColor(logprob) {
   const opt = (v, label, sel) =>
     `<option value="${v}"${sel === v ? ' selected' : ''}>${label}</option>`;
 
+  /* One visible strip, and it holds only what is about *reading* what is on
+     screen: the colour scale and the palette. Everything that changes WHICH
+     strings are on screen is a click away, because those are decisions and these
+     are comfort. The count stays out because it is not a setting -- it says what
+     you are looking at. */
   host.innerHTML = `
     <div class="sbar">
+      <label class="sfield scolour" title="shade each token by the probability the model gave it at that position">
+        <input type="checkbox" id="sColour"> colour
+      </label>
+      <!-- Just the ramp: the words for its ends pushed the bar onto a second
+           row, and the box beside it already says what the colours are. -->
+      <span class="slegend" id="sLegend" title="left = unlikely, right = near certain — the probability the model gave that token at that position">
+        <span class="ramp"></span>
+      </span>
+      <button type="button" class="stheme" id="sTheme"></button>
+      <button type="button" class="smore" id="sMore" aria-expanded="false" aria-controls="sPanel"></button>
+      <span class="sinfo" id="sInfo"></span>
+    </div>
+    <div class="smorepanel" id="sPanel" hidden>
       <label class="sfield"><span>view</span>
         <select id="sView">${VIEWS.map(([v, l]) => opt(v, l, state.view)).join('')}</select>
       </label>
@@ -206,25 +224,13 @@ window.tokColor = function tokColor(logprob) {
       <label class="sfield" id="sSortWrap"><span>ranked by</span>
         <select id="sSort"></select>
       </label>
-      <span class="sfield sscope" id="sScopeWrap"><span>how complete</span>
-        <input type="range" id="sScope" min="0" max="2" step="1" list="sTicks">
-        <datalist id="sTicks"><option value="0"></option><option value="1"></option><option value="2"></option></datalist>
-        <b id="sScopeName"></b>
-      </span>
-      <button type="button" class="smore" id="sMore" aria-expanded="false">more ▾</button>
-      <span class="sinfo" id="sInfo"></span>
-      <!-- The colour scale applies to both pages, so its box and key travel with
-           the bar instead of sitting on the lists page only. -->
-      <label class="sfield scolour" title="shade each token by the probability the model gave it at that position">
-        <input type="checkbox" id="sColour"> colour
-      </label>
-      <!-- Just the ramp: the words for its ends pushed the bar onto a second
-           row, and the box beside it already says what the colours are. -->
-      <span class="slegend" id="sLegend" title="left = unlikely, right = near certain — the probability the model gave that token at that position">
-        <span class="ramp"></span>
-      </span>
-    </div>
-    <div class="smorepanel" id="sPanel" hidden>
+      <div class="sfield" id="sScopeWrap"><span>how complete</span>
+        <span class="sscope">
+          <input type="range" id="sScope" min="0" max="2" step="1" list="sTicks">
+          <datalist id="sTicks"><option value="0"></option><option value="1"></option><option value="2"></option></datalist>
+          <b id="sScopeName"></b>
+        </span>
+      </div>
       <label class="sfield"><span>starting prompt</span>
         <input type="text" id="sPrompt" placeholder="(empty = unconditional)" spellcheck="false" value="${state.prompt.replace(/"/g, '&quot;')}">
       </label>
@@ -252,7 +258,7 @@ window.tokColor = function tokColor(logprob) {
       <label class="sfield" id="sRecWrap"><span>tokens</span>
         <span><input type="checkbox" id="sRec"${state.chosen_only ? '' : ' checked'}> include tokens known only from top_logprobs</span>
       </label>
-      <div class="sfield"><span>endings</span>
+      <div class="sfield" id="sEndsWrap"><span>endings</span>
         <span class="sends" id="sEnds"></span>
       </div>
       <!-- Help is in the nav above; a second link to it here was the same link
@@ -326,7 +332,7 @@ window.tokColor = function tokColor(logprob) {
     el('sFwdWrap').hidden = v !== 'walk';
     el('sExtendWrap').hidden = !LISTY(v) || String(state.top) === '1';
     el('sRecWrap').hidden = v !== 'prefixes';
-    el('sEnds').parentElement.hidden = !SCOPED(v);
+    el('sEndsWrap').hidden = !SCOPED(v);
     el('sPrompt').parentElement.hidden = v !== 'greedy';
     el('sPrefix').parentElement.hidden = !RANKED(v);
     const view = VIEWS.find(([x]) => x === v);
@@ -477,6 +483,22 @@ window.tokColor = function tokColor(logprob) {
   });
   paintColour();
 
+  /* Three states, so a button that names the current one rather than a two-way
+     switch: `system` keeps following the machine, which is a real preference a
+     toggle would silently pin. */
+  const THEME_LABEL = { system: '◐ system', light: '☀ light', dark: '☾ dark' };
+  function paintTheme() {
+    const t = window.appTheme;
+    if (!t) { el('sTheme').hidden = true; return; }
+    el('sTheme').textContent = THEME_LABEL[t.get()] || t.get();
+    el('sTheme').title = `palette: ${t.get()}`
+      + (t.get() === 'system' ? ` (currently ${t.resolved()})` : '')
+      + ' — click for the next of system, light, dark';
+  }
+  el('sTheme').addEventListener('click', () => { window.appTheme.cycle(); paintTheme(); });
+  window.addEventListener('themechange', paintTheme);
+  paintTheme();
+
   const panel = el('sPanel'), more = el('sMore');
   const MORE_KEY = 'bar_more';
   let open = false;
@@ -484,7 +506,8 @@ window.tokColor = function tokColor(logprob) {
   function paintMore() {
     panel.hidden = !open;
     more.setAttribute('aria-expanded', String(open));
-    more.textContent = open ? 'less ▴' : 'more ▾';
+    // It now holds every query setting, not a handful of extras, so it says so.
+    more.textContent = open ? 'settings ▴' : 'settings ▾';
   }
   more.addEventListener('click', () => {
     open = !open;

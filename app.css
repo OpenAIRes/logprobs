@@ -53,8 +53,12 @@
   --best-bg: #dfe6e9;     /* the argmax row in the tooltip */
 }
 
+/* Dark palette, in two places on purpose: the media query answers the system
+   setting, the attribute answers an explicit choice from the bar, and the guard
+   lets an explicit `light` beat a dark system. The two token lists are generated
+   identical and must stay that way -- check_theme.py asserts it. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #16161a;
     --panel: #1f1f24;
     --card: #1f1f24;
@@ -81,6 +85,34 @@
     --prompt-line: #5c6675;
     --best-bg: #2c3a3c;
   }
+}
+
+:root[data-theme="dark"] {
+    --bg: #16161a;
+    --panel: #1f1f24;
+    --card: #1f1f24;
+    --ink: #e8e8e4;
+    --ink-dim: #a0a09a;
+    --ink-faint: #6e6e68;
+    --line: #2e2e34;
+    --line-soft: #26262b;
+    --accent: #8ab0d9;
+    --danger: #e08588;
+    --bad: #e08588;
+    --good: #6ec9a0;
+    --mid: #e0b060;
+    --chip: #2a2a30;
+    --hover: #25252b;
+    --btn-hover-line: #3a3a42;
+    --btn-active: #303038;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 2px 8px rgba(0, 0, 0, .2);
+    --hi: #6b5a1f;
+    --sel: #2f5d84;
+    --prompt-bg: #2b303a;
+    --prompt-bg-hover: #343a46;
+    --prompt-ink: #b6c0cf;
+    --prompt-line: #5c6675;
+    --best-bg: #2c3a3c;
 }
 
 * { box-sizing: border-box; }
@@ -208,7 +240,8 @@ code {
 .sscope input[type=range].off { opacity: .4; }
 .sscope b { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
 .sscope input[type=range].off + b { color: var(--ink-faint); }
-.smore { padding: .2rem .55rem; font-size: .78125rem; }
+.smore, .stheme { padding: .2rem .55rem; font-size: .78125rem; }
+.stheme { font-variant-numeric: tabular-nums; min-width: 5.5rem; }
 .sinfo { margin-left: auto; color: var(--ink-faint); font-size: .78125rem;
   font-variant-numeric: tabular-nums; }
 
@@ -218,8 +251,12 @@ code {
   background: var(--chip); border: 1px solid var(--line);
   border-radius: 8px; font-size: .8125rem;
 }
-.smorepanel .sfield { display: grid; grid-template-columns: 9rem minmax(0, 1fr);
+/* Two element children per row, always: free text or a third element inside a
+   grid container becomes its own item, which is what put a label on one line and
+   its control on the next the first time round. */
+.smorepanel .sfield { display: grid; grid-template-columns: 10rem minmax(0, 1fr);
   gap: .5rem; align-items: center; }
+.smorepanel .sscope { display: flex; align-items: center; gap: .5rem; }
 .sends { display: flex; gap: .6rem; flex-wrap: wrap;
   font-family: ui-monospace, Menlo, monospace; }
 .sends label { display: inline-flex; gap: .2rem; align-items: center; cursor: pointer; }
