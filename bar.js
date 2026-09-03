@@ -18,6 +18,22 @@
    pages: one result is a single string in the token browser, more than one is a
    ranked list. Deciding that here rather than in each page is the point.
 */
+/* ---------------------------------------------------------------- shared bits
+
+   Token colouring by probability lived only in the lists view, so the same token
+   was plain in the browser and coloured in the table. It belongs to the data, not
+   to one page, so it sits here -- the one script both pages load -- and both use
+   it. Green above 0.6, amber above 0.15, red below; alpha tracks the probability
+   so a near-certain token reads as solid and an unlikely one as a faint wash. */
+window.tokColor = function tokColor(logprob) {
+  if (logprob === null || logprob === undefined || !isFinite(logprob)) return '';
+  const p = Math.exp(logprob);
+  const a = 0.10 + 0.55 * Math.min(1, p);
+  if (p > 0.6)  return `rgba(45,160,110,${a})`;
+  if (p > 0.15) return `rgba(200,150,50,${a})`;
+  return `rgba(190,70,75,${Math.max(0.12, a)})`;
+};
+
 (() => {
   const STORE_KEY = 'bar_state';
 
@@ -194,6 +210,11 @@
       </span>
       <button type="button" class="smore" id="sMore" aria-expanded="false">more ▾</button>
       <span class="sinfo" id="sInfo"></span>
+      <!-- The colour scale now applies to both pages, so its key travels with
+           the bar instead of sitting on the lists page only. -->
+      <span class="slegend" title="token background: probability of that token at that position">
+        <span>unlikely</span><span class="ramp"></span><span>certain</span>
+      </span>
     </div>
     <div class="smorepanel" id="sPanel" hidden>
       <label class="sfield"><span>starting prompt</span>
@@ -226,9 +247,9 @@
       <div class="sfield"><span>endings</span>
         <span class="sends" id="sEnds"></span>
       </div>
+      <!-- Help is in the nav above; a second link to it here was the same link
+           twice on one screen. -->
       <div class="sfoot">
-        <a href="/help.html#scope">what do these mean?</a>
-        <span class="sep">·</span>
         <a href="/index.html">the full settings page, with the counts</a>
       </div>
     </div>`;
@@ -308,7 +329,14 @@
      all -- the prefixes view matches 176,649 -- so the count is the only honest
      way to say what a screenful is a screenful of. */
   let infoSeq = 0;
+  /* A page with a richer counter of its own claims the slot, and the bar stops
+     writing it. Two writers on one element is a race, and the lists page's text
+     ("200 of 363 results · 451 unreachable · 8492 records in store") says
+     strictly more than the bar's could. */
+  let infoSuppressed = false;
+  function suppressInfo() { infoSuppressed = true; ++infoSeq; el('sInfo').textContent = ''; }
   async function paintInfo() {
+    if (infoSuppressed) return;
     const mine = ++infoSeq;
     const v = state.view;
     if (!LISTY(v)) { el('sInfo').textContent = ''; return; }
@@ -439,5 +467,5 @@
   repaint();
 
   // What the page can ask the bar, rather than reading its internals.
-  window.settingsBar = { state, query, destination, repaint, ready, landedOnId };
+  window.settingsBar = { state, query, destination, repaint, ready, suppressInfo, landedOnId };
 })();

@@ -225,3 +225,10 @@ code {
 .sends label { display: inline-flex; gap: .2rem; align-items: center; cursor: pointer; }
 .sfoot { margin-top: .3rem; font-size: .78125rem; color: var(--ink-faint); }
 .sfoot .sep { margin: 0 .4rem; }
+
+/* The colour key. Both pages colour tokens by probability now, so it belongs to
+   the bar rather than to whichever page happened to have it. */
+.slegend { display: flex; align-items: center; gap: .4rem;
+  font-size: .71875rem; color: var(--ink-faint); }
+.slegend .ramp { width: 64px; height: 7px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--bad), var(--mid), rgba(45,160,110,.75)); }

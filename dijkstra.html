@@ -26,9 +26,6 @@
   .controls { display: flex; align-items: center; gap: 1rem; margin: 1.25rem 0 .6rem; flex-wrap: wrap; }
   .shown { font-size: .78125rem; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
   .shown.filtered { color: var(--accent); font-weight: 600; }
-  .legend { display: flex; align-items: center; gap: .5rem; margin-left: auto; font-size: .75rem; color: var(--ink-faint); }
-  .legend .ramp { width: 90px; height: 8px; border-radius: 4px;
-    background: linear-gradient(90deg, var(--bad), var(--mid), rgba(45,160,110,.75)); }
 
   /* --- compact one-line-per-entry table --- */
   .table {
@@ -179,8 +176,6 @@
 <body>
 <nav class="appnav">
   <a href="/">Start</a><span class="sep">|</span>
-  <a href="/logprobs.html">Single string</a>
-  <a href="/dijkstra.html" aria-current="page">Lists</a><span class="sep">|</span>
   <a href="/help.html">Help</a>
   <span class="right" id="navStore">…</span>
 </nav>
@@ -210,15 +205,6 @@ fetch('/api/stats', { cache: 'no-store' })
     <div class="meta" id="meta"></div>
   </header>
 
-  <!-- Every setting used to sit here as well as in the bar, and the two kept
-       disagreeing: the bar's `top` was dropped, its `ranked by` showed one thing
-       while the table sorted by another. The controls are gone; this page reads
-       window.settingsBar.state and renders. All changes go through the bar. -->
-  <div class="controls">
-    <span class="shown" id="shown"></span>
-    <div class="legend">
-      <span>uncertain</span><span class="ramp"></span><span>certain</span>
-    </div>
   </div>
   </div>
 
@@ -280,7 +266,14 @@ function matchesPrefix(text, q) {
 }
 
 function currentPrefix() { return S.prefix || ''; }
-const shownEl  = document.getElementById('shown');
+/* The count lives in the bar, which is the only counter now: this page's own
+   strip said "200 of 363 results · 451 unreachable · 8492 records in store",
+   all of which the meta block below already states, and the first half of which
+   the bar states too. */
+const shownEl = document.getElementById('sInfo') || document.createElement('span');
+// This page reports its own count into the bar's slot, so the bar stops writing
+// there -- otherwise both would, and whichever fetch landed last would win.
+if (window.settingsBar && window.settingsBar.suppressInfo) window.settingsBar.suppressInfo();
 
 
 let DB = null;
@@ -304,13 +297,9 @@ function plain(t) {
 
 // Colour a token by its probability: near-1 reads as "confident", near-0 as
 // "the model was genuinely choosing". Alpha-only so it works in both themes.
-function tokColor(logprob) {
-  const p = Math.exp(logprob);
-  const a = 0.10 + 0.55 * Math.min(1, p);
-  if (p > 0.6)  return `rgba(45,160,110,${a})`;
-  if (p > 0.15) return `rgba(200,150,50,${a})`;
-  return `rgba(190,70,75,${Math.max(0.12, a)})`;
-}
+// Shared with the token browser, from bar.js: the same token used to be plain
+// there and coloured here.
+const tokColor = window.tokColor;
 
 function fmt(x, d = 4) { return Number(x).toFixed(d); }
 
@@ -487,7 +476,7 @@ function renderRows() {
       ? `<div class="empty">No string starts with <code>${plain(q)
           .replace(/&/g,'&amp;').replace(/</g,'&lt;')}</code>.</div>`
       : '<div class="empty">Nothing here yet.</div>';
-    shownEl.textContent = `0 results · ${DB.source_records} records in store`;
+    shownEl.textContent = '0 results';
     shownEl.classList.toggle('filtered', !!q);
     tableEl.hidden = false;
     return;
@@ -502,17 +491,14 @@ function renderRows() {
   tableEl.classList.toggle('has-sweep', anySweep);
   document.getElementById('thSweep').hidden = !anySweep;
 
-  /* Results are not records: 500 prefixes can come out of 401 calls, so "500 of
-     401" would be misleading. Both numbers say what they are -- and `available`
-     is the third, because a prefixes view shows a sliver (200 of 176,649) and
-     without saying so it reads as the whole answer. */
+  /* Short on purpose: it shares the bar with the colour key, and a long line
+     wrapped the bar onto a second row. `records in store` and `unreachable` are
+     both in the meta block below, so this keeps only what the bar is for --
+     how much of the match is on screen. A prefixes view shows a sliver
+     (50 of 176,649), and without the second number it reads as the whole answer. */
   const avail = DB.available != null && DB.available > slice.length
     ? ` of ${DB.available.toLocaleString('en-US')}` : '';
-  const unreach = DB.unreachable
-    ? ` · ${DB.unreachable.toLocaleString('en-US')} unreachable` : '';
-  shownEl.textContent = q
-    ? `${slice.length} results match "${plain(q)}" · ${DB.source_records} records in store`
-    : `${slice.length}${avail} results${unreach} · ${DB.source_records} records in store`;
+  shownEl.textContent = `${slice.length}${avail} results`;
   shownEl.classList.toggle('filtered', !!q);
   tableEl.hidden = false;
 }
@@ -634,7 +620,7 @@ function renderWalk(db) {
   }
 
   specialEl.innerHTML = rows.join('');
-  shownEl.textContent = `${db.steps.length} steps from store`
+  shownEl.textContent = `${db.steps.length} steps`
     + (db.needs_call ? ' · the next one needs a call' : '');
 }
 

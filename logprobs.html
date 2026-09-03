@@ -148,14 +148,13 @@
 <body>
 <nav class="appnav">
   <a href="/">Start</a><span class="sep">|</span>
-  <a href="/logprobs.html" aria-current="page">Single string</a>
-  <a href="/dijkstra.html">Lists</a><span class="sep">|</span>
   <a href="/help.html">Help</a>
   <span class="right" id="navStore">…</span>
 </nav>
 <!-- The settings bar. This page used to have no way to change anything: you had
      to go back to the start page, pick, and come here again. -->
 <div id="settingsbar"></div>
+<script src="/bar.js"></script>
 <script>
 /* The strip says which page you are on and whether the store answers. Several
    views behave differently when it does not, and noticing that from an empty
@@ -1508,7 +1507,14 @@ function renderTokens(tokens){
       }
       // odlisit zadany prompt od vygenerovaneho textu
       if (t.isPrompt) span.classList.add('is-prompt');
-      span.title=escapeToken(t.token);
+      /* Colour by probability, the same scale the lists view uses. A prompt token
+         is not a prediction -- nothing chose it -- so it stays uncoloured. */
+      if (!t.isPrompt && window.tokColor) {
+        const c = window.tokColor(t.logprob);
+        if (c) span.style.background = c;
+      }
+      span.title=escapeToken(t.token)
+        + (t.isPrompt || t.logprob == null ? '' : `  logP=${Number(t.logprob).toFixed(4)}`);
       span.addEventListener('click',e=>handleTokenClick(e,tokens));
       frag.appendChild(span);
     }
@@ -2114,6 +2120,5 @@ if (sweepBtn) sweepBtn.addEventListener('click', async () => {
 sweepUpdateCount();
 
 </script>
-<script src="/bar.js"></script>
 </body>
 </html>
