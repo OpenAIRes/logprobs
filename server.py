@@ -111,9 +111,39 @@ class Handler(SimpleHTTPRequestHandler):
             traceback.print_exc()
             return self.send_json({'error': f'{type(exc).__name__}: {exc}'}, 500)
 
+    def landing(self) -> str:
+        """Where `/` sends you: the result, not a page of choices.
+
+        Greedy at temperature 0 from the empty prompt, which is the 4096-token
+        record we have in full -- so the first thing on screen is a string with
+        its logprobs rather than a form. Derived, not hardcoded: if the store
+        gains a longer argmax chain, this follows it.
+        """
+        try:
+            first = self.store.greedy(prompt='', model='gpt-3.5-turbo-instruct').get('first_id')
+        except Exception:
+            first = None
+        if not first:
+            return '/index.html'
+        # The settings that produced it, spelled out. Sending only `id` let the
+        # bar fall back to whatever was last used, so the landing showed the
+        # greedy string while the bar said `completions` -- a bar that
+        # misdescribes what is on screen is worse than no bar.
+        return ('/logprobs.html?view=greedy&top=1'
+                f'&id={urllib.parse.quote(first)}')
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         route = posixpath.normpath(parsed.path)
+        # `/` is the landing, and the landing is a result. /index.html is still
+        # the settings page, reachable from the bar; this only changes what the
+        # bare root does.
+        if route == '/' and not parsed.query:
+            self.send_response(302)
+            self.send_header('Location', self.landing())
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            return
         if not route.startswith('/api/'):
             return super().do_GET()
 

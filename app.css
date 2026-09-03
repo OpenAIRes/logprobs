@@ -187,3 +187,41 @@ code {
 }
 .appnav .sep { color: var(--ink-faint); }
 .appnav .right { margin-left: auto; color: var(--ink-faint); }
+
+/* ---------------------------------------------------------------- settings bar
+
+   The strip above the results, rendered by bar.js. Four controls stay out: the
+   ones that change WHAT you are looking at. The rest lives behind `more`,
+   because a strip of fourteen controls is a page you read, not a bar you use. */
+.sbar {
+  display: flex; align-items: center; gap: .9rem; flex-wrap: wrap;
+  padding: .5rem .9rem; margin: 0 0 1rem;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: var(--shadow);
+  font-size: .8125rem;
+}
+.sfield { display: flex; align-items: center; gap: .4rem; color: var(--ink-dim); }
+.sfield > span:first-child { color: var(--ink-faint); }
+.sfield input[type=text] { font-family: ui-monospace, Menlo, monospace; width: 11rem; }
+.sfield input[type=number] { width: 4.5rem; }
+.sscope input[type=range] { width: 4.5rem; margin: 0; vertical-align: middle; }
+.sscope input[type=range].off { opacity: .4; }
+.sscope b { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-weight: 600; }
+.sscope input[type=range].off + b { color: var(--ink-faint); }
+.smore { padding: .2rem .55rem; font-size: .78125rem; }
+.sinfo { margin-left: auto; color: var(--ink-faint); font-size: .78125rem;
+  font-variant-numeric: tabular-nums; }
+
+.smorepanel {
+  display: grid; gap: .45rem;
+  padding: .75rem .9rem; margin: -.6rem 0 1rem;
+  background: var(--chip); border: 1px solid var(--line);
+  border-radius: 8px; font-size: .8125rem;
+}
+.smorepanel .sfield { display: grid; grid-template-columns: 9rem minmax(0, 1fr);
+  gap: .5rem; align-items: center; }
+.sends { display: flex; gap: .6rem; flex-wrap: wrap;
+  font-family: ui-monospace, Menlo, monospace; }
+.sends label { display: inline-flex; gap: .2rem; align-items: center; cursor: pointer; }
+.sfoot { margin-top: .3rem; font-size: .78125rem; color: var(--ink-faint); }
+.sfoot .sep { margin: 0 .4rem; }

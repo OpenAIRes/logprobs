@@ -196,6 +196,9 @@
   <a href="/help.html">Help</a>
   <span class="right" id="navStore">…</span>
 </nav>
+<!-- One settings bar for every page, rendered by bar.js. This page's own strip
+     below keeps only what is a live filter over already-loaded rows. -->
+<div id="settingsbar"></div>
 <script>
 /* The strip says which page you are on and whether the store answers. Several
    views behave differently when it does not, and noticing that from an empty
@@ -220,7 +223,7 @@ fetch('/api/stats', { cache: 'no-store' })
     <!-- Was eight datasets; three of them differed only in how much data existed
          at the time, and the store sees all of it. The pre-filtered set ("I have")
          is now just text in the starts-with box. -->
-    <label for="dataSel">view:
+    <label for="dataSel" id="viewWrap">view:
       <select id="dataSel">
         <option value="completions">completions</option>
         <option value="prefixes">prefixes — best-first</option>
@@ -574,8 +577,8 @@ function setupLimitControl() {
   if (limitSel.options.length) return;          // once, not on every query
   // The greedy list is short by nature (one departure per position x alternative
   // that has a continuation), so 200 there means "all of them" and 20 is saner.
-  // The key is a literal, not SORT_KEY: that const is declared below this call,
-  // and let/const are not hoisted -- referencing it here is a ReferenceError.
+  // The key is a literal on purpose: LIMIT_KEY is declared below this call, and
+  // let/const are not hoisted -- referencing it here is a ReferenceError.
   try {
     if (VIEW === 'greedy' && !localStorage.getItem('dijkstra_greedy_seen')) {
       localStorage.setItem(LIMIT_KEY, '20');
@@ -583,7 +586,11 @@ function setupLimitControl() {
     }
   } catch {}
   limitSel.innerHTML = POOL_STEPS.map(n => `<option value="${n}">${n}</option>`).join('');
-  let saved = Number(localStorage.getItem(LIMIT_KEY));
+  /* ?top= wins over the remembered value. Without this the bar could ask for 500
+     and the page would quietly serve whatever it used last -- which is exactly
+     what happened: the bar's `top` was dropped and 20 rows appeared by luck. */
+  const wanted = Number(new URLSearchParams(location.search).get('top'));
+  let saved = wanted || Number(localStorage.getItem(LIMIT_KEY));
   limitSel.value = String(POOL_STEPS.includes(saved) ? saved : 200);
   limitSel.addEventListener('change', () => {
     try { localStorage.setItem(LIMIT_KEY, limitSel.value); } catch {}
@@ -598,10 +605,7 @@ dataSel.addEventListener('change', async () => {
   if (VIEW === 'sweep' || VIEW === 'walk') await ensureBases();
   load();
 });
-sortSel.addEventListener('change', () => {
-  try { localStorage.setItem(sortKeyFor(VIEW), sortSel.value); } catch {}
-  load();
-});
+sortSel.addEventListener('change', () => { load(); });
 baseSel.addEventListener('change', load);
 stepsIn.addEventListener('change', load);
 fwdIn.addEventListener('change', load);
@@ -727,39 +731,31 @@ function paintScope() {
 }
 /* The toolbar follows the view: a starts-with filter is meaningless over a grid,
    a base selector over a ranking. Hidden controls do not reach the query. */
+/* The bar above owns every setting now, so this only keeps the page's own live
+   filter honest and the blurb in step with the view. The controls the bar
+   replaced stay in the DOM -- the page's wiring reads them and initialises them
+   from the URL -- but they are never shown, because two controls for one setting
+   leaves no way to tell which one won.
+
+   `starts with` is the exception and stays visible: it filters rows already on
+   screen without a round trip, which is a different thing from the store-side
+   prefix the bar sends. */
 function applyViewControls() {
   applyBlurb();
-  const ranked = RANKED(VIEW);
-  document.getElementById('limitWrap').hidden = !ranked;
-  // Only a ranking over strings has a scope to choose. A completion is a
-  // recorded call, so it can never be 'open' -- disabling the box says why,
-  // where silently returning nothing would not.
-  document.getElementById('endsWrap').hidden =
-    !(VIEW === 'completions' || VIEW === 'prefixes' || VIEW === 'greedy');
-  // Only the trie search walks token by token, so only it can be restricted to
-  // paths that were generated rather than recovered.
-  document.getElementById('recoveredWrap').hidden = VIEW !== 'prefixes';
-  // The slider belongs wherever the scope boxes do, greedy included.
-  document.getElementById('scopeWrap').hidden = document.getElementById('endsWrap').hidden;
-  for (const l of document.querySelectorAll('.nodeLbl')) l.hidden = false;
-  const openBox = endBoxes().find(b => b.value === 'open');
-  if (openBox) {
-    // Only a prefix can be 'open': a completion and a greedy sibling are both
-    // recorded calls and always carry the API's verdict.
-    openBox.disabled = VIEW === 'completions' || VIEW === 'greedy';
-    openBox.parentElement.title = openBox.disabled
-      ? 'a recorded call always has an API finish reason, so it is never open'
-      : 'a prefix — nothing recorded ends here; the trie continues below';
+  for (const id of ['viewWrap', 'sortWrap', 'limitWrap', 'baseWrap', 'stepsWrap',
+                    'fwdWrap', 'scopeWrap', 'endsWrap', 'recoveredWrap']) {
+    const e = document.getElementById(id);
+    if (e) e.hidden = true;
   }
-  // Prefixes come out of a sum-ordered heap; the ranking IS the search order.
-  document.getElementById('sortWrap').hidden = !(VIEW === 'completions' || VIEW === 'greedy');
+  // Meaningless over a grid or a walk: there are no rows to narrow.
+  document.getElementById('prefixWrap').hidden = !RANKED(VIEW);
+  // Still enforced even though the box is out of sight: `open` cannot happen to
+  // a recorded call, and the bar reads these boxes back.
+  const openBox = endBoxes().find(b => b.value === 'open');
+  if (openBox) openBox.disabled = VIEW === 'completions' || VIEW === 'greedy';
   const costOpt = [...sortSel.options].find(o => o.value === 'cost');
   if (costOpt) costOpt.hidden = VIEW !== 'greedy';
   if (VIEW !== 'greedy' && sortSel.value === 'cost') sortSel.value = 'sum';
-  document.getElementById('prefixWrap').hidden = !ranked;
-  document.getElementById('baseWrap').hidden = ranked;   // base applies to grid and walk
-  document.getElementById('stepsWrap').hidden = VIEW !== 'walk';
-  document.getElementById('fwdWrap').hidden = VIEW !== 'walk';
 }
 
 /* The base menu comes from /api/bases rather than a hardcoded list of ids, so a
@@ -995,13 +991,13 @@ if (PARAMS.get('steps')) stepsIn.value = PARAMS.get('steps');
    completions ranking used, so "second best" came out ordered by Σ logprob --
    which is a different question from the greedy criterion. Each view's own
    default applies until this view's sort is set explicitly. */
-const SORT_KEY = 'dijkstra_sort';
 const DEFAULT_SORT = { greedy: 'cost', completions: 'sum', prefixes: 'sum' };
-function sortKeyFor(view) { return SORT_KEY + ':' + view; }
 function loadSort() {
-  let want = PARAMS.get('sort');
-  if (!want) { try { want = localStorage.getItem(sortKeyFor(VIEW)); } catch {} }
-  if (!want) want = DEFAULT_SORT[VIEW] || 'sum';
+  /* The bar owns the sort and persists it centrally, so this no longer keeps its
+     own per-view memory. It used to, and then the page sorted by a remembered
+     `ppl` while the bar's control showed the default -- the bar saying one thing
+     and the table doing another is worse than either. */
+  let want = PARAMS.get('sort') || DEFAULT_SORT[VIEW] || 'sum';
   if ([...sortSel.options].some(o => o.value === want)) sortSel.value = want;
 }
 loadSort();
@@ -1127,6 +1123,13 @@ async function load() {
     // The link must stay shareable, but switching views must not reload the page.
     if (!LEGACY_FILE) {
       const p = new URLSearchParams({ view: VIEW });
+      // Carry the bar's settings back into the address, or switching a view here
+      // would silently drop them and the link would stop reproducing the screen.
+      if (limitSel.value && limitSel.value !== '200') p.set('top', limitSel.value);
+      for (const k of ['ends', 'nodes', 'chosen_only', 'extend', 'model', 'prompt']) {
+        const v = PARAMS.get(k);
+        if (v) p.set(k, v);
+      }
       if (RANKED(VIEW) && prefixIn.value) p.set('prefix', prefixIn.value);
       if (VIEW === 'completions' && sortSel.value !== 'sum') p.set('sort', sortSel.value);
       if (VIEW === 'walk') {
@@ -1162,5 +1165,6 @@ async function load() {
   load();
 })();
 </script>
+<script src="/bar.js"></script>
 </body>
 </html>
