@@ -1511,7 +1511,7 @@ function renderTokens(tokens){
          is not a prediction -- nothing chose it -- so it stays uncoloured. */
       if (!t.isPrompt && window.tokColor) {
         const c = window.tokColor(t.logprob);
-        if (c) span.style.background = c;
+        if (c) span.style.setProperty('--tc', c);
       }
       span.title=escapeToken(t.token)
         + (t.isPrompt || t.logprob == null ? '' : `  logP=${Number(t.logprob).toFixed(4)}`);

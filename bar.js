@@ -54,6 +54,9 @@ window.tokColor = function tokColor(logprob) {
     base_id: '',
     steps: '',
     forward_only: '',
+    // Off by default: the colours help when you are reading probabilities and get
+    // in the way when you are reading the text.
+    colour: '',
   };
 
   const VIEWS = [
@@ -115,11 +118,11 @@ window.tokColor = function tokColor(logprob) {
      -- a walk with `ends=stop` on it -- says something about the screen that is
      not true, and the next person to open it has to work out which half counts. */
   const USES = {
-    greedy: ['top', 'sort', 'prompt', 'model', 'ends', 'nodes', 'extend'],
-    completions: ['top', 'sort', 'prefix', 'model', 'ends', 'nodes', 'extend'],
-    prefixes: ['top', 'prefix', 'model', 'ends', 'nodes', 'extend', 'chosen_only'],
-    sweep: ['base_id', 'model'],
-    walk: ['base_id', 'steps', 'forward_only', 'model'],
+    greedy: ['top', 'sort', 'prompt', 'model', 'ends', 'nodes', 'extend', 'colour'],
+    completions: ['top', 'sort', 'prefix', 'model', 'ends', 'nodes', 'extend', 'colour'],
+    prefixes: ['top', 'prefix', 'model', 'ends', 'nodes', 'extend', 'chosen_only', 'colour'],
+    sweep: ['base_id', 'model', 'colour'],
+    walk: ['base_id', 'steps', 'forward_only', 'model', 'colour'],
   };
 
   function query() {
@@ -210,10 +213,15 @@ window.tokColor = function tokColor(logprob) {
       </span>
       <button type="button" class="smore" id="sMore" aria-expanded="false">more ▾</button>
       <span class="sinfo" id="sInfo"></span>
-      <!-- The colour scale now applies to both pages, so its key travels with
+      <!-- The colour scale applies to both pages, so its box and key travel with
            the bar instead of sitting on the lists page only. -->
-      <span class="slegend" title="token background: probability of that token at that position">
-        <span>unlikely</span><span class="ramp"></span><span>certain</span>
+      <label class="sfield scolour" title="shade each token by the probability the model gave it at that position">
+        <input type="checkbox" id="sColour"> colour
+      </label>
+      <!-- Just the ramp: the words for its ends pushed the bar onto a second
+           row, and the box beside it already says what the colours are. -->
+      <span class="slegend" id="sLegend" title="left = unlikely, right = near certain — the probability the model gave that token at that position">
+        <span class="ramp"></span>
       </span>
     </div>
     <div class="smorepanel" id="sPanel" hidden>
@@ -442,6 +450,32 @@ window.tokColor = function tokColor(logprob) {
     });
     el(id).addEventListener('change', () => { state[key] = el(id).value; go(); });
   }
+
+  /* Applied here and on every load, not by navigating: nothing about the query
+     changes, so re-fetching and re-rendering to repaint backgrounds would be work
+     for its own sake. */
+  function paintColour() {
+    const on = !!state.colour;
+    el('sColour').checked = on;
+    document.body.classList.toggle('tok-colour', on);
+    el('sLegend').classList.toggle('off', !on);
+  }
+  el('sColour').addEventListener('change', () => {
+    state.colour = el('sColour').checked ? '1' : '';
+    persist();
+    paintColour();
+    // Keep the address in step so a link still reproduces the screen.
+    const p = query();
+    const id = params.get('id');
+    if (id) p.set('id', id);
+    /* Keep `defaults=1` if this URL had it. Dropping it turned a
+       self-contained address into one that falls back to remembered state, so a
+       reload -- or a recipient with different settings -- would not see this
+       screen. */
+    if (fromDefaults) p.set('defaults', '1');
+    history.replaceState(null, '', location.pathname + '?' + p.toString());
+  });
+  paintColour();
 
   const panel = el('sPanel'), more = el('sMore');
   const MORE_KEY = 'bar_more';

@@ -265,6 +265,19 @@
         the trie only ever contains tokens some call actually generated, so there are
         <b>no open leaves</b>.</dd>
     </dl>
+    <h3>colour</h3>
+    <p>Off by default. Ticked, every token is shaded by the probability the model
+      gave it at that position — green above 0.6, amber above 0.15, red below, with
+      the shade tracking the probability so a near-certain token reads solid and an
+      unlikely one as a faint wash. The same scale on both pages: it used to exist
+      only in the lists view, so one token was a plain word in the browser and
+      coloured in the table.</p>
+    <p>A prompt token stays uncoloured. Nothing predicted it, so it has no
+      probability to show.</p>
+    <p>The colour rides on a custom property per token and the box toggles one class,
+      so turning it on and off costs no request and no re-render — it is display,
+      not a different query.</p>
+
     <h3>prefix &rarr; complete — one axis, three nested stops</h3>
     <p>A three-position <b>stepper</b> — a slider only in how it is drawn; the standard
       name for a control with a few named, ordered choices is a <em>segmented control</em>.

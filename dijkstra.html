@@ -406,9 +406,12 @@ function buildRow(e) {
   const row = document.createElement('div');
   row.className = 'row';
 
+  /* The colour goes into a custom property, not straight into `background`. The
+     bar's `colour` box then switches it with one class on <body>, with nothing to
+     re-render -- an inline background could not be turned off that way. */
   const tokSpan = (t, i, extra) =>
     `<span class="tok${t.source === 'alt' ? ' alt' : ''}${extra}" data-i="${i}"
-           style="background:${tokColor(t.logprob)}"
+           style="--tc:${tokColor(t.logprob)}"
            title="${plain(t.token)}  logP=${fmt(t.logprob)}">${escapeToken(t.token)}</span>`;
 
   const x = e.extension;
