@@ -236,7 +236,7 @@ code {
 .sicon.on { color: var(--card); background: var(--accent); border-color: var(--accent); }
 .spagestatus { color: var(--ink-faint); font-size: .78125rem; }
 .spagestatus:not(:empty) { margin-left: .6rem; }
-.sinfo { margin-left: auto; color: var(--ink-faint); font-size: .78125rem;
+.sinfo { display: none; margin-left: auto; color: var(--ink-faint); font-size: .78125rem;
   font-variant-numeric: tabular-nums; }
 
 .smorepanel {

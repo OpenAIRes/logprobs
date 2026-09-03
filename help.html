@@ -482,6 +482,25 @@
         perfectly predicted and larger means less so.</dd>
       <span class="formula">Σ logprob = Σ log P(tokenᵢ) · mean = Σ / n · perplexity = e^(−mean)</span>
 
+      <dt>which of these is &ldquo;what the model would say&rdquo;?</dt>
+      <dd><b>&Sigma; logprob, not perplexity.</b> Sampling at temperature 1 produces a
+        string with probability exactly e<sup>&Sigma; logprob</sup>, so the string
+        generated most often is the one with the highest &Sigma; &mdash; that is MAP
+        decoding. Perplexity is &Sigma; divided by the length, so it measures
+        predictability <em>per token</em> and rewards long, predictable strings, which
+        are the <em>least</em> likely to come out. Over the 197 completed strings we
+        have: best by &Sigma; is 5 tokens at P&nbsp;=&nbsp;6.6&times;10<sup>&minus;4</sup>,
+        best by perplexity is 767 tokens at P&nbsp;=&nbsp;2.0&times;10<sup>&minus;78</sup>
+        &mdash; 3&times;10<sup>74</sup> times less likely, and 194th of 197 by &Sigma;.
+        The greedy path is the extreme case: perplexity 1.0128, near-perfect per token,
+        and P&nbsp;=&nbsp;2.6&times;10<sup>&minus;23</sup>.</dd>
+      <dd>Two things this rests on. &ldquo;Most often&rdquo; only means anything above
+        temperature 0 &mdash; at 0 the model is deterministic and its one string comes
+        out every time. And MAP is only well posed over <em>completed</em> strings: every
+        factor in the product is &le;&nbsp;1, so &Sigma; only falls as a string grows, and
+        over prefixes too the most probable is trivially the empty one. That is the
+        <code>complete</code> stop on the stepper.</dd>
+
       <dt>cost of a deviation <span class="std">nats</span></dt>
       <dd>logprob(chosen) − logprob(alternative) at that position. Since the chosen token
         is the argmax at temperature 0, this is ≥ 0. A cost of 0.0352 means giving up

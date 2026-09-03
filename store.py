@@ -96,6 +96,14 @@ DETAIL_CAP = 400
 # one the prefixes view can offer: there the ranking IS the search order, so
 # reordering the n-best by something else would just be "the best mean among the
 # n best by sum", which reads as an answer and is not one.
+# Sigma logprob is the one that answers "what would the model actually say": a
+# sample at temperature 1 comes out with probability exactly e^(sum), so the most
+# frequently generated string is the highest-sum one, i.e. MAP. Perplexity is
+# length-normalised and so rewards long predictable strings, which are the least
+# likely to appear -- over the 197 completed strings on record the best by
+# perplexity is 3e74 times less probable than the best by sum, and 194th of 197
+# by sum. Neither is what greedy finds, which is only locally optimal.
+#
 # perplexity = e^(-mean logprob) is a strictly monotone transform of the mean, so
 # ordering by ascending perplexity is the SAME ordering as by descending mean --
 # verified over all 363 greedy siblings, identical rank for rank. It is offered
