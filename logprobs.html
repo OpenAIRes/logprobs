@@ -149,24 +149,10 @@
   </style>
 </head>
 <body>
-<nav class="appnav">
-  <a href="/">Start</a><span class="sep">|</span>
-  <a href="/help.html">Help</a>
-  <span class="right" id="navStore">…</span>
-</nav>
 <!-- The settings bar. This page used to have no way to change anything: you had
      to go back to the start page, pick, and come here again. -->
 <div id="settingsbar"></div>
 <script src="/bar.js"></script>
-<script>
-/* The strip says which page you are on and whether the store answers. Several
-   views behave differently when it does not, and noticing that from an empty
-   table is worse than being told. */
-fetch('/api/stats', { cache: 'no-store' })
-  .then(r => r.json())
-  .then(s => { document.getElementById('navStore').textContent = s.records + ' records'; })
-  .catch(() => { document.getElementById('navStore').textContent = 'store not answering'; });
-</script>
 
   <div id="header">
     <div id="statusArea">
@@ -341,6 +327,9 @@ let currentCompletionId = null;
 
 const tokensEl = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
+/* One place that clears it, called on every path out of loadTokens. Removing it
+   in one branch only is how it came to sit on screen permanently. */
+function doneLoading() { if (loadingEl) loadingEl.remove(); }
 const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
 const clearBtn = document.getElementById('clearBtn');const continueBtn4096 = document.getElementById('continueBtn4096');
@@ -445,7 +434,11 @@ async function loadTokens() {
 
     // A link from the start page or from a list can name what to open. Handled
     // before the default tree is built, so the default work is not wasted.
-    if (await openFromUrl()) return;
+    //
+    // The early return used to skip the loadingEl.remove() at the end of this
+    // function, so "loading tokens..." stayed on screen for good -- and since
+    // the landing arrives with ?id=, that was every visit.
+    if (await openFromUrl()) { doneLoading(); return; }
 
     const res = await fetch('logprobs.json');
     const data = await res.json();
@@ -564,7 +557,7 @@ async function loadTokens() {
     if (repairBtn) repairBtn.hidden = false;
     updateSavedCount();
     await openBestCompletion();
-    loadingEl.remove();
+    doneLoading();
   } catch (err) {
     loadingEl.textContent = 'Error loading logprobs.json: ' + err.message;
     statusEl.textContent = '';

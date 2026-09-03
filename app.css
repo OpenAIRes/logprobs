@@ -201,24 +201,8 @@ code {
 .grp:last-of-type { border-right: 0; }
 .fld { display: flex; align-items: center; gap: .35rem; font-size: .8125rem; color: var(--ink-dim); }
 
-/* --- the nav strip that tells you which of the four programs you are in --- */
-.appnav {
-  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
-  margin: -1rem -1.25rem 1rem; padding: .45rem 1.25rem;
-  background: var(--panel); border-bottom: 1px solid var(--line);
-  font-size: .8125rem;
-}
-.appnav a {
-  color: var(--ink-dim); text-decoration: none; padding: .2rem .5rem;
-  border: 1px solid transparent; border-radius: 6px;
-}
-.appnav a:hover { background: var(--chip); color: var(--ink); }
-.appnav a[aria-current="page"] {
-  color: var(--accent); font-weight: 600;
-  border-color: var(--line); background: var(--bg);
-}
-.appnav .sep { color: var(--ink-faint); }
-.appnav .right { margin-left: auto; color: var(--ink-faint); }
+/* The nav strip is gone: it carried one link most of the time and a record
+   count the meta block already reported. Its links live in the settings panel. */
 
 /* ---------------------------------------------------------------- settings bar
 
@@ -289,3 +273,8 @@ body.tok-colour .token { background: var(--tc, transparent); }
   border-top: 1px solid var(--line); }
 #sPageExtra #toolbar { display: flex; flex-wrap: wrap; gap: .5rem;
   align-items: center; }
+
+/* The one link on a page that has no settings bar of its own. */
+.backlink { display: inline-block; margin-bottom: .8rem;
+  font-size: .8125rem; color: var(--ink-faint); text-decoration: none; }
+.backlink:hover { color: var(--accent); }

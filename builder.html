@@ -103,21 +103,9 @@
 </style>
 </head>
 <body>
-<nav class="appnav">
-  <a href="/">Start</a><span class="sep">|</span>
-  <a href="/builder.html" aria-current="page">Builder</a><span class="sep">|</span>
-  <a href="/help.html">Help</a>
-  <span class="right" id="navStore">…</span>
-</nav>
-<script>
-/* The strip says which page you are on and whether the store answers. Several
-   views behave differently when it does not, and noticing that from an empty
-   table is worse than being told. */
-fetch('/api/stats', { cache: 'no-store' })
-  .then(r => r.json())
-  .then(s => { document.getElementById('navStore').textContent = s.records + ' records'; })
-  .catch(() => { document.getElementById('navStore').textContent = 'store not answering'; });
-</script>
+<!-- The nav strip is gone and this page carries no settings bar, so it needs
+     one way back on its own. -->
+<a class="backlink" href="/">← back</a>
 
 <div class="wrap">
   <header>

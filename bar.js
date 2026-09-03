@@ -41,7 +41,7 @@ const ICON = {
   colour: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-1.2-1-1.7-1-2.7 0-.8.7-1.3 1.6-1.3H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="8" cy="10" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="10" r="1.1" fill="currentColor" stroke="none"/></svg>',
   sun: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>',
-  gear: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.6v2.2M12 19.2v2.2M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.4 19.6 6 18M18 6l1.6-1.6"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10.6 2h2.8l.4 2.3q.9.25 1.7.72l1.95-1.3 2 2-1.3 1.95q.47.8.72 1.7l2.3.4v2.8l-2.3.4q-.25.9-.72 1.7l1.3 1.95-2 2-1.95-1.3q-.8.47-1.7.72L13.4 22h-2.8l-.4-2.3q-.9-.25-1.7-.72l-1.95 1.3-2-2 1.3-1.95q-.47-.8-.72-1.7L2.83 14.2v-2.8l2.3-.4q.25-.9.72-1.7L4.55 7.35l2-2L8.5 6.65q.8-.47 1.7-.72zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8"/></svg>',
 };
 
 (() => {
@@ -274,7 +274,13 @@ const ICON = {
       <div id="sPageExtra"></div>
       <!-- Help is in the nav above; a second link to it here was the same link
            twice on one screen. -->
+      <!-- The nav strip is gone -- it held one link most of the time and a record
+           count that the meta block already reported -- so its links live here. -->
       <div class="sfoot">
+        <a href="/">start over</a>
+        <span class="sep">·</span>
+        <a href="/help.html">help</a>
+        <span class="sep">·</span>
         <a href="/index.html">the full settings page, with the counts</a>
       </div>
     </div>`;

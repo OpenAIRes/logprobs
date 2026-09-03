@@ -45,11 +45,9 @@
 </style>
 </head>
 <body>
-<nav class="appnav">
-  <a href="/">Start</a><span class="sep">|</span>
-  <a href="/help.html" aria-current="page">Help</a>
-  <span class="right" id="navStore">…</span>
-</nav>
+<!-- The nav strip is gone and this page carries no settings bar, so it needs
+     one way back on its own. -->
+<a class="backlink" href="/">← back</a>
 
 <div class="wrap">
   <header>
@@ -269,7 +267,11 @@
         <b>no open leaves</b>.</dd>
     </dl>
     <h3>the bar</h3>
-    <p>Three icon buttons, and that is the whole visible strip:</p>
+    <p>Three icon buttons, and that is the whole visible strip — there is no page
+      navigation above it any more. It held one link most of the time and a record
+      count that the meta block below already reported, so its links moved into the
+      settings panel: <em>start over</em>, <em>help</em>, and the full settings page.</p>
+    <p>The three buttons:</p>
     <table>
       <tr><th></th><th></th></tr>
       <tr><td>palette glyph</td><td><b>colour</b> — shade every token by the
@@ -580,11 +582,5 @@
   </section>
 </div>
 
-<script>
-fetch('/api/stats', { cache: 'no-store' })
-  .then(r => r.json())
-  .then(s => { document.getElementById('navStore').textContent = s.records + ' records'; })
-  .catch(() => { document.getElementById('navStore').textContent = 'store not answering'; });
-</script>
 </body>
 </html>

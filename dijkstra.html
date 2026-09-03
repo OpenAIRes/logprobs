@@ -177,26 +177,12 @@
 </style>
 </head>
 <body>
-<nav class="appnav">
-  <a href="/">Start</a><span class="sep">|</span>
-  <a href="/help.html">Help</a>
-  <span class="right" id="navStore">…</span>
-</nav>
 <!-- One settings bar for every page, rendered by bar.js. This page's own strip
      below keeps only what is a live filter over already-loaded rows. -->
 <div id="settingsbar"></div>
 <!-- Before this page's own script, not after: the page reads its settings from
      window.settingsBar, and a `const` in bar.js is not visible until it runs. -->
 <script src="/bar.js"></script>
-<script>
-/* The strip says which page you are on and whether the store answers. Several
-   views behave differently when it does not, and noticing that from an empty
-   table is worse than being told. */
-fetch('/api/stats', { cache: 'no-store' })
-  .then(r => r.json())
-  .then(s => { document.getElementById('navStore').textContent = s.records + ' records'; })
-  .catch(() => { document.getElementById('navStore').textContent = 'store not answering'; });
-</script>
 
 <div class="wrap">
   <header>
