@@ -282,6 +282,19 @@
         strings are on screen: view, results, ranked by, how complete, prompt,
         starts with, model, base, steps, extend, recovered tokens, endings.</td></tr>
     </table>
+    <p><b>advanced — what shows on the strip.</b> Inside the settings panel. Tick a
+      control and it moves onto the visible strip; untick everything and you are back
+      to the three icons. Nothing is duplicated: the control is <em>moved</em>, one node,
+      because two copies of one setting is how a whole round of bugs started here —
+      the strip saying one thing and the page doing another, with no way to tell which
+      won. The strip lays them out in a fixed order rather than the order you ticked
+      them, so the same choices look the same on two machines, and it wraps if you pin
+      enough of them: that is your call.</p>
+    <p>A pinned control the current view has no use for stays hidden — <code>steps</code>
+      is a walk control, so it does not appear on the greedy view even when pinned.
+      Pinning says <em>where</em> a control goes, not that it applies. Like the palette,
+      the choice lives in localStorage rather than the address: a shared link should
+      reproduce the result, not impose someone else's chrome.</p>
     <p>The split is deliberate. The strip carries what is about <em>reading</em> what
       is already there; the panel carries decisions. The count on the right is
       neither — it says what you are looking at, not what to do about it — and

@@ -96,6 +96,30 @@ const ICON = {
       why: 'The model emitted EOS — the only strings that are not prefixes of anything.' },
   ];
 
+  /* What may be moved onto the visible strip, in the order it appears there. A
+     fixed order matters: laying the strip out in the order the boxes happened to
+     be ticked would make the same choices look different on two machines.
+
+     The strip and the panel share one node per control -- it is moved, not
+     copied. A second copy is how the last round of desync bugs started: two
+     controls for one setting and no way to tell which one won. */
+  const PINNABLE = [
+    ['sViewWrap', 'view'],
+    ['sResultsWrap', 'results'],
+    ['sSortWrap', 'ranked by'],
+    ['sScopeWrap', 'how complete'],
+    ['sPromptWrap', 'starting prompt'],
+    ['sPrefixWrap', 'starts with'],
+    ['sModelWrap', 'model'],
+    ['sBaseWrap', 'base completion'],
+    ['sStepsWrap', 'steps'],
+    ['sFwdWrap', 'positions'],
+    ['sExtendWrap', 'rows — extend'],
+    ['sRecWrap', 'tokens — recovered'],
+    ['sEndsWrap', 'endings'],
+  ];
+  const PINNED_KEY = 'bar_pinned';
+
   const RANKED = v => v === 'completions' || v === 'prefixes';
   const LISTY = v => RANKED(v) || v === 'greedy';
   const SCOPED = v => LISTY(v);
@@ -220,7 +244,7 @@ const ICON = {
       <span class="spagestatus" id="sPageStatus"></span>
     </div>
     <div class="smorepanel" id="sPanel" hidden>
-      <label class="sfield"><span>view</span>
+      <label class="sfield" id="sViewWrap"><span>view</span>
         <select id="sView">${VIEWS.map(([v, l]) => opt(v, l, state.view)).join('')}</select>
       </label>
       <label class="sfield" id="sResultsWrap"><span>results</span>
@@ -239,10 +263,10 @@ const ICON = {
           <b id="sScopeName"></b>
         </span>
       </div>
-      <label class="sfield"><span>starting prompt</span>
+      <label class="sfield" id="sPromptWrap"><span>starting prompt</span>
         <input type="text" id="sPrompt" placeholder="(empty = unconditional)" spellcheck="false" value="${state.prompt.replace(/"/g, '&quot;')}">
       </label>
-      <label class="sfield"><span>starts with</span>
+      <label class="sfield" id="sPrefixWrap"><span>starts with</span>
         <input type="text" id="sPrefix" placeholder="e.g. I have" spellcheck="false" value="${state.prefix.replace(/"/g, '&quot;')}">
       </label>
       <label class="sfield" id="sModelWrap"><span>model</span>
@@ -269,6 +293,13 @@ const ICON = {
       <div class="sfield" id="sEndsWrap"><span>endings</span>
         <span class="sends" id="sEnds"></span>
       </div>
+      <details class="sadv" id="sAdv"><summary>advanced — what shows on the strip</summary>
+        <p class="sadvhint">Ticked controls sit on the visible strip instead of in
+          here. Nothing is duplicated: the control moves. Untick everything for the
+          three icons and nothing else.</p>
+        <div class="sadvlist" id="sAdvList"></div>
+        <button type="button" id="sPinReset">back to minimal</button>
+      </details>
       <!-- Where a page hangs its own controls. The token browser's toolbar --
            new tree, the caches, its model select -- was a third row on screen. -->
       <div id="sPageExtra"></div>
@@ -286,6 +317,11 @@ const ICON = {
     </div>`;
 
   const el = id => document.getElementById(id);
+
+  /* Declared here, next to el(), because layout() reads it and `const` is not
+     hoisted -- leaving it further down was a ReferenceError waiting for whichever
+     listener fired first. */
+  const panel = el('sPanel'), more = el('sMore');
 
   // ---------------------------------------------------------------- scope stepper
 
@@ -350,8 +386,8 @@ const ICON = {
     el('sExtendWrap').hidden = !LISTY(v) || String(state.top) === '1';
     el('sRecWrap').hidden = v !== 'prefixes';
     el('sEndsWrap').hidden = !SCOPED(v);
-    el('sPrompt').parentElement.hidden = v !== 'greedy';
-    el('sPrefix').parentElement.hidden = !RANKED(v);
+    el('sPromptWrap').hidden = v !== 'greedy';
+    el('sPrefixWrap').hidden = !RANKED(v);
     const view = VIEWS.find(([x]) => x === v);
     el('sView').title = view ? view[2] : '';
   }
@@ -418,9 +454,34 @@ const ICON = {
     } catch { sel.innerHTML = '<option value="">store not answering</option>'; }
   }
 
+  /* Moves each control to the side of the fence it belongs on. Called after
+     paintVisibility, because a pinned control the current view has no use for
+     must still be hidden -- pinning says where it goes, not that it applies. */
+  function layout() {
+    const on = new Set(pinned);
+    const bar = host.querySelector('.sbar');
+    const info = el('sInfo');
+    for (const [id] of PINNABLE) {
+      const node = el(id);
+      if (!node) continue;
+      const wantBar = on.has(id);
+      const inBar = node.parentElement === bar;
+      if (wantBar && !inBar) bar.insertBefore(node, info);
+      else if (!wantBar && inBar) panel.insertBefore(node, el('sAdv'));
+    }
+    // Re-assert the order every time, so unpinning and pinning again does not
+    // shuffle the strip.
+    for (const [id] of PINNABLE) {
+      const node = el(id);
+      if (node && node.parentElement === bar) bar.insertBefore(node, info);
+    }
+    for (const b of document.querySelectorAll('.sPinBox')) b.checked = on.has(b.value);
+  }
+
   function repaint() {
     paintSorts();
     paintVisibility();
+    layout();
     paintBoxes();
     paintScope();
     paintInfo();
@@ -514,7 +575,32 @@ const ICON = {
   window.addEventListener('themechange', paintTheme);
   paintTheme();
 
-  const panel = el('sPanel'), more = el('sMore');
+  /* Which controls the reader wants on the strip. Kept in localStorage, not the
+     URL: it is a layout preference belonging to the person, like the palette, and
+     a shared link should reproduce the RESULT, not force someone else's chrome. */
+  let pinned = [];
+  try {
+    const raw = localStorage.getItem(PINNED_KEY);
+    if (raw) pinned = raw.split(',').filter(id => PINNABLE.some(([x]) => x === id));
+  } catch {}
+
+  el('sAdvList').innerHTML = PINNABLE.map(([id, label]) =>
+    `<label><input type="checkbox" class="sPinBox" value="${id}"> ${label}</label>`).join('');
+  for (const b of document.querySelectorAll('.sPinBox')) {
+    b.addEventListener('change', () => {
+      pinned = PINNABLE.map(([x]) => x)
+        .filter(x => [...document.querySelectorAll('.sPinBox')]
+          .some(y => y.value === x && y.checked));
+      try { localStorage.setItem(PINNED_KEY, pinned.join(',')); } catch {}
+      layout();
+    });
+  }
+  el('sPinReset').addEventListener('click', () => {
+    pinned = [];
+    try { localStorage.removeItem(PINNED_KEY); } catch {}
+    layout();
+  });
+
   const MORE_KEY = 'bar_more';
   let open = false;
   try { open = localStorage.getItem(MORE_KEY) === '1'; } catch {}
@@ -538,8 +624,7 @@ const ICON = {
 
   repaint();
 
-  // What the page can ask the bar, rather than reading its internals.
-    /* A page moves its own controls into the panel instead of keeping a strip of
+  /* A page moves its own controls into the panel instead of keeping a strip of
      its own, and its status line onto the bar. Both were a whole extra row. */
   function adopt(node, where) {
     const slot = el(where === 'status' ? 'sPageStatus' : 'sPageExtra');

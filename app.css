@@ -278,3 +278,20 @@ body.tok-colour .token { background: var(--tc, transparent); }
 .backlink { display: inline-block; margin-bottom: .8rem;
   font-size: .8125rem; color: var(--ink-faint); text-decoration: none; }
 .backlink:hover { color: var(--accent); }
+
+/* The advanced list: which controls sit on the visible strip. */
+.sadv { margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--line); }
+.sadv summary { font-size: .78125rem; color: var(--ink-faint); cursor: pointer; }
+.sadvhint { margin: .4rem 0 .5rem; font-size: .75rem; color: var(--ink-faint);
+  line-height: 1.5; max-width: 34rem; }
+.sadvlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: .25rem .8rem; margin-bottom: .55rem; }
+.sadvlist label { display: flex; align-items: center; gap: .35rem;
+  font-size: .78125rem; color: var(--ink-dim); cursor: pointer; }
+#sPinReset { font-size: .75rem; padding: .15rem .5rem; }
+
+/* A control moved onto the strip: the panel's two-column grid is for rows, so on
+   the strip it goes back to sitting inline with its label. */
+.sbar .sfield { display: inline-flex; align-items: center; gap: .35rem; }
+.sbar .sfield select, .sbar .sfield input[type=text] { max-width: 12rem; }
+.sbar .sfield input[type=text] { width: 8rem; }
