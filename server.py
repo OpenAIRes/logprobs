@@ -129,7 +129,10 @@ class Handler(SimpleHTTPRequestHandler):
         # bar fall back to whatever was last used, so the landing showed the
         # greedy string while the bar said `completions` -- a bar that
         # misdescribes what is on screen is worse than no bar.
-        return ('/logprobs.html?view=greedy&top=1'
+        # defaults=1 tells the bar to ignore what was last used. Without it a
+        # remembered filter leaked into the landing and the bar described the
+        # string as filtered when it was not.
+        return ('/logprobs.html?view=greedy&top=1&defaults=1'
                 f'&id={urllib.parse.quote(first)}')
 
     def do_GET(self):

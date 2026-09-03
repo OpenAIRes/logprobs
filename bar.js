@@ -77,10 +77,15 @@
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch {}
 
+  /* `defaults=1` means "this URL is the whole story": start from the defaults and
+     let only the params present override them. The landing sends it, because
+     naming just view and top let a remembered `ends=stop` leak in -- the bar then
+     reported "1 of 4 match" over a string that was not filtered at all. */
+  const fromDefaults = params.get('defaults') === '1';
   const state = {};
   for (const [k, dflt] of Object.entries(FIELDS)) {
     state[k] = params.has(k) ? params.get(k)
-      : (saved[k] !== undefined ? saved[k] : dflt);
+      : (!fromDefaults && saved[k] !== undefined ? saved[k] : dflt);
   }
   // `id` is a destination, not a setting: it says which record the token browser
   // is showing, and it must never be carried over to a different query.
@@ -90,9 +95,22 @@
     try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {}
   }
 
+  /* What each view actually reads. A link that carries settings the view ignores
+     -- a walk with `ends=stop` on it -- says something about the screen that is
+     not true, and the next person to open it has to work out which half counts. */
+  const USES = {
+    greedy: ['top', 'sort', 'prompt', 'model', 'ends', 'nodes', 'extend'],
+    completions: ['top', 'sort', 'prefix', 'model', 'ends', 'nodes', 'extend'],
+    prefixes: ['top', 'prefix', 'model', 'ends', 'nodes', 'extend', 'chosen_only'],
+    sweep: ['base_id', 'model'],
+    walk: ['base_id', 'steps', 'forward_only', 'model'],
+  };
+
   function query() {
     const p = new URLSearchParams();
+    const uses = USES[state.view] || Object.keys(FIELDS);
     for (const [k, dflt] of Object.entries(FIELDS)) {
+      if (k !== 'view' && !uses.includes(k)) continue;
       const v = String(state[k] ?? '');
       if (v && v !== String(dflt)) p.set(k, v);
     }
@@ -316,14 +334,28 @@
     }
   }
 
-  async function ensureBases() {
+  /* The field is `base_id`, not `id` -- reading the wrong one left base_id empty,
+     /api/sweep answered 400 because it is required, and the grid came up blank. */
+  /* Guarded by the in-flight promise, not by the select being filled: repaint()
+     and the ready promise both call this and both start before the first one has
+     answered, so the option check let two identical fetches through. */
+  let basesPromise = null;
+  function ensureBases() {
+    return (basesPromise = basesPromise || loadBases());
+  }
+  async function loadBases() {
     const sel = el('sBase');
     if (sel.options.length) return;
     try {
       const { bases } = await (await fetch('/api/bases', { cache: 'no-store' })).json();
-      sel.innerHTML = bases.map(b =>
-        opt(b.id, `${b.text.slice(0, 40)}${b.text.length > 40 ? '…' : ''}`, state.base_id)).join('');
-      if (!state.base_id && bases[0]) state.base_id = bases[0].id;
+      sel.innerHTML = bases.map(b => {
+        const t = (b.text || b.base_id).slice(0, 40);
+        return opt(b.base_id, `${b.calls}× — ${t.replace(/&/g, '&amp;').replace(/</g, '&lt;')}`,
+                   state.base_id);
+      }).join('');
+      // The grid and the walk cannot query without one, so pick the first.
+      if (!state.base_id && bases[0]) state.base_id = bases[0].base_id;
+      sel.value = state.base_id;
     } catch { sel.innerHTML = '<option value="">store not answering</option>'; }
   }
 
@@ -399,8 +431,13 @@
   });
   paintMore();
 
+  /* The grid and the walk cannot be queried without a base_id, and resolving it
+     means a fetch. The page awaits this before its first load, or it fires the
+     query with no base and gets a 400. */
+  const ready = (async () => { if (!LISTY(state.view)) await ensureBases(); })();
+
   repaint();
 
   // What the page can ask the bar, rather than reading its internals.
-  window.settingsBar = { state, query, destination, repaint, landedOnId };
+  window.settingsBar = { state, query, destination, repaint, ready, landedOnId };
 })();
