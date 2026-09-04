@@ -854,6 +854,40 @@ const ICON = {
 
   repaint();
 
+  /* Every filter currently narrowing the result, in words. An empty list has to
+     be able to say why it is empty, and since the details block is off by default
+     there is otherwise nothing on screen that names the filters at all -- which is
+     how "davinci and more than one record shows nothing" became a mystery rather
+     than a message. Two remembered settings do that: `complete`, because all 7
+     davinci records end on length and none on EOS, and `sweeps only`, because all
+     7 are in the history group. */
+  function activeFilters() {
+    const out = [];
+    if (state.model) out.push({ key: 'model', label: 'model', value: state.model });
+    const at = stopOf();
+    if (state.ends || state.nodes) {
+      out.push({ key: 'scope', label: 'how complete',
+                 value: at !== null ? STOPS[at].name
+                        : [state.ends, state.nodes].filter(Boolean).join(' + ') });
+    }
+    if (state.sources) out.push({ key: 'sources', label: 'databases', value: state.sources });
+    if (state.chosen_only) out.push({ key: 'chosen_only', label: 'tokens',
+                                      value: 'generated only, no recovered' });
+    if (state.prefix) out.push({ key: 'prefix', label: 'starts with', value: state.prefix });
+    return out;
+  }
+
+  /* Puts every narrowing setting back to its default and reloads. Named
+     deliberately: it does not touch the view, the count or the sort, because
+     those are not why a list came back empty. */
+  function clearFilters() {
+    for (const k of ['model', 'ends', 'nodes', 'sources', 'chosen_only', 'prefix']) {
+      state[k] = '';
+    }
+    persist();
+    go();
+  }
+
   /* A page moves its own controls into the panel instead of keeping a strip of
      its own, and its status line onto the bar. Both were a whole extra row. */
   function adopt(node, where) {
@@ -862,5 +896,6 @@ const ICON = {
   }
   window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
                          adopt, provideRecord, landedOnId,
+                         activeFilters, clearFilters,
                          block: key => blocks.has(key) };
 })();
