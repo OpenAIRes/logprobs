@@ -121,6 +121,8 @@ const ICON = {
   const PINNED_KEY = 'bar_pinned';
 
   const RANKED = v => v === 'completions' || v === 'prefixes';
+  // The one case where no ranking is involved at all.
+  const singleGreedy = () => state.view === 'greedy' && String(state.top) === '1';
   const LISTY = v => RANKED(v) || v === 'greedy';
   const SCOPED = v => LISTY(v);
 
@@ -164,6 +166,9 @@ const ICON = {
     const uses = USES[state.view] || Object.keys(FIELDS);
     for (const [k, dflt] of Object.entries(FIELDS)) {
       if (k !== 'view' && !uses.includes(k)) continue;
+      // Same rule as the per-view list: a link should not carry a criterion the
+      // destination cannot apply.
+      if (k === 'sort' && singleGreedy()) continue;
       const v = String(state[k] ?? '');
       if (v && v !== String(dflt)) p.set(k, v);
     }
@@ -368,17 +373,29 @@ const ICON = {
 
   // ---------------------------------------------------------------- per-view
 
+  /* Which criterion is actually in force: the chosen one, or the view's default
+     when nothing was chosen. Two places needed this answer and computing it twice
+     is how they would come to disagree. */
+  function effectiveSort() {
+    const want = state.sort || (state.view === 'greedy' ? 'cost' : 'sum');
+    return (want === 'cost' && state.view !== 'greedy') ? 'sum' : want;
+  }
+
   function paintSorts() {
     const sel = el('sSort');
     const allowed = SORTS.filter(([, , ok]) => ok(state.view));
-    const want = state.sort || (state.view === 'greedy' ? 'cost' : 'sum');
-    sel.innerHTML = allowed.map(([v, l]) => opt(v, l, want)).join('');
+    sel.innerHTML = allowed.map(([v, l]) => opt(v, l, effectiveSort())).join('');
   }
 
   function paintVisibility() {
     const v = state.view;
     el('sResultsWrap').hidden = !LISTY(v);
-    el('sSortWrap').hidden = !(v === 'completions' || v === 'greedy');
+    /* `ranked by` is shown only where it can do something. On the greedy view
+       with one result there is nothing to rank: the path is argmax at every step,
+       so all four criteria return the same record -- and a control that visibly
+       does nothing reads as a broken one. With more than one result it ranks the
+       siblings, and on a ranking with one result it decides WHICH one. */
+    el('sSortWrap').hidden = !((v === 'completions' || v === 'greedy') && !singleGreedy());
     el('sScopeWrap').hidden = !SCOPED(v);
     el('sBaseWrap').hidden = LISTY(v);
     el('sStepsWrap').hidden = v !== 'walk';
@@ -421,9 +438,16 @@ const ICON = {
       const n = db.available;
       if (n == null) { el('sInfo').textContent = ''; return; }
       const want = Number(state.top) || 1;
+      /* With one result out of a ranking, the criterion is what picked it, and
+         nothing else on screen said so. That mattered: `perplexity` and `length`
+         name the same record here -- the 4096-token one is both the longest and
+         the best per token -- so switching between them looks like a dead
+         control unless the line says which one is in force. */
+      const by = (want === 1 && !singleGreedy() && LISTY(v))
+        ? ` by ${(SORTS.find(([k]) => k === effectiveSort()) || [, ''])[1]}` : '';
       el('sInfo').textContent = want >= n
         ? `${n.toLocaleString('en-US')} match`
-        : `${want.toLocaleString('en-US')} of ${n.toLocaleString('en-US')} match`;
+        : `${want.toLocaleString('en-US')} of ${n.toLocaleString('en-US')} match${by}`;
     } catch {
       if (mine === infoSeq) el('sInfo').textContent = 'store not answering';
     }
