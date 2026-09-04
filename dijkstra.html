@@ -35,6 +35,19 @@
     background: var(--card); border: 1px solid var(--line);
     border-radius: 9px; box-shadow: var(--shadow); overflow: hidden;
   }
+  /* Full text per row. The string column stops being 1fr -- which is what forced
+     the ellipsis -- and takes the width it needs, so the table scrolls sideways
+     rather than cutting every row off at the same place. */
+  body.wide-rows .table { overflow-x: auto; }
+  body.wide-rows .thead, body.wide-rows .row {
+    grid-template-columns: 3rem max-content 3.5rem 6rem 6rem 5.5rem;
+    width: max-content; min-width: 100%;
+  }
+  body.wide-rows .has-sweep .thead, body.wide-rows .has-sweep .row {
+    grid-template-columns: 3rem max-content 3.5rem 6rem 6rem 5.5rem 10.5rem;
+  }
+  body.wide-rows .text { overflow: visible; text-overflow: clip; }
+  .capnote { color: var(--ink-faint); font-size: .71875rem; padding-left: .3rem; }
   .thead, .row {
     display: grid;
     grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem;
@@ -407,11 +420,19 @@ function buildRow(e) {
            style="--tc:${tokColor(t.logprob)}"
            title="${plain(t.token)}  logP=${fmt(t.logprob)}">${escapeToken(t.token)}</span>`;
 
+  /* One 4096-token row would make the table scroll for a screen and a half and
+     leave every other row unreadable, so when the list contains one, every row is
+     cut to the first 20 tokens. All of them, not just the long one: rows cut to
+     different lengths cannot be compared by eye, which is what the column is for. */
+  const cap = window.ROW_TOKEN_CAP || 0;
   const x = e.extension;
   /* The continuation is appended to the row but stays visibly separate: it is not
      what the row was ranked by, and over the default top 200 ranking by the
      extended sum would reorder 11,325 of 19,900 pairs. */
-  const toks = e.tokens.map((t, i) => tokSpan(t, i, '')).join('')
+  const shownToks = cap ? e.tokens.slice(0, cap) : e.tokens;
+  const toks = shownToks.map((t, i) => tokSpan(t, i, '')).join('')
+    + (cap && e.tokens.length > cap
+        ? `<span class="capnote">… ${e.tokens.length - cap} more</span>` : '')
     + (x && x.added_n
         ? '<span class="extmark" title="everything after this point is the continuation, '
           + 'not part of what was ranked">›</span>'
@@ -481,6 +502,12 @@ function renderRows() {
     tableEl.hidden = false;
     return;
   }
+
+  /* The cap is decided per list, not per row: if anything here is at the
+     max_tokens ceiling, every row is cut. LIST_CAP_AT is that ceiling. */
+  const LIST_CAP_AT = 4096, CAP_TO = 20;
+  window.ROW_TOKEN_CAP = (BAR.block && BAR.block('wide-rows')
+    && slice.some(e => e.n >= LIST_CAP_AT)) ? CAP_TO : 0;
 
   const frag = document.createDocumentFragment();
   slice.forEach(e => frag.appendChild(buildRow(e)));
@@ -777,6 +804,7 @@ function queryUrl() {
   if (S.ends) p.set('ends', S.ends);
   if (S.nodes) p.set('nodes', S.nodes);
   if (S.extend) p.set('extend', '1');
+  if (S.sources) p.set('sources', S.sources);
   if (VIEW === 'greedy') {
     p.set('sort', effectiveSort());
     if (S.prompt) p.set('prompt', S.prompt);
@@ -827,6 +855,10 @@ async function load() {
     shownEl.textContent = '';
   }
 }
+
+/* The full-text setting changes what is rendered, not only how it looks: the
+   token cap depends on it. So this redraws rather than relying on the class. */
+window.addEventListener('blockschange', () => { if (DB) renderRows(); });
 
 (async () => {
   applyViewControls();

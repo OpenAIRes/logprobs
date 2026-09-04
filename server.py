@@ -185,6 +185,9 @@ class Handler(SimpleHTTPRequestHandler):
                     # past the string. Crosses with ends: 494 length-ended paths
                     # were later continued, so this is not "untick open".
                     nodes=one('nodes') or None,
+                    # sources=history,sweep -- which databases get ranked. Absent
+                    # means all of them, so every existing link is unchanged.
+                    sources=one('sources') or None,
                 ))
 
             if route == '/api/record':
@@ -210,6 +213,7 @@ class Handler(SimpleHTTPRequestHandler):
                     ends=one('ends') or None,
                     extend=_bool(one('extend')),
                     nodes=one('nodes') or None,
+                    sources=one('sources') or None,
                 ))
 
             if route == '/api/walk':

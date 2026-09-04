@@ -310,3 +310,11 @@ body.tok-colour .token { background: var(--tc, transparent); }
 .sjson pre { margin: 0; max-height: 26rem; overflow: auto;
   font: 12px/1.45 ui-monospace, Menlo, monospace; color: var(--ink-dim);
   white-space: pre; }
+
+/* A control that is only a button: no label column to reserve. */
+.smorepanel .sfield.sbare { display: block; }
+
+/* Page blocks, switched by classes the bar puts on <body>. Hidden by default
+   means the rule is the absence of the class, so nothing has to run for the
+   minimal case to be the minimal case. */
+body:not(.show-meta) .meta { display: none !important; }

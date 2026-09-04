@@ -290,6 +290,30 @@
         strings are on screen: view, results, ranked by, how complete, prompt,
         starts with, model, base, steps, extend, recovered tokens, endings.</td></tr>
     </table>
+    <h3>databases</h3>
+    <p>The six record files are two kinds of thing, so they are offered as two groups:
+      <b>history</b> — calls made by hand, 411 records — and <b>sweeps</b> — exhaustive
+      one-token perturbations of a few bases, 8081 records. The sweeps are 95% of the
+      corpus and dominate any ranking they are in, which is the reason to be able to
+      set them aside.</p>
+    <div class="note">
+      <p>The filter applies to what gets <em>ranked or counted</em>. It deliberately
+        does not apply to two things. The <b>cache verdict</b> — &ldquo;do we already
+        have this call, or must it be paid for?&rdquo; — always sees every file:
+        narrowing it would report a miss for a record we hold and buy it again. And the
+        <b>greedy path</b> is reconstructed by chaining records, so removing some would
+        not filter the path, it would break it. On the greedy view the path therefore
+        comes from everything while its departures come from the databases you picked.</p>
+      <p>One surprise worth knowing: sweeps alone rank <b>380</b> departures where all
+        files together rank <b>362</b>. Fewer records, more results. The cause is in
+        <code>build_trie</code>, which fills a node's alternatives table from the first
+        record to reach that position (<code>if alts and node.top_logprobs is None</code>);
+        a different set of files means a different record wins that slot, a different
+        top-20 table, and so a different set of children that can be scored at all.
+        It is the same first-writer rule that produced the cross-model scoring bug
+        earlier in this project.</p>
+    </div>
+
     <p><b>advanced — what shows on the strip.</b> Inside the settings panel. Tick a
       control and it moves onto the visible strip; untick everything and you are back
       to the three icons. Nothing is duplicated: the control is <em>moved</em>, one node,

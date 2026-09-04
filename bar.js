@@ -67,6 +67,8 @@ const ICON = {
     // Off by default: the colours help when you are reading probabilities and get
     // in the way when you are reading the text.
     colour: '',
+    // Which databases get ranked. Empty means all of them.
+    sources: '',
   };
 
   const VIEWS = [
@@ -140,8 +142,19 @@ const ICON = {
     ['sRecWrap', 'tokens — recovered'],
     ['sEndsWrap', 'endings'],
     ['sJsonWrap', 'json — the raw record'],
+    ['sSourcesWrap', 'databases'],
   ];
   const PINNED_KEY = 'bar_pinned';
+  const HIDE_WHEN_DEAD = new Set(['sJsonWrap']);
+
+  /* Page-level display, as opposed to controls. Each one is a class on <body> and
+     the pages' CSS keys off it, so turning one on and off costs no request and no
+     re-render -- the same arrangement as the colour box. */
+  const BLOCKS = [
+    ['show-meta', 'details block — provenance, counts, filters in force', false],
+    ['wide-rows', 'full text per row — no wrapping, the table scrolls sideways', true],
+  ];
+  const BLOCKS_KEY = 'bar_blocks';
 
   const RANKED = v => v === 'completions' || v === 'prefixes';
   // The one case where no ranking is involved at all.
@@ -177,9 +190,9 @@ const ICON = {
      -- a walk with `ends=stop` on it -- says something about the screen that is
      not true, and the next person to open it has to work out which half counts. */
   const USES = {
-    greedy: ['top', 'sort', 'prompt', 'model', 'ends', 'nodes', 'extend', 'colour'],
-    completions: ['top', 'sort', 'prefix', 'model', 'ends', 'nodes', 'extend', 'colour'],
-    prefixes: ['top', 'prefix', 'model', 'ends', 'nodes', 'extend', 'chosen_only', 'colour'],
+    greedy: ['top', 'sort', 'prompt', 'model', 'ends', 'nodes', 'extend', 'colour', 'sources'],
+    completions: ['top', 'sort', 'prefix', 'model', 'ends', 'nodes', 'extend', 'colour', 'sources'],
+    prefixes: ['top', 'prefix', 'model', 'ends', 'nodes', 'extend', 'chosen_only', 'colour', 'sources'],
     sweep: ['base_id', 'model', 'colour'],
     walk: ['base_id', 'steps', 'forward_only', 'model', 'colour'],
   };
@@ -225,6 +238,7 @@ const ICON = {
         if (state.ends) q.set('ends', state.ends);
         if (state.nodes) q.set('nodes', state.nodes);
         if (state.chosen_only) q.set('chosen_only', '1');
+        if (state.sources) q.set('sources', state.sources);
         const db = await (await fetch('/api/query?' + q, { cache: 'no-store' })).json();
         id = ((db.entries || [])[0] || {}).id || null;
       }
@@ -322,14 +336,20 @@ const ICON = {
       <div class="sfield" id="sEndsWrap"><span>endings</span>
         <span class="sends" id="sEnds"></span>
       </div>
-      <div class="sfield" id="sJsonWrap"><span>record</span>
-        <span><button type="button" id="sJson">json</button></span>
+      <div class="sfield" id="sSourcesWrap"><span>databases</span>
+        <span class="sends" id="sSources"></span>
       </div>
-      <details class="sadv" id="sAdv"><summary>advanced — what shows on the strip</summary>
-        <p class="sadvhint">Ticked controls sit on the visible strip instead of in
-          here. Nothing is duplicated: the control moves. Untick everything for the
-          three icons and nothing else.</p>
+      <!-- No label: the word on the button is the label. -->
+      <div class="sfield sbare" id="sJsonWrap">
+        <button type="button" id="sJson">json</button>
+      </div>
+      <details class="sadv" id="sAdv"><summary>advanced — what shows</summary>
+        <p class="sadvhint">On the strip: ticked controls sit on the visible strip
+          instead of in here. Nothing is duplicated — the control moves. Untick
+          everything for the three icons and nothing else.</p>
         <div class="sadvlist" id="sAdvList"></div>
+        <p class="sadvhint">On the page:</p>
+        <div class="sadvlist" id="sBlockList"></div>
         <button type="button" id="sPinReset">back to minimal</button>
       </details>
       <!-- Where a page hangs its own controls. The token browser's toolbar --
@@ -410,6 +430,31 @@ const ICON = {
     `<label><input type="checkbox" class="sEndBox" value="${v}"> ${v}</label>`).join('')
     + NODES_ALL.map(v =>
     `<label><input type="checkbox" class="sNodeBox" value="${v}"> ${v === 'leaf' ? 'dead end' : v}</label>`).join('');
+
+  /* Which record files get ranked. Two groups rather than six checkboxes,
+     because the six are two kinds of thing: calls made by hand, and the sweeps --
+     8081 of the 8492 records, so they dominate any ranking they are in. */
+  const SOURCE_GROUPS = [
+    ['history', 'history', 'calls made by hand: completion_history, builder_history, meta_resample_root — 411 records'],
+    ['sweep', 'sweeps', 'exhaustive one-token perturbations of a few bases: sweep_history, sweep2, sweep3 — 8081 records'],
+  ];
+  el('sSources').innerHTML = SOURCE_GROUPS.map(([v, label, why]) =>
+    `<label title="${why}"><input type="checkbox" class="sSrcBox" value="${v}"> ${label}</label>`).join('');
+  const srcBoxes = () => [...document.querySelectorAll('.sSrcBox')];
+  function paintSources() {
+    const on = listOf(state.sources);
+    for (const b of srcBoxes()) b.checked = !on.length || on.includes(b.value);
+  }
+  for (const b of srcBoxes()) {
+    b.addEventListener('change', () => {
+      // Every group off asks for nothing; put the one just cleared back.
+      if (!srcBoxes().some(x => x.checked)) { b.checked = true; return; }
+      const on = srcBoxes().filter(x => x.checked).map(x => x.value);
+      state.sources = on.length === SOURCE_GROUPS.length ? '' : on.join(',');
+      repaint();
+      go();
+    });
+  }
 
   const endBoxes = () => [...document.querySelectorAll('.sEndBox')];
   const nodeBoxes = () => [...document.querySelectorAll('.sNodeBox')];
@@ -495,6 +540,7 @@ const ICON = {
          through provideRecord(). */
       sJsonWrap: recordId() ? null
         : 'no single record on screen — open one result, or a row of a list',
+      sSourcesWrap: LISTY(v) ? null : notList,
     };
   }
 
@@ -525,6 +571,7 @@ const ICON = {
     if (state.prefix && RANKED(v)) p.set('prefix', state.prefix);
     if (state.chosen_only && v === 'prefixes') p.set('chosen_only', '1');
     if (state.prompt && v === 'greedy') p.set('prompt', state.prompt);
+    if (state.sources) p.set('sources', state.sources);
     try {
       const route = v === 'greedy' ? '/api/greedy_alternatives?' : '/api/query?';
       const db = await (await fetch(route + p, { cache: 'no-store' })).json();
@@ -592,9 +639,15 @@ const ICON = {
          would be clutter, but on the strip it stays put and goes grey. You asked
          for it to be there, so it is there -- and it says why it is unavailable
          instead of disappearing. */
+      /* Greying a pinned control keeps it where you put it and lets it explain
+         itself. That only works for a control with a label to explain: `json` is
+         a bare button, and a greyed-out mystery blob is worse than an absence,
+         so this one goes away instead. */
       const dead = why[id];
-      node.hidden = node.dataset.forcedHidden === '1' || (!!dead && !wantBar);
-      node.classList.toggle('dead', !!dead && wantBar);
+      const hideDead = HIDE_WHEN_DEAD.has(id);
+      node.hidden = node.dataset.forcedHidden === '1'
+        || (!!dead && (!wantBar || hideDead));
+      node.classList.toggle('dead', !!dead && wantBar && !hideDead);
       for (const f of node.querySelectorAll('select, input, button')) f.disabled = !!dead;
       node.title = dead ? `Not available: ${dead}.` : '';
     }
@@ -610,6 +663,7 @@ const ICON = {
   function repaint() {
     paintSorts();
     paintVisibility();
+    paintSources();
     layout();
     paintBoxes();
     paintScope();
@@ -736,6 +790,33 @@ const ICON = {
     layout();
   });
 
+  /* Which page blocks are on. Stored, not in the URL: like the palette this is
+     about the person reading rather than about which strings are on screen. */
+  let blocks = null;
+  try {
+    const raw = localStorage.getItem(BLOCKS_KEY);
+    if (raw) blocks = new Set(raw.split(',').filter(Boolean));
+  } catch {}
+  if (!blocks) blocks = new Set(BLOCKS.filter(([, , on]) => on).map(([k]) => k));
+
+  function paintBlocks() {
+    for (const [key] of BLOCKS) document.body.classList.toggle(key, blocks.has(key));
+    for (const b of document.querySelectorAll('.sBlockBox')) b.checked = blocks.has(b.value);
+    // A page may render differently, not just show or hide: the lists page caps
+    // its rows when the full text is on.
+    window.dispatchEvent(new CustomEvent('blockschange'));
+  }
+  el('sBlockList').innerHTML = BLOCKS.map(([key, label]) =>
+    `<label><input type="checkbox" class="sBlockBox" value="${key}"> ${label}</label>`).join('');
+  for (const b of document.querySelectorAll('.sBlockBox')) {
+    b.addEventListener('change', () => {
+      if (b.checked) blocks.add(b.value); else blocks.delete(b.value);
+      try { localStorage.setItem(BLOCKS_KEY, [...blocks].join(',')); } catch {}
+      paintBlocks();
+    });
+  }
+  paintBlocks();
+
   const MORE_KEY = 'bar_more';
   let open = false;
   try { open = localStorage.getItem(MORE_KEY) === '1'; } catch {}
@@ -776,5 +857,6 @@ const ICON = {
   }
 
   window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
-                         adopt, hideField, provideRecord, landedOnId };
+                         adopt, hideField, provideRecord, landedOnId,
+                         block: key => blocks.has(key) };
 })();

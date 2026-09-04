@@ -49,6 +49,24 @@ SOURCES = [
 
 VIEWS = ('prefixes', 'completions')
 
+# Which file a record came from, grouped. The six sources are two kinds of thing:
+# the ordinary history of calls made by hand, and the sweeps -- exhaustive
+# one-token perturbations of a few bases, which are 8080 of the 8492 records and
+# so dominate any ranking they are in.
+#
+# The filter applies to what gets RANKED or COUNTED. It deliberately does not
+# apply to lookup() or greedy(): the first answers "do we already have this, or
+# must it be paid for", and narrowing that would make us buy a record we hold;
+# the second reconstructs a path by chaining records, and dropping some of them
+# would not filter the path, it would break it.
+SOURCE_GROUPS = {
+    'history': ['completion_history.json', 'builder_history.json',
+                'meta_resample_root.json'],
+    'sweep': ['sweep_history.json', 'sweep2_history.json.gz',
+              'sweep3_ihave.json.gz'],
+}
+GROUP_OF = {f: g for g, files in SOURCE_GROUPS.items() for f in files}
+
 # What decided where a string ends -- the axis that says whether two rows' scores
 # are comparable at all. Σ logprob over a prefix is a partial sum that can only
 # get worse; over a string the model itself ended it is final. Mixing them in one
@@ -118,7 +136,8 @@ SORTS = {
 }
 
 DEFAULTS = dict(top=200, min_n=1, prefix=None, model=None, chosen_only=False,
-                max_alts=8, sort='sum', ends=None, extend=False, nodes=None)
+                max_alts=8, sort='sum', ends=None, extend=False, nodes=None,
+                sources=None)
 
 
 class RecordStore:
@@ -134,6 +153,9 @@ class RecordStore:
         self._completions_cache: Dict[tuple, List[Dict]] = {}
         self._alts_cache: Dict[tuple, tuple] = {}
         self._counts_cache: Dict[tuple, Dict] = {}
+        self._subsets: Dict[Optional[frozenset], List[Dict]] = {}
+        self._subset_ends: Dict[Optional[frozenset], Dict[tuple, str]] = {}
+        self._subset_sweeps: Dict[Optional[frozenset], Dict[tuple, Dict]] = {}
         self.load_seconds = 0.0
         self.missing: List[str] = []
 
@@ -149,6 +171,16 @@ class RecordStore:
             else:
                 self.missing.append(name)
         self.records = load_records(paths)
+        # Tagged at load, so a subset is a filter rather than a second read of the
+        # files. load_records keeps the first copy of a duplicated id, and the
+        # order of SOURCES decides which file that was -- the tag follows it.
+        by_id_group = {}
+        for path in paths:
+            group = GROUP_OF.get(os.path.basename(path))
+            for rec in load_records([path]):
+                by_id_group.setdefault(rec.get('id'), group)
+        for rec in self.records:
+            rec['_group'] = by_id_group.get(rec.get('id'))
         self.by_id = {r['id']: r for r in self.records if r.get('id')}
         self.by_prompt = {}
         for rec in self.records:
@@ -161,6 +193,9 @@ class RecordStore:
         self._completions_cache.clear()
         self._alts_cache.clear()
         self._counts_cache.clear()
+        self._subsets.clear()
+        self._subset_ends.clear()
+        self._subset_sweeps.clear()
         self.load_seconds = time.time() - started
         return self
 
@@ -234,7 +269,7 @@ class RecordStore:
         return out
 
     def trie_counts(self, model: Optional[str] = None, chosen_only: bool = False,
-                    ends=None, nodes=None) -> Dict:
+                    ends=None, nodes=None, sources=None) -> Dict:
         """How many prefixes exist, how many the search can reach, how many match.
 
         The list can never show them all -- 176,649 rows would be hundreds of
@@ -249,11 +284,11 @@ class RecordStore:
         an unscored node the running sum no longer counts from the root. 22 such
         nodes block 429 below them.
         """
-        key = (model, bool(chosen_only), ends, nodes)
+        key = (model, bool(chosen_only), ends, nodes, sources)
         if key in self._counts_cache:
             return self._counts_cache[key]
 
-        root = self.trie(model)
+        root = self.trie(model, sources)
         usable = (lambda n: n.logprob is not None and n.source == 'chosen')             if chosen_only else (lambda n: n.logprob is not None)
 
         total = reachable = 0
@@ -271,7 +306,7 @@ class RecordStore:
         # 177,100 nodes. Every remaining reachable node is 'open', and an open node
         # always has children, so that cell takes the balance and open-leaf is 0.
         cells = Counter()
-        for path, reason in self.ends.items():
+        for path, reason in self.ends_for(sources).items():
             node = root
             for tok in path:
                 node = node.children.get(tok)
@@ -383,10 +418,45 @@ class RecordStore:
             raise ValueError(f'ends must name at least one of {ENDS}')
         return None if wanted == frozenset(ENDS) else wanted
 
-    def trie(self, model: Optional[str] = None):
-        if model not in self._tries:
-            self._tries[model] = build_trie(self.records, model)
-        return self._tries[model]
+    @staticmethod
+    def _normalize_sources(value) -> Optional[frozenset]:
+        """None / empty / everything -> no filter, so the common case is the fast
+        one and every existing link keeps its meaning."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = [p.strip() for p in value.split(',')]
+        wanted = frozenset(v for v in value if v in SOURCE_GROUPS)
+        if not wanted:
+            raise ValueError(f'sources must name at least one of {tuple(SOURCE_GROUPS)}')
+        return None if wanted == frozenset(SOURCE_GROUPS) else wanted
+
+    def records_for(self, sources=None) -> List[Dict]:
+        if sources is None:
+            return self.records
+        if sources not in self._subsets:
+            self._subsets[sources] = [r for r in self.records if r.get('_group') in sources]
+        return self._subsets[sources]
+
+    def ends_for(self, sources=None) -> Dict[tuple, str]:
+        if sources is None:
+            return self.ends
+        if sources not in self._subset_ends:
+            self._subset_ends[sources] = self._index_ends(self.records_for(sources))
+        return self._subset_ends[sources]
+
+    def sweeps_for(self, sources=None) -> Dict[tuple, Dict]:
+        if sources is None:
+            return self.sweep_by_prompt
+        if sources not in self._subset_sweeps:
+            self._subset_sweeps[sources] = index_sweeps(self.records_for(sources))
+        return self._subset_sweeps[sources]
+
+    def trie(self, model: Optional[str] = None, sources=None):
+        key = (model, sources)
+        if key not in self._tries:
+            self._tries[key] = build_trie(self.records_for(sources), model)
+        return self._tries[key]
 
     # -- the one cache verdict ------------------------------------------------
 
@@ -405,7 +475,8 @@ class RecordStore:
 
     def lookup(self, prompt: str, model: Optional[str] = None,
                max_tokens: Optional[int] = None,
-               temperature: Optional[float] = 0) -> Optional[Dict]:
+               temperature: Optional[float] = 0,
+               sources=None) -> Optional[Dict]:
         """The record that already answers this call, or None.
 
         A record may serve a request for FEWER tokens than it generated (the
@@ -414,6 +485,12 @@ class RecordStore:
         """
         for rec in self.by_prompt.get(prompt, []):
             req = rec.get('request') or {}
+            # `sources` is for callers asking "is this in the databases I picked",
+            # not for the cache verdict. The verdict must see everything: narrowing
+            # it would report a miss for a record we hold and buy it again. Every
+            # caller that answers "must this be paid for" leaves it None.
+            if sources and rec.get('_group') not in sources:
+                continue
             if model and not self._model_matches(rec, model):
                 continue
             if temperature is not None and req.get('temperature', 0) != temperature:
@@ -438,11 +515,12 @@ class RecordStore:
         Order of operations is unchanged: sort, then prefix, then top, exactly as
         build_completion_entries does it, which is what keeps verify_store green.
         """
-        key = (args.model, bool(args.chosen_only), args.max_alts)
+        key = (args.model, bool(args.chosen_only), args.max_alts, args.sources)
         if key not in self._completions_cache:
             full = SimpleNamespace(**{**vars(args), 'prefix': None, 'top': None})
             self._completions_cache[key] = build_completion_entries(
-                self.trie(args.model), self.records, self.sweep_by_prompt, full)
+                self.trie(args.model, args.sources), self.records_for(args.sources),
+                self.sweeps_for(args.sources), full)
 
         entries = self._completions_cache[key]
         # Sorting must precede the cap, or "top 1 by mean" silently means "the best
@@ -460,7 +538,7 @@ class RecordStore:
         if args.ends:
             entries = [e for e in entries if e.get('end') in args.ends]
         if args.nodes:
-            root = self.trie(args.model)
+            root = self.trie(args.model, args.sources)
             entries = [e for e in entries
                        if self.node_kind([t['token'] for t in e['tokens']], root) in args.nodes]
         entries = apply_prefix(entries, args.prefix)
@@ -474,7 +552,7 @@ class RecordStore:
         # and a filtered view must not renumber the entries another one is reading.
         # node_kind is stamped here rather than in the cached ranking because it
         # is a question about the trie, and only the shown rows need the answer.
-        trie = self.trie(args.model)
+        trie = self.trie(args.model, args.sources)
         return [{**e, 'rank': i,
                  'node_kind': self.node_kind([t['token'] for t in e['tokens']], trie)}
                 for i, e in enumerate(entries, 1)]
@@ -486,8 +564,10 @@ class RecordStore:
                                   **{k: v for k, v in kwargs.items() if k in DEFAULTS}})
         args.ends = self._normalize_ends(args.ends)
         args.nodes = self._normalize_nodes(args.nodes)
-        root = self.trie(args.model)
-        counts = (self.trie_counts(args.model, args.chosen_only, args.ends, args.nodes)
+        args.sources = self._normalize_sources(args.sources)
+        root = self.trie(args.model, args.sources)
+        counts = (self.trie_counts(args.model, args.chosen_only, args.ends, args.nodes,
+                                   args.sources)
                   if view == 'prefixes' else None)
         search: Dict = {}
         if view == 'completions':
@@ -496,8 +576,9 @@ class RecordStore:
         else:
             # The heap search is by sum, so that is the only honest ranking here.
             args.sort = 'sum'
-            entries = build_prefix_entries(root, self.sweep_by_prompt, args,
-                                           ends_index=self.ends, stats=search)
+            entries = build_prefix_entries(root, self.sweeps_for(args.sources), args,
+                                           ends_index=self.ends_for(args.sources),
+                                           stats=search)
             ranking = 'sum_logprob desc (best-first / uniform-cost over token trie)'
         # After the cap: only the rows actually shown need a continuation, and the
         # ranked object stays the prefix -- see add_extensions for why it must.
@@ -508,7 +589,8 @@ class RecordStore:
             'generated_from': ', '.join(self.sources),
             'model_filter': args.model,
             'chosen_only': args.chosen_only,
-            'source_records': len(self.records),
+            'source_records': len(self.records_for(args.sources)),
+            'sources': sorted(args.sources) if args.sources else None,
             'ranking': ranking,
             'sort': args.sort,
             'view': view,
@@ -536,7 +618,8 @@ class RecordStore:
             # is a setting. Calling 172,926 excluded-by-chosen_only nodes
             # "unscored" would be plainly false: they are scored, just recovered.
             'unreachable_unscored': (None if view == 'completions'
-                                     else self.trie_counts(args.model, False, None)['unreachable']),
+                                     else self.trie_counts(args.model, False, None, None,
+                                                           args.sources)['unreachable']),
             # How many distinct strings the extended rows collapse onto. Far fewer
             # than the row count, and saying so is the point.
             'distinct_extended': distinct,
@@ -679,7 +762,7 @@ class RecordStore:
     def greedy_alternatives(self, prompt: str = '', model: str = 'gpt-3.5-turbo-instruct',
                             top: int = 20, sort: str = 'cost',
                             max_alts: int = 8, ends=None, extend: bool = False,
-                            nodes=None) -> Dict:
+                            nodes=None, sources=None) -> Dict:
         """The greedy path and its next-best siblings: one-token departures from it.
 
         "Second best by the greedy criterion" is the cheapest single-token
@@ -706,12 +789,14 @@ class RecordStore:
         # candidate set, and sort/top/ends are all applied to a copy of it.
         ends = self._normalize_ends(ends)
         nodes = self._normalize_nodes(nodes)
-        cache_key = (prompt, model, max_alts)
+        sources = self._normalize_sources(sources)
+        cache_key = (prompt, model, max_alts, sources)
         if cache_key in self._alts_cache:
             greedy, candidates, missing = self._alts_cache[cache_key]
             return self._rank_alts(prompt, model, sort, top, greedy, candidates,
-                                   missing, ends, extend, root_for_extend=self.trie(model),
-                                   max_alts=max_alts, nodes=nodes)
+                                   missing, ends, extend,
+                                   root_for_extend=self.trie(model, sources),
+                                   max_alts=max_alts, nodes=nodes, sources=sources)
 
         greedy = self.greedy(prompt=prompt, model=model)
         if not greedy['n'] or not greedy['first_id']:
@@ -726,7 +811,7 @@ class RecordStore:
         # every sum downstream of it was wrong by 0.1394. The same string then had
         # two different Σ depending on which view computed it. lookup() in this
         # very function already filters by model; walk_detail bypassed it.
-        root = self.trie(model)
+        root = self.trie(model, sources)
         base = self.by_id[greedy['first_id']]
         lp = (base.get('choices') or [{}])[0].get('logprobs') or {}
         toks = list(lp.get('tokens') or [])
@@ -767,7 +852,11 @@ class RecordStore:
                     continue
                 cost = tls[i] - alt_lp
                 prefix = ''.join(toks[:i]) + alt
-                rec = self.lookup(prefix, model=model, max_tokens=None)
+                # Restricted to the chosen databases: the candidates are what
+                # those databases contain, while the base path below still comes
+                # from everything, because a path with records removed is not a
+                # filtered path, it is a broken one.
+                rec = self.lookup(prefix, model=model, max_tokens=None, sources=sources)
                 if rec is None:
                     missing += 1
                     continue
@@ -795,7 +884,8 @@ class RecordStore:
         # a continuation. Sorting and capping are cheap, so only the build is cached.
         self._alts_cache[cache_key] = (greedy, entries, missing)
         return self._rank_alts(prompt, model, sort, top, greedy, entries, missing, ends,
-                               extend, root_for_extend=root, max_alts=max_alts, nodes=nodes)
+                               extend, root_for_extend=root, max_alts=max_alts,
+                               nodes=nodes, sources=sources)
 
     # cost first, and it is the default: the greedy criterion is what makes a
     # sibling "second best", and the other keys answer a different question.
@@ -809,7 +899,7 @@ class RecordStore:
 
     def _rank_alts(self, prompt, model, sort, top, greedy, candidates, missing,
                    ends=None, extend=False, root_for_extend=None, max_alts=8,
-                   nodes=None) -> Dict:
+                   nodes=None, sources=None) -> Dict:
         key, label = self.ALT_SORTS.get(sort) or self.ALT_SORTS['cost']
         entries = sorted(candidates, key=key)
         # After the sort and before the cap, as everywhere else: filtering the
@@ -834,7 +924,8 @@ class RecordStore:
             'model': model,
             'sort': sort if sort in self.ALT_SORTS else 'cost',
             'ranking': label,
-            'source_records': len(self.records),
+            'source_records': len(self.records_for(sources)),
+            'sources': sorted(sources) if sources else None,
             'generated_from': ', '.join(self.sources),
             'greedy': {k: greedy[k] for k in
                        ('n', 'sum_logprob', 'mean_logprob', 'first_id', 'finish_reason')},
