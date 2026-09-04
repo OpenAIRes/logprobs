@@ -2143,6 +2143,8 @@ sweepUpdateCount();
      The page's select stays in the DOM because getSelectedModel() reads it, but
      it is no longer a control: the bar's value is written into it, and a change
      in the bar navigates, so there is never a moment where the two disagree. */
+  // `any` is a ranking filter and not a model to generate with, so the page
+  // keeps its own default in that case.
   if (bar.state && bar.state.model && modelSelect
       && [...modelSelect.options].some(o => o.value === bar.state.model)) {
     modelSelect.value = bar.state.model;

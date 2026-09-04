@@ -55,7 +55,11 @@ const ICON = {
     top: '1',
     sort: '',
     prompt: '',
-    model: 'gpt-3.5-turbo-instruct',
+    /* Empty means every model. It has to be expressible: a ranking over records
+        can span models, and making one of them the default would quietly drop the
+        davinci and babbage records from the default list. A decode path is a
+        different matter -- see GREEDY_MODEL. */
+    model: '',
     prefix: '',
     ends: '',
     nodes: '',
@@ -156,6 +160,13 @@ const ICON = {
   ];
   const BLOCKS_KEY = 'bar_blocks';
 
+  /* A greedy path is per model -- argmax at every step means argmax of ONE
+     model's distribution -- so unlike a ranking it cannot be asked for "any".
+     Chaining records from several models would not produce a mixed path, it
+     would produce a wrong one. */
+  const GREEDY_MODEL = 'gpt-3.5-turbo-instruct';
+  const greedyModel = () => state.model || GREEDY_MODEL;
+
   const RANKED = v => v === 'completions' || v === 'prefixes';
   // The one case where no ranking is involved at all.
   const singleGreedy = () => state.view === 'greedy' && String(state.top) === '1';
@@ -228,7 +239,7 @@ const ICON = {
       if (state.view === 'greedy') {
         // Resolved by walking argmax records rather than by ranking anything, so
         // it has its own endpoint; its first hop is where the browser lands.
-        const q = new URLSearchParams({ prompt: state.prompt, model: state.model });
+        const q = new URLSearchParams({ prompt: state.prompt, model: greedyModel() });
         const g = await (await fetch('/api/greedy?' + q, { cache: 'no-store' })).json();
         id = g.first_id || null;
       } else {
@@ -239,6 +250,7 @@ const ICON = {
         if (state.nodes) q.set('nodes', state.nodes);
         if (state.chosen_only) q.set('chosen_only', '1');
         if (state.sources) q.set('sources', state.sources);
+        if (state.model) q.set('model', state.model);
         const db = await (await fetch('/api/query?' + q, { cache: 'no-store' })).json();
         id = ((db.entries || [])[0] || {}).id || null;
       }
@@ -314,8 +326,9 @@ const ICON = {
       </label>
       <label class="sfield" id="sModelWrap"><span>model</span>
         <select id="sModel">
-          ${['gpt-3.5-turbo-instruct', 'davinci-002', 'babbage-002']
-            .map(m => opt(m, m, state.model)).join('')}
+          ${[['', 'any'], ['gpt-3.5-turbo-instruct', 'gpt-3.5-turbo-instruct'],
+             ['davinci-002', 'davinci-002'], ['babbage-002', 'babbage-002']]
+            .map(([v, l]) => opt(v, l, state.model)).join('')}
         </select>
       </label>
       <label class="sfield" id="sBaseWrap"><span>base completion</span>
@@ -572,6 +585,8 @@ const ICON = {
     if (state.chosen_only && v === 'prefixes') p.set('chosen_only', '1');
     if (state.prompt && v === 'greedy') p.set('prompt', state.prompt);
     if (state.sources) p.set('sources', state.sources);
+    if (v === 'greedy') p.set('model', greedyModel());
+    else if (state.model) p.set('model', state.model);
     try {
       const route = v === 'greedy' ? '/api/greedy_alternatives?' : '/api/query?';
       const db = await (await fetch(route + p, { cache: 'no-store' })).json();

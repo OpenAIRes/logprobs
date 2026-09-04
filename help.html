@@ -306,6 +306,29 @@
       long one: rows cut to different lengths cannot be compared by eye, which is what
       the column is for.</p>
 
+    <h3>model</h3>
+    <p>Defaults to <b>any</b>, which is a real option and has to be: a ranking over
+      records can span models, and making one of them the default would quietly drop
+      the 7 davinci-002 and 10 babbage-002 records from the default list. A
+      <em>greedy path</em> is the exception — argmax at every step means argmax of one
+      model's distribution, so it always runs against a concrete model and falls back
+      to <code>gpt-3.5-turbo-instruct</code> when the filter says any.</p>
+    <div class="note">
+      <p>The filter was broken for two of the three models, silently.
+        <code>build_trie</code> tested the asked-for name as a substring of the served
+        name, and the API serves davinci-002 as <code>davinci:2023-07-21-v2</code> and
+        babbage-002 as <code>babbage:2023-07-21-v2</code> — the string
+        &ldquo;davinci-002&rdquo; appears in neither. So both were dropped from the
+        trie entirely and the ranking came back <em>empty</em> rather than filtered.
+        It only ever looked right for <code>gpt-3.5-turbo-instruct</code>, whose
+        served name does contain the asked name.</p>
+      <p>Fixed by giving the request block precedence — it records the name that was
+        asked for — with the served name as a prefix fallback for older records that
+        have none. That rule already existed for the cache verdict; there are now not
+        two copies of it. davinci-002: 7 completions, 118 prefixes. babbage-002: 10
+        and 153.</p>
+    </div>
+
     <h3>databases</h3>
     <p>The six record files are two kinds of thing, so they are offered as two groups:
       <b>history</b> — calls made by hand, 411 records — and <b>sweeps</b> — exhaustive

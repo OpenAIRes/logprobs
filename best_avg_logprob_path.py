@@ -86,10 +86,31 @@ def record_model(rec: Dict) -> str:
     return rec.get("model") or (rec.get("request") or {}).get("model") or ""
 
 
+def model_matches(rec: Dict, model: str) -> bool:
+    """Whether this record answers a request for `model`.
+
+    A substring test against the served name is wrong, and silently: the API
+    serves davinci-002 as `davinci:2023-07-21-v2` and babbage-002 as
+    `babbage:2023-07-21-v2`, so "davinci-002" appears in neither. Filtering the
+    trie that way dropped every davinci and babbage record and the ranking came
+    back empty rather than filtered. It only looked right for
+    gpt-3.5-turbo-instruct, whose served name does contain the asked name.
+
+    So the request wins where it exists -- it records the name that was asked
+    for -- and the served name is a prefix fallback for the older records that
+    have no request block.
+    """
+    asked = (rec.get("request") or {}).get("model")
+    if isinstance(asked, str):
+        return asked == model
+    served = record_model(rec)
+    return isinstance(served, str) and served.startswith(model)
+
+
 def build_trie(records: List[Dict], model_filter: Optional[str] = None) -> TrieNode:
     root = TrieNode()
     for rec in records:
-        if model_filter and model_filter not in record_model(rec):
+        if model_filter and not model_matches(rec, model_filter):
             continue
 
         prompt_tokens = ((rec.get("prompt") or {}).get("logprobs") or {}).get("tokens") or []

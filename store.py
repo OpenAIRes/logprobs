@@ -23,7 +23,7 @@ from collections import Counter
 from types import SimpleNamespace
 from typing import Dict, List, Optional
 
-from best_avg_logprob_path import build_trie, record_model
+from best_avg_logprob_path import build_trie, model_matches, record_model
 from export_dijkstra_top import (
     apply_prefix,
     build_completion_entries,
@@ -431,12 +431,21 @@ class RecordStore:
             raise ValueError(f'sources must name at least one of {tuple(SOURCE_GROUPS)}')
         return None if wanted == frozenset(SOURCE_GROUPS) else wanted
 
-    def records_for(self, sources=None) -> List[Dict]:
-        if sources is None:
-            return self.records
-        if sources not in self._subsets:
-            self._subsets[sources] = [r for r in self.records if r.get('_group') in sources]
-        return self._subsets[sources]
+    def records_for(self, sources=None, model=None) -> List[Dict]:
+        """The record list a query should see. The model filter belongs here as
+        well as in the trie: build_completion_entries walks whatever list it is
+        given, and leaving other models in it meant their entries were dropped
+        only because they happened to be unscorable against the filtered trie --
+        an accident, not a filter."""
+        key = (sources, model)
+        if key not in self._subsets:
+            out = self.records
+            if sources is not None:
+                out = [r for r in out if r.get('_group') in sources]
+            if model:
+                out = [r for r in out if model_matches(r, model)]
+            self._subsets[key] = out
+        return self._subsets[key]
 
     def ends_for(self, sources=None) -> Dict[tuple, str]:
         if sources is None:
@@ -460,18 +469,9 @@ class RecordStore:
 
     # -- the one cache verdict ------------------------------------------------
 
-    @staticmethod
-    def _model_matches(rec: Dict, model: str) -> bool:
-        """A request records the model it asked for; older records only carry the
-        served model, which is versioned (gpt-3.5-turbo-instruct:20230824-v2).
-        Falling back to a prefix match is what stops a davinci-002 record from
-        being served for a gpt-3.5-turbo-instruct request, which is the bug this
-        function exists to prevent."""
-        asked = (rec.get('request') or {}).get('model')
-        if isinstance(asked, str):
-            return asked == model
-        served = record_model(rec)
-        return isinstance(served, str) and served.startswith(model)
+    # One implementation, shared with build_trie. Two of them is how the trie came
+    # to drop every davinci and babbage record while the cache verdict kept them.
+    _model_matches = staticmethod(model_matches)
 
     def lookup(self, prompt: str, model: Optional[str] = None,
                max_tokens: Optional[int] = None,
@@ -519,7 +519,8 @@ class RecordStore:
         if key not in self._completions_cache:
             full = SimpleNamespace(**{**vars(args), 'prefix': None, 'top': None})
             self._completions_cache[key] = build_completion_entries(
-                self.trie(args.model, args.sources), self.records_for(args.sources),
+                self.trie(args.model, args.sources),
+                self.records_for(args.sources, args.model),
                 self.sweeps_for(args.sources), full)
 
         entries = self._completions_cache[key]
@@ -589,7 +590,7 @@ class RecordStore:
             'generated_from': ', '.join(self.sources),
             'model_filter': args.model,
             'chosen_only': args.chosen_only,
-            'source_records': len(self.records_for(args.sources)),
+            'source_records': len(self.records_for(args.sources, args.model)),
             'sources': sorted(args.sources) if args.sources else None,
             'ranking': ranking,
             'sort': args.sort,

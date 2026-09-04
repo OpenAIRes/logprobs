@@ -832,6 +832,11 @@ function queryUrl() {
     }).toString();
   }
   const p = new URLSearchParams({ top: String(S.top || (VIEW === 'greedy' ? 20 : 200)) });
+  /* The model was never sent. So picking davinci-002 changed the address and
+     nothing else: the ranking still came back over every model, which reads as
+     the setting being ignored -- and it was. */
+  if (VIEW === 'greedy') p.set('model', S.model || 'gpt-3.5-turbo-instruct');
+  else if (S.model) p.set('model', S.model);
   if (S.ends) p.set('ends', S.ends);
   if (S.nodes) p.set('nodes', S.nodes);
   if (S.extend) p.set('extend', '1');
