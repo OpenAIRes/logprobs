@@ -77,12 +77,34 @@ const ICON = {
     ['walk', 'cheapest-deviation walk', 'Repeatedly take the cheapest single-token edit, then regenerate.'],
   ];
 
+  /* Every criterion is offered everywhere, because picking one is how you choose
+     what you are looking at -- see viewForSort. `deviation cost` used to be
+     offered only on the greedy view, which made it look like an accessory of that
+     view rather than the way into it. */
   const SORTS = [
-    ['cost', 'deviation cost', v => v === 'greedy'],
-    ['sum', 'Σ logprob', v => true],
-    ['ppl', 'perplexity', v => true],
-    ['length', 'length', v => true],
+    ['cost', 'deviation cost'],
+    ['sum', 'Σ logprob'],
+    ['ppl', 'perplexity'],
+    ['length', 'length'],
   ];
+
+  /* The criterion decides the view, not the other way round.
+
+     `deviation cost` is measured against the greedy path -- there is no cost
+     without a path to depart from -- so choosing it IS choosing greedy, and with
+     nothing else said that path starts from the empty prompt, i.e. what
+     temperature 0 produces. The other three rank a pool of finished strings, so
+     choosing one of them leaves greedy.
+
+     The exception, and it is the reason the greedy view has a `results` control
+     at all: greedy asking for more than one result is the path plus its one-token
+     siblings, and that IS a pool worth ranking by sum or perplexity. Only the
+     single-string case has nothing to rank. */
+  function viewForSort(next) {
+    if (next === 'cost') return 'greedy';
+    if (state.view === 'greedy' && String(state.top) !== '1') return 'greedy';
+    return 'completions';
+  }
 
   /* The prefix-to-complete axis, nested: each stop is a subset of the one to its
      left, so stepping right only narrows. Kept in step with store.py's ENDS and
@@ -166,9 +188,10 @@ const ICON = {
     const uses = USES[state.view] || Object.keys(FIELDS);
     for (const [k, dflt] of Object.entries(FIELDS)) {
       if (k !== 'view' && !uses.includes(k)) continue;
-      // Same rule as the per-view list: a link should not carry a criterion the
-      // destination cannot apply.
-      if (k === 'sort' && singleGreedy()) continue;
+      /* `sort` stays out of a single-string greedy link: `cost` is that view's
+         own default, so writing it would add a parameter that says nothing, and
+         no other value can survive there -- picking one moves the view. */
+      if (k === 'sort' && singleGreedy() && effectiveSort() === 'cost') continue;
       const v = String(state[k] ?? '');
       if (v && v !== String(dflt)) p.set(k, v);
     }
@@ -377,14 +400,19 @@ const ICON = {
      when nothing was chosen. Two places needed this answer and computing it twice
      is how they would come to disagree. */
   function effectiveSort() {
+    // Prefixes come out of a sum-ordered heap: the ranking IS the search order,
+    // so nothing else can be in force there whatever was last chosen.
+    if (state.view === 'prefixes') return 'sum';
     const want = state.sort || (state.view === 'greedy' ? 'cost' : 'sum');
     return (want === 'cost' && state.view !== 'greedy') ? 'sum' : want;
   }
 
   function paintSorts() {
     const sel = el('sSort');
-    const allowed = SORTS.filter(([, , ok]) => ok(state.view));
-    sel.innerHTML = allowed.map(([v, l]) => opt(v, l, effectiveSort())).join('');
+    sel.innerHTML = SORTS.map(([v, l]) => opt(v, l, effectiveSort())).join('');
+    sel.title = 'The criterion decides what you are looking at: deviation cost is '
+      + 'measured against the greedy path, so it selects that path; the others rank '
+      + 'recorded strings.';
   }
 
   /* Why a control does not apply to the current view, or null when it does. A
@@ -396,10 +424,9 @@ const ICON = {
     const notList = LISTY(v) ? null : `${v} is not a ranked list of strings`;
     return {
       sResultsWrap: notList,
-      sSortWrap: singleGreedy()
-        ? 'the greedy path is argmax at every step, so there is no ranking to choose'
-        : (v === 'completions' || v === 'greedy') ? null
-        : 'prefixes come out of a sum-ordered search — the ranking IS the search order',
+      // Never dead: every criterion is reachable, and picking one moves the view
+      // to where it means something. That is the whole point of viewForSort.
+      sSortWrap: null,
       sScopeWrap: SCOPED(v) ? null : notList,
       sPromptWrap: v === 'greedy' ? null : 'only the greedy path starts from a prompt you give',
       sPrefixWrap: RANKED(v) ? null : `${v} has no ranking to filter`,
@@ -545,7 +572,13 @@ const ICON = {
     go();
   });
   el('sResults').addEventListener('change', () => { state.top = el('sResults').value; repaint(); go(); });
-  el('sSort').addEventListener('change', () => { state.sort = el('sSort').value; go(); });
+  el('sSort').addEventListener('change', () => {
+    const next = el('sSort').value;
+    state.sort = next;
+    state.view = viewForSort(next);
+    repaint();
+    go();
+  });
   el('sScope').addEventListener('input', () => {
     const s = STOPS[Number(el('sScope').value) || 0];
     state.ends = s.ends; state.nodes = s.nodes;

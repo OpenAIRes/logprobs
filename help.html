@@ -498,17 +498,25 @@
         perfectly predicted and larger means less so.</dd>
       <span class="formula">Σ logprob = Σ log P(tokenᵢ) · mean = Σ / n · perplexity = e^(−mean)</span>
 
-      <dt>why does changing <b>ranked by</b> sometimes do nothing?</dt>
-      <dd>Two reasons, and neither is a fault. On the <b>greedy</b> view with one
-        result there is no ranking at all &mdash; the path is argmax at every step, so
-        every criterion returns the same string. The control is hidden there for that
-        reason. And on <b>completions</b>, <code>perplexity</code> and
-        <code>length</code> happen to name the same record: the 4096-token one is both
-        the longest we have and the best per token (perplexity 1.0128), so only
-        <code>&Sigma; logprob</code> picks something else &mdash; a 17-token string at
-        &Sigma;&nbsp;&minus;6.13. With one result the count line names the criterion in
-        force, so a coincidence like that reads as a coincidence rather than as a dead
-        control.</dd>
+      <dt><b>ranked by</b> decides what you are looking at</dt>
+      <dd><b>deviation cost</b> is measured against the greedy path &mdash; there is no
+        cost without a path to depart from &mdash; so choosing it <em>is</em> choosing
+        greedy, and with nothing else said that path starts from the empty prompt, i.e.
+        what temperature 0 produces. The other three rank a pool of recorded strings, so
+        choosing one of them leaves greedy for <b>completions</b>.</dd>
+      <dd>One exception, and it is why the greedy view has a <b>results</b> control at
+        all: greedy asking for more than one result is the path <em>plus its one-token
+        siblings</em>, and that is a pool worth ranking by &Sigma; logprob or
+        perplexity. Only the single-string case has nothing to rank. So
+        <code>&Sigma;</code> on greedy with 20 results ranks the 363 siblings; with one
+        result it moves you to completions.</dd>
+      <dd>The criterion is never a dead control, then. What it can look like: on
+        completions, <code>perplexity</code> and <code>length</code> name the
+        <em>same</em> record, because the 4096-token one is both the longest we have and
+        the best per token (perplexity 1.0128). Only <code>&Sigma; logprob</code> picks
+        differently there &mdash; a 17-token string at &Sigma;&nbsp;&minus;6.13. With one
+        result the count line names the criterion in force, so that coincidence reads as
+        a coincidence.</dd>
 
       <dt>which of these is &ldquo;what the model would say&rdquo;?</dt>
       <dd><b>&Sigma; logprob, not perplexity.</b> Sampling at temperature 1 produces a
