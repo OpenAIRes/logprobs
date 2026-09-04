@@ -187,7 +187,7 @@
           title="Permanently deletes the whole history in this browser. The sweep cache stays. Export first!">Clear history</button>
       </div>
 
-      <label class="fld" for="modelSelect" title="Which model generates. Recorded per record: data from different models is never mixed.">
+      <label class="fld" id="modelField" for="modelSelect" title="Which model generates. Recorded per record: data from different models is never mixed.">
         <span>model</span>
         <select id="modelSelect">
           <option value="gpt-3.5-turbo-instruct">gpt-3.5-turbo-instruct</option>
@@ -2134,7 +2134,21 @@ sweepUpdateCount();
   if (!bar || !bar.adopt) return;
   const toolbar = document.getElementById('toolbar');
   const status = document.getElementById('statusArea');
-  if (toolbar) { bar.adopt(toolbar, 'extra'); bar.hideField('sModelWrap'); }
+  if (toolbar) bar.adopt(toolbar, 'extra');
+  /* One model control, and it is the bar's -- so it can be pinned to the strip
+     like any other. Hiding the bar's row instead (which is what this did) meant
+     pinning `model` here showed nothing at all, because the only model select on
+     this page was the one buried in the panel.
+
+     The page's select stays in the DOM because getSelectedModel() reads it, but
+     it is no longer a control: the bar's value is written into it, and a change
+     in the bar navigates, so there is never a moment where the two disagree. */
+  if (bar.state && bar.state.model && modelSelect
+      && [...modelSelect.options].some(o => o.value === bar.state.model)) {
+    modelSelect.value = bar.state.model;
+  }
+  const ownModel = document.getElementById('modelField');
+  if (ownModel) ownModel.hidden = true;
   if (status) bar.adopt(status, 'status');
   /* Asked for on demand: currentCompletionId is assigned in eight places here,
      and pushing it from all eight is eight chances to miss one. */

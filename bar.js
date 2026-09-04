@@ -645,8 +645,7 @@ const ICON = {
          so this one goes away instead. */
       const dead = why[id];
       const hideDead = HIDE_WHEN_DEAD.has(id);
-      node.hidden = node.dataset.forcedHidden === '1'
-        || (!!dead && (!wantBar || hideDead));
+      node.hidden = !!dead && (!wantBar || hideDead);
       node.classList.toggle('dead', !!dead && wantBar && !hideDead);
       for (const f of node.querySelectorAll('select, input, button')) f.disabled = !!dead;
       node.title = dead ? `Not available: ${dead}.` : '';
@@ -846,17 +845,7 @@ const ICON = {
     const slot = el(where === 'status' ? 'sPageStatus' : 'sPageExtra');
     if (slot && node) slot.appendChild(node);
   }
-  /* A page can take a control away for good -- the token browser has a model
-     select of its own. Marked, not merely hidden, because layout() recomputes
-     `hidden` on every repaint and would put it straight back. */
-  function hideField(id) {
-    const e = el(id);
-    if (!e) return;
-    e.dataset.forcedHidden = '1';
-    e.hidden = true;
-  }
-
   window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
-                         adopt, hideField, provideRecord, landedOnId,
+                         adopt, provideRecord, landedOnId,
                          block: key => blocks.has(key) };
 })();
