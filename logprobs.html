@@ -22,6 +22,16 @@
     }
     #statusArea { display: flex; align-items: baseline; gap: .6rem; min-height: 1.9rem;
                   padding-top: .25rem; }
+    /* The source chip stays until the next lookup, unlike #status, which clears
+       itself after two seconds. "Did that click cost money?" is a question still
+       being asked long after a message has gone -- and since the status line
+       moved onto the settings bar, a two-second message there is easy to miss. */
+    #dataSource { font-size: .78125rem; padding: .05rem .45rem; border-radius: 999px;
+      border: 1px solid var(--line); background: var(--chip); color: var(--ink-dim);
+      white-space: nowrap; }
+    #dataSource.free { color: var(--good); }
+    #dataSource.busy { color: var(--mid); }
+    #dataSource.paid { color: var(--danger); border-color: var(--danger); }
     #toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
     #toolbar .fld select { font: inherit; font-size: .8125rem; color: var(--ink);
       background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
@@ -157,6 +167,8 @@
   <div id="header">
     <div id="statusArea">
       <span id="loading">loading tokens…</span>
+      <!-- Where what is on screen came from, and whether it cost anything. -->
+      <span id="dataSource" hidden></span>
       <span id="status"></span>
     </div>
     <div id="toolbar">
@@ -260,7 +272,14 @@
         probability. Clicking one in the table branches the tree — it generates the
         continuation as if the model had picked that token there.</dd>
       <dt>the status message</dt>
-      <dd><b>Loaded</b> = from this browser's history · <b>Loaded from the sweep cache</b> or
+      <dd>The chip on the settings bar says where what is on screen came from:
+        <b>from history</b> (this browser), <b>from the sweep cache</b>, <b>from the store</b>
+        — all free — or <b>calling the API…</b> / <b>new API call</b>, which is the one that
+        costs money. It stays until the next lookup, so it can still be read afterwards.
+        A click generates <b>20</b> tokens on gpt-3.5-turbo-instruct (what the sweeps used,
+        so a cache hit is exact) and <b>5</b> on davinci-002 and babbage-002, which have no
+        sweep data and so always cost a call.<br>
+        In the message line: <b>Loaded</b> = from this browser's history · <b>Loaded from the sweep cache</b> or
         <b>from the store</b> = no call was made · <b>Saved</b> = the API really was called
         and it cost money.</dd>
     </dl>
@@ -356,6 +375,7 @@ const promptsOverlay = document.getElementById('promptsOverlay');
 const promptsClose = document.getElementById('promptsClose');
 const promptsList = document.getElementById('promptsList');
 const statusEl = document.getElementById('status');
+const sourceEl = document.getElementById('dataSource');
 const savedCountEl = document.getElementById('savedCount');
 const repairBtn = document.getElementById('repairBtn');
 const modelSelect = document.getElementById('modelSelect');
@@ -384,6 +404,80 @@ function getSelectedModel(){
 
 function escapeToken(tok){return tok.replace(/\n/g,'\\n').replace(/\t/g,'\\t').replace(/ /g,'␣');}
 function showStatus(msg){statusEl.textContent=msg;statusEl.classList.remove('error');setTimeout(()=>{statusEl.textContent='';},2000);}
+
+/* Four places can answer a click, and they are asked in this order: this
+   browser's history, the sweep cache, the store (server.py), then the API. Only
+   the last one spends money. Nothing on screen used to say which had answered --
+   showStatus said it for two seconds, said "Loaded" without naming the source
+   for the commonest case, and said nothing at all while a paid call was in
+   flight. This chip names the source and stays. */
+const SOURCES = {
+  lookup:  ['looking for it…', 'busy',
+            "Searching this browser's history, then the sweep cache, then the store. The API is only called if none of them has it."],
+  history: ['from history', 'free',
+            "Answered by this browser's own history. No API call, nothing spent."],
+  sweep:   ['from the sweep cache', 'free',
+            'Answered by the imported sweep databases. No API call, nothing spent.'],
+  store:   ['from the store', 'free',
+            'Answered by the store (server.py), which holds every call ever made. No API call, nothing spent.'],
+  calling: ['calling the API…', 'busy',
+            'Nothing had this continuation, so it is being generated. This one costs money.'],
+  api:     ['new API call', 'paid',
+            'Nothing had this continuation, so it was generated and paid for. It is saved now, so asking for it again is free.'],
+};
+function setSource(kind, extra){
+  if (!sourceEl) return;
+  const s = SOURCES[kind];
+  if (!s) { sourceEl.hidden = true; sourceEl.textContent = ''; return; }
+  sourceEl.textContent = extra ? `${s[0]} ${extra}` : s[0];
+  sourceEl.className = s[1];
+  sourceEl.title = s[2];
+  sourceEl.hidden = false;
+}
+
+/* How far a token click generates.
+
+   20 for gpt-3.5-turbo-instruct because every sweep was run at 20: asking for
+   exactly that makes the sweep cache an exact hit instead of a near miss (16 was
+   answered by cutting a 20-token record down, which worked, but threw away four
+   tokens already paid for).
+
+   5 for the base models, which have no sweep data at all -- every click on
+   davinci-002 or babbage-002 is a paid call, so it is kept short. They also
+   return only 5 alternatives per position however many are asked for (measured:
+   ntop=5 on all 17 base-model records, against 20 for gpt), so they are a
+   coarser instrument anyway. */
+const CLICK_TOKENS_GPT = 20;
+const CLICK_TOKENS_BASE = 5;
+function clickMaxTokens(model){
+  model = model || getSelectedModel();
+  return /^(ada|babbage|curie|davinci)/.test(model) ? CLICK_TOKENS_BASE : CLICK_TOKENS_GPT;
+}
+
+/* Whether a record can answer a request for `want` tokens. Either it was asked
+   for at least that many -- at temperature 0 the shorter string is a prefix of
+   the longer one, which we verified directly on a 16- and a 4096-token call over
+   the same prompt -- or it stopped on its own, in which case asking for more
+   returns the same string again.
+
+   The token count is the floor for `asked` because 190 of the older records
+   carry no target_max_tokens at all; without that they would answer nothing and
+   every click on them would be paid for a second time. */
+function entryTokenCount(e){
+  const t = e?.choices?.[0]?.logprobs?.tokens;
+  return Array.isArray(t) ? t.length : null;
+}
+function askedTokens(e){
+  const have = entryTokenCount(e);
+  const target = Number(e?.meta?.target_max_tokens ?? e?.max_tokens);
+  if (have === null) return Number.isFinite(target) ? target : 0;
+  return Number.isFinite(target) ? Math.max(target, have) : have;
+}
+function answersLength(e, want){
+  if (entryTokenCount(e) === null) return false;
+  return askedTokens(e) >= Number(want)
+      || e?.choices?.[0]?.finish_reason === 'stop';
+}
 async function updateSavedCount(){ try{ const n = await idbCount(); savedCountEl.textContent = n; }catch{ savedCountEl.textContent = '0'; } }
 function toPlainTokens(arr){return (arr||[]).map(t=>typeof t==='string'?t:(t&&typeof t.token==='string'?t.token:String(t)))}
 
@@ -405,18 +499,22 @@ async function openFromUrl() {
 
   if (id) {
     let entry = null;
+    let fromStore = false;
     try { entry = await idbGet(id); } catch {}
     if (!entry) {
       try {
         const res = await fetch('/api/record?id=' + encodeURIComponent(id), { cache: 'no-store' });
         if (res.ok) {
           const rec = await res.json();
-          if (rec && rec.id) { await idbPut(rec); entry = rec; }
+          if (rec && rec.id) { await idbPut(rec); entry = rec; fromStore = true; }
         }
       } catch { /* store down: fall through to the default tree */ }
     }
     if (entry) {
       await openEntryById(id);
+      // openEntryById reads the local database, but the record may have just
+      // been fetched into it -- name where it actually came from.
+      if (fromStore) setSource('store');
       await updateSavedCount();
       return true;
     }
@@ -1246,10 +1344,16 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
   // indexed under "\n" but queried under "" (since promptText.trim() === "").
   // Real matches then silently never surface. Scan everything instead; the
   // exact-token check below still does all the real matching work.
+  setSource('lookup');
   const candidates = await idbGetAll();
-  const existing = candidates.find(e => {
+  const usable = candidates.filter(e => {
     const tokMatch = JSON.stringify(e?.prompt?.logprobs?.tokens||[]) === JSON.stringify(plainPromptTokens);
-    const maxMatch = Number((e?.meta?.target_max_tokens ?? e?.max_tokens)) === Number(maxTokens);
+    /* Long enough, not exactly as long. The exact test was a hidden bill: a
+       record generated at 16 cannot answer a click asking for 5, so the shorter
+       per-model length introduced below would have re-bought data already
+       sitting in the database. The sweep and store lookups have always accepted
+       `>= requested` and cut the arrays down; this now matches them. */
+    const maxMatch = answersLength(e, maxTokens);
     // e.model is the resolved snapshot OpenAI returned (e.g. "...:20230824-v2"), not
     // the alias we requested, so it never equals `model` directly. Entries created
     // after the model-select feature record the actually-requested alias in
@@ -1263,15 +1367,27 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
     const modelMatch = e?.request?.model ? e.request.model === model : (typeof e?.model === 'string' && e.model.startsWith(model));
     return tokMatch && maxMatch && modelMatch;
   });
+  // Tightest fit first, so a 4096-token record is not cut down while a 20-token
+  // one is sitting right next to it.
+  usable.sort((a, b) => askedTokens(a) - askedTokens(b));
+  const existing = usable[0];
   if (existing) {
-    console.log('[HIT] Found existing completion');
-    return { response: { id: existing.id, choices: existing.choices }, prompt: promptText, fromHistory: true };
+    const have = entryTokenCount(existing);
+    const cut = have > Number(maxTokens);
+    console.log('[HIT] Found existing completion', cut ? `(cut from ${have})` : '');
+    setSource('history', cut ? `(cut from ${have})` : '');
+    return { response: { id: existing.id,
+                         choices: [cut ? truncateChoice(existing.choices[0], Number(maxTokens))
+                                       : existing.choices[0]] },
+             prompt: promptText, fromHistory: true,
+             truncatedFrom: cut ? have : null };
   }
 
   // Vlastni historie nic nema — zkus sweep databazi, nez zaplatis volani.
   const swept = await sweepLookup(plainPromptTokens, model, maxTokens);
   if (swept) {
     console.log('[SWEEP HIT]', swept.id, swept.truncatedFrom ? `(zkraceno z ${swept.truncatedFrom})` : '');
+    setSource('sweep', swept.truncatedFrom ? `(cut from ${swept.truncatedFrom})` : '');
     return { response: { id: swept.id, choices: swept.choices }, prompt: promptText,
              fromHistory: true, fromSweep: true, truncatedFrom: swept.truncatedFrom };
   }
@@ -1281,17 +1397,22 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
   const stored = await storeLookup(promptText, model, maxTokens);
   if (stored) {
     console.log('[STORE HIT]', stored.id, stored.truncatedFrom ? `(zkraceno z ${stored.truncatedFrom})` : '');
+    setSource('store', stored.truncatedFrom ? `(cut from ${stored.truncatedFrom})` : '');
     return { response: { id: stored.id, choices: stored.choices }, prompt: promptText,
              fromHistory: true, fromStore: true, truncatedFrom: stored.truncatedFrom };
   }
 
   console.log('[MISS] Calling API for prompt:', promptText);
+  /* Set before the call, not after: the point of showing this is to know that
+     money is going out, and the answer takes a second or two to arrive. */
+  setSource('calling');
 
   const key = await ensureApiKey();
-  if (!key) return null;
+  if (!key) { setSource(null); return null; }
 
   const data = await fetchCompletionAutoFit(promptText, maxTokens, key, model);
-  if (!data) return null;
+  if (!data) { setSource(null); return null; }
+  setSource('api', `(${maxTokens} tokens)`);
 
   const lp = data.choices[0].logprobs;
 
@@ -1582,7 +1703,7 @@ async function completion(e){
   e.stopPropagation();
   const idx=+e.currentTarget.dataset.idx;
   const altToken=e.currentTarget.dataset.alt; if(altToken===undefined) return;
-  const result=await createCompletion(currentCompletionId,idx,altToken,16);
+  const result=await createCompletion(currentCompletionId,idx,altToken,clickMaxTokens());
   if(!result) return;
   applyCompletion(result.response,idx,altToken);
   showStatus(hitLabel(result, 'Saved — the API was called'));
@@ -1774,7 +1895,7 @@ if (objectBtn) objectBtn.addEventListener('click', showCurrentRaw);
 // this only adds a new root entry (previous_response_id: null) to the store.
 /* promptText '' = korenovy strom jako dosud; cokoli jineho zalozi strom z
    vlastniho zadaneho promptu. */
-async function startNewTree(promptText = '', maxTokens = 16){
+async function startNewTree(promptText = '', maxTokens = clickMaxTokens()){
   const model = getSelectedModel();
   promptText = String(promptText ?? '');
 
@@ -1796,6 +1917,7 @@ async function startNewTree(promptText = '', maxTokens = 16){
   });
   if (existing) {
     await openEntryById(existing.id);
+    setSource('history');
     showStatus(`Loaded from history (model: ${model})`);
     return;
   }
@@ -1809,6 +1931,7 @@ async function startNewTree(promptText = '', maxTokens = 16){
       id: swept.id, model, promptText, promptTokens, maxTokens,
       choice: swept.choices[0], usage: null, request: null, fromSweep: true,
     });
+    setSource('sweep', swept.truncatedFrom ? `(cut from ${swept.truncatedFrom})` : '');
     showStatus(swept.truncatedFrom
       ? `Loaded from the sweep cache (truncated from ${swept.truncatedFrom})`
       : 'Loaded from the sweep cache');
@@ -1819,11 +1942,13 @@ async function startNewTree(promptText = '', maxTokens = 16){
   const ok = confirm(`Start a new tree (${label}) with model "${model}"?\nThis will call the OpenAI API.`);
   if (!ok) return;
 
+  setSource('calling');
   const key = await ensureApiKey();
-  if (!key) return;
+  if (!key) { setSource(null); return; }
 
   const data = await fetchCompletionAutoFit(promptText, maxTokens, key, model);
-  if (!data) return;
+  if (!data) { setSource(null); return; }
+  setSource('api', `(${maxTokens} tokens)`);
 
   await saveTreeRoot({
     id: data.id, model: data.model, promptText, promptTokens, maxTokens,
@@ -1951,6 +2076,7 @@ async function openEntryById(id){
     currentCompletionId = id;
     renderTokens(allTokens);
     promptsOverlay.classList.add('hidden');
+    setSource('history');
     showStatus('Loaded from history');
   }catch{ showStatus('Could not open the record'); }
 }
@@ -2095,8 +2221,10 @@ if (repairBtn) repairBtn.addEventListener('click', repairLinks);
    ze sweep cache a byla pripadne zkracena na pozadovanou delku. */
 function hitLabel(result, missMsg){
   if (!result.fromHistory) return missMsg;
-  const from = result.fromStore ? 'from the store' : result.fromSweep ? 'from the sweep cache' : null;
-  if (!from) return 'Loaded';
+  // A bare "Loaded" was the commonest case and the least informative one.
+  const from = result.fromStore ? 'from the store'
+             : result.fromSweep ? 'from the sweep cache'
+             : "from this browser's history";
   return result.truncatedFrom
     ? `Loaded ${from} (truncated from ${result.truncatedFrom})`
     : `Loaded ${from}`;
