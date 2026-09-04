@@ -295,3 +295,8 @@ body.tok-colour .token { background: var(--tc, transparent); }
 .sbar .sfield { display: inline-flex; align-items: center; gap: .35rem; }
 .sbar .sfield select, .sbar .sfield input[type=text] { max-width: 12rem; }
 .sbar .sfield input[type=text] { width: 8rem; }
+
+/* A pinned control the current view cannot use: it stays where you put it and
+   goes grey, rather than vanishing after you deliberately pinned it. */
+.sbar .sfield.dead { opacity: .42; }
+.sbar .sfield.dead, .sbar .sfield.dead * { cursor: not-allowed; }

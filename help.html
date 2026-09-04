@@ -290,10 +290,13 @@
       won. The strip lays them out in a fixed order rather than the order you ticked
       them, so the same choices look the same on two machines, and it wraps if you pin
       enough of them: that is your call.</p>
-    <p>A pinned control the current view has no use for stays hidden — <code>steps</code>
-      is a walk control, so it does not appear on the greedy view even when pinned.
-      Pinning says <em>where</em> a control goes, not that it applies. Like the palette,
-      the choice lives in localStorage rather than the address: a shared link should
+    <p>A pinned control the current view has no use for <b>stays where you put it and
+      goes grey</b>, with a title saying why — <code>ranked by</code> on the greedy
+      path with one result, for instance, because that path is argmax at every step and
+      there is no ranking to choose. In the panel such a control is hidden instead,
+      where it would only be clutter. Pinning says <em>where</em> a control goes, and
+      once you have said where, it should not vanish on you. Like the palette, the
+      choice lives in localStorage rather than the address: a shared link should
       reproduce the result, not impose someone else's chrome.</p>
     <p>The split is deliberate. The strip carries what is about <em>reading</em> what
       is already there; the panel carries decisions. The count on the right is

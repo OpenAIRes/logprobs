@@ -387,25 +387,36 @@ const ICON = {
     sel.innerHTML = allowed.map(([v, l]) => opt(v, l, effectiveSort())).join('');
   }
 
+  /* Why a control does not apply to the current view, or null when it does. A
+     reason rather than a boolean: a pinned control is shown disabled and has to
+     be able to say what is wrong. Vanishing from the strip after you deliberately
+     put it there is not an answer. */
+  function inapplicable() {
+    const v = state.view, one = String(state.top) === '1';
+    const notList = LISTY(v) ? null : `${v} is not a ranked list of strings`;
+    return {
+      sResultsWrap: notList,
+      sSortWrap: singleGreedy()
+        ? 'the greedy path is argmax at every step, so there is no ranking to choose'
+        : (v === 'completions' || v === 'greedy') ? null
+        : 'prefixes come out of a sum-ordered search — the ranking IS the search order',
+      sScopeWrap: SCOPED(v) ? null : notList,
+      sPromptWrap: v === 'greedy' ? null : 'only the greedy path starts from a prompt you give',
+      sPrefixWrap: RANKED(v) ? null : `${v} has no ranking to filter`,
+      sModelWrap: null,
+      sBaseWrap: LISTY(v) ? 'a base completion is what the grid and the walk work from' : null,
+      sStepsWrap: v === 'walk' ? null : 'steps belong to the walk',
+      sFwdWrap: v === 'walk' ? null : 'this belongs to the walk',
+      sExtendWrap: !LISTY(v) ? notList
+        : one ? 'one string is already shown in full' : null,
+      sRecWrap: v === 'prefixes' ? null
+        : 'only the trie search walks token by token, so only it can be restricted',
+      sEndsWrap: SCOPED(v) ? null : notList,
+    };
+  }
+
   function paintVisibility() {
-    const v = state.view;
-    el('sResultsWrap').hidden = !LISTY(v);
-    /* `ranked by` is shown only where it can do something. On the greedy view
-       with one result there is nothing to rank: the path is argmax at every step,
-       so all four criteria return the same record -- and a control that visibly
-       does nothing reads as a broken one. With more than one result it ranks the
-       siblings, and on a ranking with one result it decides WHICH one. */
-    el('sSortWrap').hidden = !((v === 'completions' || v === 'greedy') && !singleGreedy());
-    el('sScopeWrap').hidden = !SCOPED(v);
-    el('sBaseWrap').hidden = LISTY(v);
-    el('sStepsWrap').hidden = v !== 'walk';
-    el('sFwdWrap').hidden = v !== 'walk';
-    el('sExtendWrap').hidden = !LISTY(v) || String(state.top) === '1';
-    el('sRecWrap').hidden = v !== 'prefixes';
-    el('sEndsWrap').hidden = !SCOPED(v);
-    el('sPromptWrap').hidden = v !== 'greedy';
-    el('sPrefixWrap').hidden = !RANKED(v);
-    const view = VIEWS.find(([x]) => x === v);
+    const view = VIEWS.find(([x]) => x === state.view);
     el('sView').title = view ? view[2] : '';
   }
 
@@ -485,6 +496,7 @@ const ICON = {
     const on = new Set(pinned);
     const bar = host.querySelector('.sbar');
     const info = el('sInfo');
+    const why = inapplicable();
     for (const [id] of PINNABLE) {
       const node = el(id);
       if (!node) continue;
@@ -492,6 +504,16 @@ const ICON = {
       const inBar = node.parentElement === bar;
       if (wantBar && !inBar) bar.insertBefore(node, info);
       else if (!wantBar && inBar) panel.insertBefore(node, el('sAdv'));
+
+      /* A control the current view cannot use: hidden in the panel, where it
+         would be clutter, but on the strip it stays put and goes grey. You asked
+         for it to be there, so it is there -- and it says why it is unavailable
+         instead of disappearing. */
+      const dead = why[id];
+      node.hidden = node.dataset.forcedHidden === '1' || (!!dead && !wantBar);
+      node.classList.toggle('dead', !!dead && wantBar);
+      for (const f of node.querySelectorAll('select, input, button')) f.disabled = !!dead;
+      node.title = dead ? `Not available: ${dead}.` : '';
     }
     // Re-assert the order every time, so unpinning and pinning again does not
     // shuffle the strip.
@@ -654,7 +676,15 @@ const ICON = {
     const slot = el(where === 'status' ? 'sPageStatus' : 'sPageExtra');
     if (slot && node) slot.appendChild(node);
   }
-  function hideField(id) { const e = el(id); if (e) e.hidden = true; }
+  /* A page can take a control away for good -- the token browser has a model
+     select of its own. Marked, not merely hidden, because layout() recomputes
+     `hidden` on every repaint and would put it straight back. */
+  function hideField(id) {
+    const e = el(id);
+    if (!e) return;
+    e.dataset.forcedHidden = '1';
+    e.hidden = true;
+  }
 
   window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
                          adopt, hideField, landedOnId };
