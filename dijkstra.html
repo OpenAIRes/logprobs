@@ -39,12 +39,16 @@
      the ellipsis -- and takes the width it needs, so the table scrolls sideways
      rather than cutting every row off at the same place. */
   body.wide-rows .table { overflow-x: auto; }
+  /* --textw is measured once per render and shared by every row. Each .row is
+     its own grid, so `max-content` sized each one independently and the numeric
+     columns landed in a different place on every line. One width, set from the
+     widest string, puts them under each other. */
   body.wide-rows .thead, body.wide-rows .row {
-    grid-template-columns: 3rem max-content 3.5rem 6rem 6rem 5.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem;
     width: max-content; min-width: 100%;
   }
   body.wide-rows .has-sweep .thead, body.wide-rows .has-sweep .row {
-    grid-template-columns: 3rem max-content 3.5rem 6rem 6rem 5.5rem 10.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 10.5rem;
   }
   body.wide-rows .text { overflow: visible; text-overflow: clip; }
   .capnote { color: var(--ink-faint); font-size: .71875rem; padding-left: .3rem; }
@@ -110,6 +114,13 @@
   .tok {
     display: inline-block; padding: .02em .24em; margin: 0 1px 1px 0;
     border-radius: 3px; border-bottom: 2px solid transparent;
+  }
+  /* Reading mode: the chip padding and margin put a visible gap between every
+     token, so "Porchlight" read as "Por ch light" -- the separators were being
+     read as spaces. Gone here; a token boundary is a change of shade instead,
+     which is what the colour is for. */
+  body.wide-rows .tok {
+    padding: .02em 0; margin: 0; border-radius: 0;
   }
   .row.open .tok { cursor: pointer; }
   .row.open .tok:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
@@ -408,6 +419,22 @@ function devCell(e) {
   return `<div class="c-sweep">${badge}${mark}${(badge || mark) && rest ? ' ' : ''}${rest}</div>`;
 }
 
+/* The string column's width, measured from the widest row and then applied to
+   all of them. The property has to be cleared first: with it still set, every
+   cell is already clamped to the previous measurement and the new one would
+   only ever shrink. */
+function measureTextColumn() {
+  if (!(BAR.block && BAR.block('wide-rows'))) {
+    tableEl.style.removeProperty('--textw');
+    return;
+  }
+  tableEl.style.removeProperty('--textw');
+  const cells = [...listEl.querySelectorAll('.row > .text')];
+  if (!cells.length) return;
+  const w = Math.max(...cells.map(c => c.scrollWidth));
+  if (w > 0) tableEl.style.setProperty('--textw', w + 'px');
+}
+
 function buildRow(e) {
   const row = document.createElement('div');
   row.className = 'row';
@@ -528,6 +555,10 @@ function renderRows() {
   shownEl.textContent = `${slice.length}${avail} results`;
   shownEl.classList.toggle('filtered', !!q);
   tableEl.hidden = false;
+  /* After the table is shown, not before: [hidden] is display:none, so measuring
+     while it was still hidden read every cell as zero wide and the column width
+     was never set. */
+  measureTextColumn();
 }
 
 

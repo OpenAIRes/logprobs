@@ -290,6 +290,22 @@
         strings are on screen: view, results, ranked by, how complete, prompt,
         starts with, model, base, steps, extend, recovered tokens, endings.</td></tr>
     </table>
+    <h3>full text per row</h3>
+    <p>On by default. The string column stops being a fixed fraction of the width &mdash;
+      which is what forced the ellipsis &mdash; so the table scrolls sideways instead of
+      cutting every row at the same place. Its width is measured from the widest row and
+      then given to all of them, so <code>length</code>, <code>&Sigma; logprob</code> and
+      <code>mean</code> stay under each other; each row is its own grid, and letting each
+      size itself put the numbers in a different place on every line.</p>
+    <p>Token boundaries lose their padding here. With it, <em>Porchlight</em> read as
+      &ldquo;Por ch light&rdquo; &mdash; the separators were being read as spaces. In this
+      mode adjacent tokens touch exactly, and a boundary is a change of shade instead,
+      which is what <b>colour</b> is for.</p>
+    <p>If the list contains a row at the 4096-token ceiling, <b>every</b> row is cut to
+      its first 20 tokens with &ldquo;&hellip; N more&rdquo;. All of them, not just the
+      long one: rows cut to different lengths cannot be compared by eye, which is what
+      the column is for.</p>
+
     <h3>databases</h3>
     <p>The six record files are two kinds of thing, so they are offered as two groups:
       <b>history</b> — calls made by hand, 411 records — and <b>sweeps</b> — exhaustive

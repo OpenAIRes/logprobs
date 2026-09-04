@@ -317,4 +317,7 @@ body.tok-colour .token { background: var(--tc, transparent); }
 /* Page blocks, switched by classes the bar puts on <body>. Hidden by default
    means the rule is the absence of the class, so nothing has to run for the
    minimal case to be the minimal case. */
-body:not(.show-meta) .meta { display: none !important; }
+/* The whole header, not only the counts block: the title, the blurb explaining
+   the view and the route the data came from are the same kind of thing -- an
+   explanation of what you are looking at, which the minimal case does without. */
+body:not(.show-meta) header { display: none !important; }
