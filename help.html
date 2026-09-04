@@ -278,6 +278,14 @@
         probability the model gave it. Off by default.</td></tr>
       <tr><td>sun or moon</td><td><b>palette</b> — light or dark. The glyph shows
         the one you are in; clicking gives the other.</td></tr>
+      <tr><td><code>json</code></td><td><b>the raw record</b> &mdash; off by default,
+        available under <em>advanced</em>. Opens the whole call as it was stored:
+        request, tokens, log-probabilities, <code>top_logprobs</code>, usage. It
+        belongs to <em>one</em> call, so on a list it works once you have opened a
+        row, and says so until then. The 4096-token record is 2.9&nbsp;MB formatted,
+        which stalls a tab, so the block shows the first 200&nbsp;kB, states exactly
+        how much it left out, and links to <code>/api/record</code> for the rest
+        &mdash; the browser renders JSON itself.</td></tr>
       <tr><td>gear</td><td><b>settings</b> — everything that decides <em>which</em>
         strings are on screen: view, results, ranked by, how complete, prompt,
         starts with, model, base, steps, extend, recovered tokens, endings.</td></tr>

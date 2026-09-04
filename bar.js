@@ -139,6 +139,7 @@ const ICON = {
     ['sExtendWrap', 'rows — extend'],
     ['sRecWrap', 'tokens — recovered'],
     ['sEndsWrap', 'endings'],
+    ['sJsonWrap', 'json — the raw record'],
   ];
   const PINNED_KEY = 'bar_pinned';
 
@@ -321,6 +322,9 @@ const ICON = {
       <div class="sfield" id="sEndsWrap"><span>endings</span>
         <span class="sends" id="sEnds"></span>
       </div>
+      <div class="sfield" id="sJsonWrap"><span>record</span>
+        <span><button type="button" id="sJson">json</button></span>
+      </div>
       <details class="sadv" id="sAdv"><summary>advanced — what shows on the strip</summary>
         <p class="sadvhint">Ticked controls sit on the visible strip instead of in
           here. Nothing is duplicated: the control moves. Untick everything for the
@@ -342,7 +346,8 @@ const ICON = {
         <span class="sep">·</span>
         <a href="/index.html">the full settings page, with the counts</a>
       </div>
-    </div>`;
+    </div>
+    <div class="sjson" id="sJsonOut" hidden></div>`;
 
   const el = id => document.getElementById(id);
 
@@ -350,6 +355,52 @@ const ICON = {
      hoisted -- leaving it further down was a ReferenceError waiting for whichever
      listener fired first. */
   const panel = el('sPanel'), more = el('sMore');
+
+  /* Which record `json` should show. Asked for on demand rather than pushed at
+     us: the token browser assigns its current id in eight different places, and
+     hooking all eight is eight chances to miss one. */
+  let recordSourceFn = null;
+  function recordId() {
+    try { return (recordSourceFn && recordSourceFn()) || null; } catch { return null; }
+  }
+  function provideRecord(fn) { recordSourceFn = fn; repaint(); }
+
+  /* Pretty-printing the whole thing is not always sane: the 4096-token record is
+     2.9 MB formatted, and pouring that into a <pre> stalls the tab. So the block
+     shows the head and says exactly how much it left out, with the untruncated
+     route one click away -- the browser renders JSON itself. */
+  const JSON_CAP = 200000;
+  let jsonOpen = false;
+  async function showJson() {
+    const box = el('sJsonOut');
+    const id = recordId();
+    if (!id) { box.hidden = true; return; }
+    jsonOpen = !jsonOpen;
+    el('sJson').classList.toggle('on', jsonOpen);
+    if (!jsonOpen) { box.hidden = true; return; }
+    box.hidden = false;
+    box.textContent = 'loading…';
+    try {
+      const res = await fetch('/api/record?id=' + encodeURIComponent(id), { cache: 'no-store' });
+      const rec = await res.json();
+      const text = JSON.stringify(rec, null, 2);
+      const choice = (rec.choices || [{}])[0] || {};
+      const n = (((choice.logprobs || {}).tokens) || []).length;
+      const head = `${id} · ${n} generated tokens · ${(text.length / 1024).toFixed(0)} kB formatted`;
+      const cut = text.length > JSON_CAP;
+      box.innerHTML = `<div class="sjsonhead">${head}`
+        + ` · <a href="/api/record?id=${encodeURIComponent(id)}" target="_blank" rel="noopener">open the whole thing</a></div>`
+        + `<pre></pre>`;
+      box.querySelector('pre').textContent = cut
+        ? text.slice(0, JSON_CAP)
+          + `\n\n… ${((text.length - JSON_CAP) / 1024).toFixed(0)} kB not shown; `
+          + 'use the link above for the rest.'
+        : text;
+    } catch (err) {
+      box.textContent = 'could not read the record: ' + err.message;
+    }
+  }
+  el('sJson').addEventListener('click', showJson);
 
   // ---------------------------------------------------------------- scope stepper
 
@@ -439,6 +490,11 @@ const ICON = {
       sRecWrap: v === 'prefixes' ? null
         : 'only the trie search walks token by token, so only it can be restricted',
       sEndsWrap: SCOPED(v) ? null : notList,
+      /* The raw record is a property of ONE call. A list has many, so the button
+         works there only once a row is opened -- the page says which one that is
+         through provideRecord(). */
+      sJsonWrap: recordId() ? null
+        : 'no single record on screen — open one result, or a row of a list',
     };
   }
 
@@ -720,5 +776,5 @@ const ICON = {
   }
 
   window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
-                         adopt, hideField, landedOnId };
+                         adopt, hideField, provideRecord, landedOnId };
 })();

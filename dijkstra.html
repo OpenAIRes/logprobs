@@ -234,6 +234,10 @@ const errEl   = document.getElementById('err');
    address. This page reads them and renders; it owns no control of its own, so
    there is nothing left that can disagree with what the bar says. */
 const BAR = window.settingsBar || { state: {} };
+/* The row the reader has expanded, which is what `json` in the bar reports on.
+   A list has no single record until one is opened. */
+let openRowId = null;
+if (BAR.provideRecord) BAR.provideRecord(() => openRowId);
 const S = BAR.state;
 const listOf = v => (v ? String(v).split(',') : []);
 /* Deviation cost is the greedy criterion and only exists there; a ranking has no
@@ -441,6 +445,10 @@ function buildRow(e) {
     if (ev.target.closest('.detail')) return;   // don't collapse when using the panel
     const opening = !row.classList.contains('open');
     row.classList.toggle('open', opening);
+    // An open row is the one record on screen, so the bar's `json` button has
+    // something to show. Closing it takes that away again.
+    openRowId = opening ? (e.id || null) : null;
+    if (BAR.repaint) BAR.repaint();
     if (opening) renderRowHint(detailEl);
     else {
       detailEl.classList.add('hide');

@@ -329,7 +329,13 @@ const tokensEl = document.getElementById('tokens');
 const loadingEl = document.getElementById('loading');
 /* One place that clears it, called on every path out of loadTokens. Removing it
    in one branch only is how it came to sit on screen permanently. */
-function doneLoading() { if (loadingEl) loadingEl.remove(); }
+function doneLoading() {
+  if (loadingEl) loadingEl.remove();
+  /* The record arrives asynchronously, so at the time the bar first painted
+     itself currentCompletionId was still null and its `json` button read as
+     unavailable. This is the one place that means "a record is now on screen". */
+  if (window.settingsBar && window.settingsBar.repaint) window.settingsBar.repaint();
+}
 const tooltipEl = document.getElementById('tooltip');
 const exportBtn = document.getElementById('exportBtn');
 const clearBtn = document.getElementById('clearBtn');const continueBtn4096 = document.getElementById('continueBtn4096');
@@ -2130,6 +2136,9 @@ sweepUpdateCount();
   const status = document.getElementById('statusArea');
   if (toolbar) { bar.adopt(toolbar, 'extra'); bar.hideField('sModelWrap'); }
   if (status) bar.adopt(status, 'status');
+  /* Asked for on demand: currentCompletionId is assigned in eight places here,
+     and pushing it from all eight is eight chances to miss one. */
+  if (bar.provideRecord) bar.provideRecord(() => currentCompletionId);
   const header = document.getElementById('header');
   if (header && !header.children.length) header.hidden = true;
 })();

@@ -300,3 +300,13 @@ body.tok-colour .token { background: var(--tc, transparent); }
    goes grey, rather than vanishing after you deliberately pinned it. */
 .sbar .sfield.dead { opacity: .42; }
 .sbar .sfield.dead, .sbar .sfield.dead * { cursor: not-allowed; }
+
+/* The raw record, opened by the bar's  button. Its own block rather than a
+   dialog: you read it next to the string it belongs to. */
+.sjson { margin: 0 0 1rem; padding: .6rem .8rem;
+  background: var(--chip); border: 1px solid var(--line); border-radius: 8px; }
+.sjsonhead { font-size: .78125rem; color: var(--ink-faint); margin-bottom: .4rem;
+  font-family: ui-monospace, Menlo, monospace; }
+.sjson pre { margin: 0; max-height: 26rem; overflow: auto;
+  font: 12px/1.45 ui-monospace, Menlo, monospace; color: var(--ink-dim);
+  white-space: pre; }
