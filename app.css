@@ -59,7 +59,6 @@
   --prompt-bg: #eef1f5;   /* the given prompt: no logprobs, nothing to click */
   --prompt-bg-hover: #e2e8f0;
   --prompt-ink: #4a5568;
-  --prompt-line: #94a3b8;
   --best-bg: #dfe6e9;     /* the argmax row in the tooltip */
 }
 
@@ -92,7 +91,6 @@
     --prompt-bg: #2b303a;
     --prompt-bg-hover: #343a46;
     --prompt-ink: #b6c0cf;
-    --prompt-line: #5c6675;
     --best-bg: #2c3a3c;
   }
 }
@@ -121,7 +119,6 @@
     --prompt-bg: #2b303a;
     --prompt-bg-hover: #343a46;
     --prompt-ink: #b6c0cf;
-    --prompt-line: #5c6675;
     --best-bg: #2c3a3c;
 }
 

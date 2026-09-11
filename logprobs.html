@@ -47,9 +47,9 @@
 .newline.only-nl:hover::after { background: var(--hi); }
     .newline:hover { background: var(--hi); }
     .selected   { background: var(--sel); }
-    /* zadany prompt: nema logprobs, takze neni na co klikat */
-    .token.is-prompt { background: var(--prompt-bg); color: var(--prompt-ink);
-                       border-bottom: 1px dotted var(--prompt-line); }
+    /* zadany prompt: nema logprobs, takze neni na co klikat. Sede pozadi to
+       rekne samo; teckovane podtrzeni pod nim bylo druhe oznaceni tehoz. */
+    .token.is-prompt { background: var(--prompt-bg); color: var(--prompt-ink); }
     .token.is-prompt:hover { background: var(--prompt-bg-hover); }
 
     #tooltip {
