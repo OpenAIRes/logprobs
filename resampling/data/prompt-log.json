@@ -1,0 +1,4115 @@
+[
+  {
+    "id": "seed-resampling-prompt",
+    "type": "seed",
+    "createdAt": "1970-01-01T00:00:00.000Z",
+    "mode": "seed",
+    "backend": null,
+    "model": null,
+    "parentInstruction": null,
+    "parentPrompt": null,
+    "template": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "run": {
+      "id": "seed-run",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "request": null,
+    "response": null,
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+        "rawPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+        "finishReason": null,
+        "logprob": null,
+        "probability": null,
+        "parentPrompt": null,
+        "parentInstruction": null
+      }
+    ]
+  },
+  {
+    "id": "0edaac3c-484a-42f6-8ea9-65d4ca1d5014",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:35:35.783Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_08facf24b8e543a0006a169ec1b23081a191492489d93ba933",
+        "object": "response",
+        "created_at": 1779867329,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867334,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_08facf24b8e543a0006a169ec2b4dc81a18d38f6afb01ef42d",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_08facf24b8e543a0006a169ec617ec81a19708d76b65006914",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Paraphrase the given instruction while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 203,
+          "output_tokens_details": {
+            "reasoning_tokens": 176
+          },
+          "total_tokens": 247
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Paraphrase the given instruction while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-0edaac3c-484a-42f6-8ea9-65d4ca1d5014",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "ab813d61-c759-4eb7-a730-b3c630394aa1",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:36:49.612Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_088dd0dd284371cb006a169f0bee1881949782c57568b97541",
+        "object": "response",
+        "created_at": 1779867403,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867408,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_088dd0dd284371cb006a169f0d1a808194b6bab2de2d59164d",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_088dd0dd284371cb006a169f0fe8588194a3e954152ebee916",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Rewrite the following instruction using different wording while preserving its original meaning."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 149,
+          "output_tokens_details": {
+            "reasoning_tokens": 130
+          },
+          "total_tokens": 193
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Rewrite the following instruction using different wording while preserving its original meaning.",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-ab813d61-c759-4eb7-a730-b3c630394aa1",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "0da4454f-ba38-452a-a158-b16fb0a299dd",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:37:55.919Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_0d0031f65f70af67006a169f4eb0b08197a16da753f20021b6",
+        "object": "response",
+        "created_at": 1779867470,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867474,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0d0031f65f70af67006a169f4fdb3c81978950ab1ede23610e",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_0d0031f65f70af67006a169f52445c8197aab0bb135ac1a6b5",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Paraphrase the given instruction while preserving its original meaning."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 155,
+          "output_tokens_details": {
+            "reasoning_tokens": 137
+          },
+          "total_tokens": 199
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Paraphrase the given instruction while preserving its original meaning.",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-0da4454f-ba38-452a-a158-b16fb0a299dd",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "0c111397-dec3-4c59-b4bd-a6678227d5cb",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:39:33.519Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_0a303b476cd4699e006a169fb1299c819da1c9a3289d302ac7",
+        "object": "response",
+        "created_at": 1779867569,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867572,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0a303b476cd4699e006a169fb1d254819db20669e36218f234",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_0a303b476cd4699e006a169fb3c644819dab92f042578a5b2f",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Rewrite the following instruction in a different way while preserving its original meaning."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 107,
+          "output_tokens_details": {
+            "reasoning_tokens": 87
+          },
+          "total_tokens": 151
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Rewrite the following instruction in a different way while preserving its original meaning.",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-0c111397-dec3-4c59-b4bd-a6678227d5cb",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "5ce66d95-9d37-43b8-98a1-c9f3bece6631",
+    "type": "openai_resample",
+    "createdAt": "2026-05-27T07:40:21.987Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_0864d1d6b47ac144006a169fe08c7c81a3b8bf95036e708d46",
+        "object": "response",
+        "created_at": 1779867616,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1779867620,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0864d1d6b47ac144006a169fe195bc81a393191510c61bb235",
+            "type": "reasoning",
+            "summary": []
+          },
+          {
+            "id": "msg_0864d1d6b47ac144006a169fe4217081a3b7c8a7ffda254d21",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Rewrite the following instruction using different wording while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 44,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 150,
+          "output_tokens_details": {
+            "reasoning_tokens": 122
+          },
+          "total_tokens": 194
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Rewrite the following instruction using different wording while preserving its original meaning.\n\nInput: [INSTRUCTION]  \nOutput:",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ],
+    "run": {
+      "id": "legacy-5ce66d95-9d37-43b8-98a1-c9f3bece6631",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "backend": "responses"
+  },
+  {
+    "id": "6825a858-6a9c-4244-9444-5b9f5bccd723",
+    "type": "openai_resample_error",
+    "createdAt": "2026-06-22T10:09:47.846Z",
+    "mode": "custom",
+    "model": "gpt-5.5",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "61c08cb4-c58e-4e22-aeb7-3682918729c4",
+      "requestedCount": 5,
+      "index": 1,
+      "total": 5
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "temperature": 0
+      }
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Unsupported parameter: 'temperature' is not supported with this model.",
+          "type": "invalid_request_error",
+          "param": "temperature",
+          "code": null
+        }
+      }
+    },
+    "generatedPrompts": [],
+    "backend": "responses"
+  },
+  {
+    "id": "b2408cf2-872e-4de2-b248-20619531b255",
+    "type": "openai_resample_error",
+    "createdAt": "2026-06-22T10:32:07.873Z",
+    "mode": "meta",
+    "model": "gpt-5.5",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "21abb263-bf9c-41f8-aa15-fb0c62387c55",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "max_output_tokens": 1
+      }
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "Invalid 'max_output_tokens': integer below minimum value. Expected a value >= 16, but got 1 instead.",
+          "type": "invalid_request_error",
+          "param": "max_output_tokens",
+          "code": "integer_below_min_value"
+        }
+      }
+    },
+    "generatedPrompts": [],
+    "backend": "responses"
+  },
+  {
+    "id": "9015796a-e7e4-4762-917a-5d46e5472805",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:03.156Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "658f4f54-231d-448d-8c14-61ee38afc99b",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoI6Vu3yEkM7f5V3eyogCTn9Vz4K",
+        "object": "text_completion",
+        "created": 1787913602,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a different version of the given instruction while maintaining its intended meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a different version of the given instruction while maintaining its intended meaning.",
+        "rawPrompt": " Create a different version of the given instruction while maintaining its intended meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "c3872e2a-1811-4587-8094-6e5e6e61ddf6",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:23.137Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "79326b1a-1242-4a71-8e99-aad251d4d20c",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoIRz8WdqhCDG2UaghgNNhHUftG7",
+        "object": "text_completion",
+        "created": 1787913623,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Generate a different version of the instruction without changing its meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 12,
+          "total_tokens": 50
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a different version of the instruction without changing its meaning.",
+        "rawPrompt": " Generate a different version of the instruction without changing its meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "0794c077-45e3-4e1b-b0c3-4c8c5d09e2f6",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:30.138Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "2d952576-bd5a-42ce-9774-ea506a3d4d70",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoIYePfGX0hZ57AwOyoDcadNWp3R",
+        "object": "text_completion",
+        "created": 1787913630,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Generate a different version of the given instruction while maintaining its meaning. ",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a different version of the given instruction while maintaining its meaning.",
+        "rawPrompt": " Generate a different version of the given instruction while maintaining its meaning. ",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "020d06ec-8ebb-46a7-913c-c428ba61c566",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:40:38.686Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "fa59fed3-5e82-4a83-9dcd-21985d1058b9",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoIg3N4B2aGIcryCKW7XlO8cD0zg",
+        "object": "text_completion",
+        "created": 1787913638,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a modified version of the given instruction while maintaining its intended meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a modified version of the given instruction while maintaining its intended meaning.",
+        "rawPrompt": " Create a modified version of the given instruction while maintaining its intended meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "9233c7ad-2e8e-4562-98f7-fc4cf580d455",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T10:41:49.611Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "e4aecc35-108d-4047-9370-8ef91ea9ee37",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHoJpIDRbC8nH9Dctp0mdnON8wIC7",
+        "object": "text_completion",
+        "created": 1787913709,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a different version of the given instruction while maintaining its semantic meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a different version of the given instruction while maintaining its semantic meaning.",
+        "rawPrompt": " Create a different version of the given instruction while maintaining its semantic meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "db504347-8c24-418c-b9d9-ec03d969944a",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T12:41:00.494Z",
+    "mode": "custom",
+    "backend": "responses",
+    "model": "gpt-5.5",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "be04a0ab-1104-44ce-93c1-7e47cf394c1f",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "responses",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/responses",
+      "body": {
+        "model": "gpt-5.5",
+        "input": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:"
+      },
+      "backend": "responses"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "resp_088676f4fd7d7e03006a9181db3d0487d1866ec0bc14762d09",
+        "object": "response",
+        "created_at": 1787920859,
+        "status": "completed",
+        "background": false,
+        "billing": {
+          "payer": "openai"
+        },
+        "completed_at": 1787920860,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": null,
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "model": "gpt-5.5-2026-04-23",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_088676f4fd7d7e03006a9181dbd5f887d1afa0f7fd455a716b",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqkYHcXH9SJ0b-uGjrBIFDK4eCsHbD1JhGl5R2ibzvH466zsQAhb5KvFPHT1wBUrF4kQGiWxFnVbygkLkLd5_wFdOO35yb2WAIT_3wmQtl1b89t7HAEk3EMwdSLfSzI6GWqnaDnQUANEG89W-n9EQp6VCkr4jxhbmpZKQwofLYLcJxdSBqVFLIy11XYrC3amNNQOdeIwH4220iJXN-EGYm1cfcm_NmJeoNxLV2e5o5rfLkOL94j8NTDsX1EQFcSWrqdmU0yjk0CXaUejDAkn0RiguulrBeBTDEVfR1d-I6sxBWhYLgyBCZPsZ5sU404tJX_6iwwdVdiJ3aM813jWeuXm1_ERwxKpOXMMkentcIbl4OQcDYnyC4BOt7KRz69MWXppj_mtG-hAMi3y6fUExEPbw-d74FgCmGMFMrQ_5Mek1IG6PfbeVMnJUeS443OcZJ4eF5K5STJA5ihi27bvXA7DMqz_ECBOnlJPlk8YnLAm2kz1T0GYkTIUi9yM6BkQUgTKfrUYgP22-1YjDakwRzXHXrmj2hkkw4XpuUWmxsLDWsIWhKfy3yj61uyK_0MXTu9Lun3Yu-pK4RTk2gG_F3J-2ClHqci9At3oWKU3aZk3apgw46AS_QE-ccnDYvonTE0BVaM5Bs25aNXJJyWOKlRI4C-_VLImqC7B-Y6-NzX953b9ED6K977knRPRERzXlrfjQv-TBu5K1rGBsq1XytN1D__1XhaHe1eUaAesq9JHqCeMWc14UOvvt_Rndld6eG0JzcUmQJSXTC4gbyuLKLIbUH3xU-DPzjyylKTt0lAvwfncFDr0VbHUiLzoA-YvyfjvDJqsj-SG6JIsezSwMBwQpTG9FlzIcSYEzX_Y-NOAFXR3V3z3uZR87eAq6EvX0x10Epd2FMPE2GR6O3120wIyJNDMQtF1nkMKaXxeTP539Y_KSr8oO_76Hv8-NgezPT88U0kbJNR1kthE05DAARhPu9oThmwDi960KlDWp0GrpEJkXzt94uRxhMQRM4jTaoAZiNXQKclGhpE_LbW-ei7CRM18hGhjBr5mowJkP3UshqGGJSFfNODWoylKat35u7JPnzkRHM3poiaIbW-KKpMf4TVGhkBN_WDcsO4qjNnOPGMIUrDgQ0tbKG82YdYL2fnmOw0wTrPGblx0I4oHJfibgWp6lF8cXJGQqcwJvlV28iwLOayTVAcsV6W1PnaebFojzwfSxK9J92vMUFeGF-dJsoMiG-n7QYXL8sO_Gmu1GD24lW7Zqg-pRj9P4-Z5QUAWiO91RwGI4KLcNyXv3uavb8mojWu0fvmuhTK5wObwtSm77NxGIex0dTAGsyNLkA5m6WfL5W7QQi0UTSfCQ3kWtOaI6H8SdTTjodQYYyz9BkCxRJTLGyzlVefw7-x0yyVwCN",
+            "summary": []
+          },
+          {
+            "id": "msg_088676f4fd7d7e03006a9181dc4df887d1b35495abfbb7af88",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Provide the opposite meaning of the word."
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "current_turn",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 31,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 47,
+          "output_tokens_details": {
+            "reasoning_tokens": 33
+          },
+          "total_tokens": 78
+        },
+        "user": null,
+        "metadata": {}
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Provide the opposite meaning of the word.",
+        "rawPrompt": "Provide the opposite meaning of the word.",
+        "finishReason": "completed",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      }
+    ]
+  },
+  {
+    "id": "8abf6d42-09aa-43e0-b978-948058b625fa",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T12:41:03.955Z",
+    "mode": "custom",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "d35bfb23-82a1-4407-8d59-01535278142e",
+      "requestedCount": 3,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 3
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "n": 3,
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHqBDDbYmHeJ80uHLWSKdeSUSs8hE",
+        "object": "text_completion",
+        "created": 1787920863,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " record the opposite of the term.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          },
+          {
+            "text": " record the opposite of the term.",
+            "index": 1,
+            "logprobs": null,
+            "finish_reason": "stop"
+          },
+          {
+            "text": " record the opposite of the term.",
+            "index": 2,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 25,
+          "completion_tokens": 21,
+          "total_tokens": 46
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "record the opposite of the term.",
+        "rawPrompt": " record the opposite of the term.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "record the opposite of the term.",
+        "rawPrompt": " record the opposite of the term.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "record the opposite of the term.",
+        "rawPrompt": " record the opposite of the term.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      }
+    ]
+  },
+  {
+    "id": "eb0c3410-4d6c-4223-8a4c-70879ba0395e",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:27:19.817Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "1db6acf4-582d-4714-a33b-c3ae553e13ec",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHueEGOQF68JqKvPeZd0It3SlZhTJ",
+        "object": "text_completion",
+        "created": 1787938038,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Generate a different version of the given instruction without changing the intended meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a different version of the given instruction without changing the intended meaning.",
+        "rawPrompt": " Generate a different version of the given instruction without changing the intended meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "02fa0621-895d-43f2-9428-5284055108c5",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:27:42.354Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "a54964ae-d434-4251-b4ce-24e657024dd6",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHuebTiGX4o4rPvcK4JBTJSAzUjWJ",
+        "object": "text_completion",
+        "created": 1787938061,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Generate a modified version of the given instruction without changing its meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 13,
+          "total_tokens": 51
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a modified version of the given instruction without changing its meaning.",
+        "rawPrompt": " Generate a modified version of the given instruction without changing its meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "2fe55a4f-ea82-4113-822f-18c436539685",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:27:48.438Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "3a941ae4-40c8-41f2-963c-56edd7cdfd83",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHuehtUqUlV9t2woeSzJoaY9a7lQC",
+        "object": "text_completion",
+        "created": 1787938067,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a version of the provided instruction while maintaining its semantic meaning. ",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a version of the provided instruction while maintaining its semantic meaning.",
+        "rawPrompt": " Create a version of the provided instruction while maintaining its semantic meaning. ",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "9babcb6e-8424-4585-8ee3-65ec6a8e7ed3",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:27:54.143Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "7e87f833-d8d2-42f9-9fa8-8b8b4b57cb79",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHuen5W2xln0vvUxRBGz9DTldlpTv",
+        "object": "text_completion",
+        "created": 1787938073,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a variation of the given instruction while maintaining the same semantic meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a variation of the given instruction while maintaining the same semantic meaning.",
+        "rawPrompt": " Create a variation of the given instruction while maintaining the same semantic meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "d9a8adbd-cd56-478c-a86a-19175d1b63ad",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:28:01.735Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "run": {
+      "id": "8cb828da-7c25-4ba1-9647-17c37024582f",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHueuQRy5gjFhQADnqu0ImqkLwoot",
+        "object": "text_completion",
+        "created": 1787938080,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Generate a version of the given instruction while maintaining the original meaning.",
+            "index": 0,
+            "logprobs": null,
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 13,
+          "total_tokens": 51
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Generate a version of the given instruction while maintaining the original meaning.",
+        "rawPrompt": " Generate a version of the given instruction while maintaining the original meaning.",
+        "finishReason": "stop",
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  },
+  {
+    "id": "e5d1ebbe-e226-4c95-88e9-1224669fe67d",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:42:57.481Z",
+    "mode": "custom",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "a29b00ff-abb7-4758-b316-b5a9bf503e1b",
+      "requestedCount": 2,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 2
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "n": 2,
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "logprobs": 5
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHutNQfm6OraFLpiWt8ouJMUQBINm",
+        "object": "text_completion",
+        "created": 1787938977,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " write the opposite of the given term.",
+            "index": 0,
+            "logprobs": {
+              "tokens": [
+                " write",
+                " the",
+                " opposite",
+                " of",
+                " the",
+                " given",
+                " term",
+                "."
+              ],
+              "token_logprobs": [
+                -2.1141713,
+                -0.0905405,
+                -0.020443432,
+                -0.106914386,
+                -0.00034368722,
+                -0.40305868,
+                -0.8698501,
+                -0.05419878
+              ],
+              "top_logprobs": [
+                {
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " please": -2.7030823
+                },
+                {
+                  " the": -0.0905405,
+                  " down": -2.94974,
+                  " a": -3.8973565,
+                  " out": -5.5787187,
+                  " an": -5.604573
+                },
+                {
+                  " opposite": -0.020443432,
+                  " word": -3.9194741,
+                  " opposing": -9.376081,
+                  " ant": -9.486124,
+                  " term": -9.62977
+                },
+                {
+                  " of": -0.106914386,
+                  " meaning": -2.3776433,
+                  " word": -5.1415005,
+                  " term": -7.3081913,
+                  "/": -7.56847
+                },
+                {
+                  " the": -0.00034368722,
+                  " this": -8.774908,
+                  " that": -9.874304,
+                  "\n": -10.050661,
+                  " \"": -10.632544
+                },
+                {
+                  " given": -0.40305868,
+                  " word": -1.6062905,
+                  " term": -2.1068418,
+                  " specified": -5.013828,
+                  " provided": -6.5010295
+                },
+                {
+                  " word": -0.5435218,
+                  " term": -0.8698501,
+                  " vocabulary": -8.79561,
+                  " expression": -9.845255,
+                  "\n": -11.142273
+                },
+                {
+                  ".": -0.05419878,
+                  ".\n": -2.9879107,
+                  " ": -7.191995,
+                  "<|endoftext|>": -7.298597,
+                  ".\n\n": -7.6998916
+                }
+              ],
+              "text_offset": [
+                132,
+                138,
+                142,
+                151,
+                154,
+                158,
+                164,
+                169
+              ]
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "text": " provide the opposite of the given term.",
+            "index": 1,
+            "logprobs": {
+              "tokens": [
+                " provide",
+                " the",
+                " opposite",
+                " of",
+                " the",
+                " given",
+                " term",
+                "."
+              ],
+              "token_logprobs": [
+                -1.500232,
+                -0.06587282,
+                -0.6258032,
+                -0.22551794,
+                -0.0062009734,
+                -0.6372323,
+                -0.30705348,
+                -0.057965133
+              ],
+              "top_logprobs": [
+                {
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " please": -2.7030823
+                },
+                {
+                  " the": -0.06587282,
+                  " an": -3.4125793,
+                  " a": -4.128979,
+                  " me": -4.504378,
+                  " ant": -6.5757604
+                },
+                {
+                  " opposite": -0.6258032,
+                  " ant": -0.84470385,
+                  " word": -4.2209587,
+                  " opposing": -5.4058056,
+                  " contrary": -5.587654
+                },
+                {
+                  " of": -0.22551794,
+                  " meaning": -1.9396122,
+                  " term": -3.7851589,
+                  " word": -4.370829,
+                  " for": -4.6850896
+                },
+                {
+                  " the": -0.0062009734,
+                  " this": -6.4792633,
+                  " said": -6.5717773,
+                  " word": -7.6260185,
+                  " a": -7.7949524
+                },
+                {
+                  " given": -0.6372323,
+                  " term": -1.1532273,
+                  " word": -2.6108155,
+                  " specified": -2.9871774,
+                  " following": -5.1831784
+                },
+                {
+                  " term": -0.30705348,
+                  " word": -1.3604821,
+                  " vocabulary": -5.648551,
+                  " expression": -5.8742666,
+                  " terminology": -8.175807
+                },
+                {
+                  ".": -0.057965133,
+                  ".\n": -3.300969,
+                  "<|endoftext|>": -4.7207403,
+                  " ": -5.4300547,
+                  "\n": -6.1254854
+                }
+              ],
+              "text_offset": [
+                132,
+                140,
+                144,
+                153,
+                156,
+                160,
+                166,
+                171
+              ]
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 25,
+          "completion_tokens": 16,
+          "total_tokens": 41
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "write the opposite of the given term.",
+        "rawPrompt": " write the opposite of the given term.",
+        "finishReason": "stop",
+        "logprob": -3.65952086522,
+        "probability": 0.02574484502236397,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "provide the opposite of the given term.",
+        "rawPrompt": " provide the opposite of the given term.",
+        "finishReason": "stop",
+        "logprob": -3.4258778464,
+        "probability": 0.03252072025776625,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      }
+    ]
+  },
+  {
+    "id": "731e80c5-e94f-473d-a20e-f6bfd1cbd11a",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:52:42.892Z",
+    "mode": "custom",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "23973d9b-9f48-41ab-89c4-7a15a8c0f8d8",
+      "requestedCount": 2,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 2
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "n": 2,
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "logprobs": 20
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHv2ov3Y5zWjvuxyCdivN186KYmR6",
+        "object": "text_completion",
+        "created": 1787939562,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": "provide the antonym of the given word.",
+            "index": 0,
+            "logprobs": {
+              "tokens": [
+                "provide",
+                " the",
+                " ant",
+                "onym",
+                " of",
+                " the",
+                " given",
+                " word",
+                "."
+              ],
+              "token_logprobs": [
+                -9999,
+                -0.054396603,
+                -0.8022783,
+                -0.055454914,
+                -0.59672344,
+                -0.022609107,
+                -0.37653166,
+                -0.5459949,
+                -0.101698935
+              ],
+              "top_logprobs": [
+                {
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " please": -2.7030823,
+                  " enter": -2.848777,
+                  " produce": -3.3562005,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " the": -0.054396603,
+                  " an": -3.642888,
+                  " a": -4.5061274,
+                  " me": -4.549323,
+                  " ant": -6.0695696,
+                  " ": -7.8068323,
+                  " th": -8.159183,
+                  " t": -8.196425,
+                  " us": -8.247945,
+                  " opposite": -8.618249,
+                  " to": -9.0227,
+                  "/write": -9.029094,
+                  "\n": -9.22992,
+                  " word": -9.256318,
+                  " synonym": -9.441878,
+                  "the": -9.538072,
+                  " instruction": -9.74969,
+                  " instructions": -9.830712,
+                  " another": -9.8904505,
+                  " with": -9.963098
+                },
+                {
+                  " ant": -0.8022783,
+                  " opposite": -0.748615,
+                  " word": -3.3573759,
+                  " opposing": -4.9071484,
+                  " contrary": -4.979492,
+                  " converse": -5.5485535,
+                  " contrasting": -5.5937443,
+                  " inverse": -5.6056595,
+                  " term": -5.7321663,
+                  " reverse": -5.829708,
+                  " synonym": -6.475708,
+                  " counter": -7.23123,
+                  " opposition": -7.7086983,
+                  " contradictory": -7.7198105,
+                  " counterpart": -7.722864,
+                  " corresponding": -7.7304554,
+                  " contrast": -7.870283,
+                  " negative": -7.8906994,
+                  " oppos": -8.0733795,
+                  " polar": -8.074106
+                },
+                {
+                  "onym": -0.055454914,
+                  "onyms": -2.9452388,
+                  "o": -7.9511914,
+                  "ony": -8.322982,
+                  "on": -8.480937,
+                  "onymous": -8.975484,
+                  "ynom": -9.758517,
+                  "<|endoftext|>": -9.758994,
+                  "ip": -10.3961115,
+                  "yn": -10.433868,
+                  "in": -10.866533,
+                  "ith": -10.907008,
+                  "y": -10.994385,
+                  "ym": -11.114975,
+                  "nym": -11.287222,
+                  "om": -11.410652,
+                  "omy": -11.590002,
+                  "ton": -12.294451,
+                  "en": -12.329346,
+                  "onomy": -12.459169
+                },
+                {
+                  " of": -0.59672344,
+                  " for": -0.87273395,
+                  " to": -4.072666,
+                  "\n": -5.7504425,
+                  " word": -6.580927,
+                  " corresponding": -6.638962,
+                  " term": -6.8470078,
+                  " synonym": -7.1265755,
+                  " opposite": -7.212202,
+                  " that": -7.5486584,
+                  " ": -7.6754894,
+                  "<|endoftext|>": -7.8488293,
+                  "\n\n": -8.045164,
+                  " associated": -8.1930065,
+                  ".": -8.206409,
+                  " given": -8.262619,
+                  " in": -8.275475,
+                  ".\n": -8.50548,
+                  " counterpart": -8.732475,
+                  " as": -8.861389
+                },
+                {
+                  " the": -0.022609107,
+                  " a": -4.7846236,
+                  " said": -5.5847487,
+                  " given": -6.063146,
+                  " this": -6.2590213,
+                  " word": -6.921638,
+                  " that": -7.2899814,
+                  " your": -7.650331,
+                  "\n": -7.952968,
+                  " specified": -7.986751,
+                  " ": -8.0547495,
+                  "<|endoftext|>": -8.311692,
+                  " each": -8.330905,
+                  " th": -8.43658,
+                  " input": -8.455632,
+                  " an": -8.782699,
+                  " t": -8.816588,
+                  " term": -8.865703,
+                  "the": -9.051774,
+                  " any": -9.367034
+                },
+                {
+                  " given": -0.37653166,
+                  " term": -1.6035995,
+                  " input": -3.322012,
+                  " specified": -3.4752865,
+                  " word": -3.599413,
+                  " designated": -5.5695477,
+                  " chosen": -5.70595,
+                  " provided": -6.108076,
+                  " selected": -6.130024,
+                  " entered": -6.277031,
+                  " following": -6.3877316,
+                  " indicated": -7.348549,
+                  " supplied": -8.087763,
+                  " stated": -8.164621,
+                  " requested": -8.171289,
+                  " written": -8.896645,
+                  " entry": -8.923946,
+                  " target": -9.443562,
+                  " mentioned": -9.685848,
+                  " specific": -9.700535
+                },
+                {
+                  " word": -0.5459949,
+                  " term": -0.86933434,
+                  " expression": -8.042207,
+                  " vocabulary": -8.145244,
+                  " input": -8.939113,
+                  "\n": -9.2537985,
+                  " ": -9.35015,
+                  " noun": -9.969068,
+                  " terminology": -10.08928,
+                  "\n\n": -10.297751,
+                  " entry": -10.353953,
+                  "word": -10.424615,
+                  " text": -10.524968,
+                  " phrase": -10.589824,
+                  ".": -10.620389,
+                  " wor": -10.635303,
+                  " language": -10.873887,
+                  " words": -10.926841,
+                  " keyword": -10.930638,
+                  " item": -11.008992
+                },
+                {
+                  ".": -0.101698935,
+                  ".\n": -2.877244,
+                  "<|endoftext|>": -4.3576345,
+                  " ": -4.443921,
+                  "\n": -4.8782854,
+                  ".\n\n": -6.0666857,
+                  " \n": -6.615281,
+                  ",": -7.031583,
+                  " to": -7.177146,
+                  "\n\n": -7.554303,
+                  " as": -7.743718,
+                  " in": -8.0174,
+                  " instead": -8.6720495,
+                  " for": -8.760163,
+                  " .": -8.979564,
+                  " by": -9.210835,
+                  ".\n\n\n": -9.616499,
+                  " please": -9.6633625,
+                  " and": -9.980037,
+                  ".\"": -10.025321
+                }
+              ],
+              "text_offset": [
+                132,
+                139,
+                143,
+                147,
+                151,
+                154,
+                158,
+                164,
+                169
+              ]
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "text": " record the antonym for the given word.",
+            "index": 1,
+            "logprobs": {
+              "tokens": [
+                " record",
+                " the",
+                " ant",
+                "onym",
+                " for",
+                " the",
+                " given",
+                " word",
+                "."
+              ],
+              "token_logprobs": [
+                -2.562133,
+                -0.014459054,
+                -2.302315,
+                -0.12411415,
+                -1.0226693,
+                -0.03527434,
+                -0.16231123,
+                -0.79585516,
+                -0.06355892
+              ],
+              "top_logprobs": [
+                {
+                  " record": -2.562133,
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " please": -2.7030823,
+                  " enter": -2.848777,
+                  " produce": -3.3562005,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " the": -0.014459054,
+                  " a": -5.2003284,
+                  " an": -6.166414,
+                  " down": -6.9448905,
+                  "/write": -7.1591983,
+                  " ant": -7.1961303,
+                  " opposite": -7.6114497,
+                  " what": -7.634273,
+                  " ": -7.9141307,
+                  " t": -8.174964,
+                  " or": -8.315888,
+                  " its": -8.346719,
+                  " th": -8.526185,
+                  "/": -8.669745,
+                  " word": -8.69756,
+                  " another": -9.426572,
+                  " in": -9.501061,
+                  " as": -9.650537,
+                  "/type": -9.831258,
+                  " synonym": -9.895871
+                },
+                {
+                  " ant": -2.302315,
+                  " opposite": -0.2398493,
+                  " word": -2.8337939,
+                  " contrary": -4.329628,
+                  " converse": -4.880375,
+                  " opposing": -4.99037,
+                  " term": -5.6625786,
+                  " reverse": -5.7463417,
+                  " contrasting": -5.831644,
+                  " inverse": -5.909111,
+                  " synonym": -6.623705,
+                  " opposition": -6.710781,
+                  " contradictory": -6.909931,
+                  " contrast": -7.0249157,
+                  " oppos": -7.2140255,
+                  " meaning": -7.519375,
+                  " counter": -7.748867,
+                  " polar": -7.848402,
+                  " counterpart": -7.9009266,
+                  " contra": -7.9271374
+                },
+                {
+                  "onym": -0.12411415,
+                  "onyms": -2.2342787,
+                  "ip": -5.740033,
+                  "ith": -5.862645,
+                  "onymous": -6.3555193,
+                  "o": -8.334363,
+                  "ony": -8.478808,
+                  "on": -8.747997,
+                  "eced": -8.762268,
+                  "<|endoftext|>": -9.370464,
+                  "ilogy": -9.862222,
+                  "agon": -9.998287,
+                  "i": -10.05957,
+                  "ynom": -10.090327,
+                  "ed": -10.100211,
+                  "in": -10.17618,
+                  "igram": -10.705219,
+                  "iph": -10.706214,
+                  "ton": -10.862693,
+                  "igraph": -10.922544
+                },
+                {
+                  " for": -1.0226693,
+                  " of": -0.5001989,
+                  " to": -5.177111,
+                  " corresponding": -5.5054307,
+                  " that": -5.8909345,
+                  "\n": -5.9581475,
+                  " opposite": -5.991265,
+                  " associated": -6.100638,
+                  " term": -6.4058423,
+                  "ic": -6.7080235,
+                  " word": -6.8398557,
+                  ".": -7.1523423,
+                  ".\n": -7.4731927,
+                  "<|endoftext|>": -7.607207,
+                  " counterpart": -7.713116,
+                  " synonym": -7.755553,
+                  "y": -7.7609105,
+                  " in": -7.8113008,
+                  " related": -7.867825,
+                  " ": -7.9338536
+                },
+                {
+                  " the": -0.03527434,
+                  " this": -4.1661453,
+                  " that": -4.864868,
+                  " said": -5.522608,
+                  " each": -6.1065464,
+                  " given": -6.4782295,
+                  " a": -7.260435,
+                  " word": -7.6129227,
+                  " \"": -8.481838,
+                  " your": -8.489622,
+                  " th": -8.545784,
+                  " ": -8.607883,
+                  "\n": -8.983946,
+                  " '": -9.1687355,
+                  " t": -9.212679,
+                  " specified": -9.218874,
+                  " provided": -9.317642,
+                  " which": -9.59767,
+                  " me": -9.80728,
+                  " term": -10.072908
+                },
+                {
+                  " given": -0.16231123,
+                  " specified": -2.651571,
+                  " term": -3.4567068,
+                  " provided": -4.0501685,
+                  " word": -4.090011,
+                  " designated": -5.568279,
+                  " input": -6.1379943,
+                  " selected": -6.5453944,
+                  " chosen": -6.8045154,
+                  " corresponding": -6.9457736,
+                  " indicated": -6.992946,
+                  " following": -8.043642,
+                  " entered": -8.09049,
+                  " supplied": -8.159691,
+                  " stated": -8.342388,
+                  " requested": -8.345575,
+                  " specific": -8.365171,
+                  " respective": -8.4402485,
+                  " particular": -8.4628105,
+                  " aforementioned": -9.017889
+                },
+                {
+                  " word": -0.79585516,
+                  " term": -0.60518515,
+                  " vocabulary": -6.881432,
+                  " expression": -7.891703,
+                  " entry": -7.9298596,
+                  " input": -8.364882,
+                  " text": -9.070518,
+                  " terminology": -9.165198,
+                  "\n": -9.823768,
+                  " noun": -10.025422,
+                  " ": -10.058846,
+                  " phrase": -10.311469,
+                  " language": -10.325364,
+                  " lexical": -10.348586,
+                  " keyword": -10.371261,
+                  " prompt": -10.409249,
+                  " concept": -10.567464,
+                  " definition": -10.80869,
+                  " item": -10.853593,
+                  " words": -11.21695
+                },
+                {
+                  ".": -0.06355892,
+                  ".\n": -2.9925387,
+                  "<|endoftext|>": -5.635346,
+                  " ": -5.7562833,
+                  "\n": -6.3605886,
+                  ".\n\n": -6.543059,
+                  " \n": -8.277781,
+                  " in": -8.399332,
+                  ",": -9.002043,
+                  "\n\n": -9.279709,
+                  " and": -9.379766,
+                  "'s": -9.628498,
+                  ".\"": -9.6907425,
+                  " on": -9.826154,
+                  " instead": -10.136332,
+                  " .": -10.184627,
+                  " as": -10.429783,
+                  ".\n\n\n": -10.442767,
+                  " into": -10.713373,
+                  " to": -10.794012
+                }
+              ],
+              "text_offset": [
+                132,
+                139,
+                143,
+                147,
+                151,
+                155,
+                159,
+                165,
+                170
+              ]
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 25,
+          "completion_tokens": 18,
+          "total_tokens": 43
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "provide the antonym of the given word.",
+        "rawPrompt": "provide the antonym of the given word.",
+        "finishReason": "stop",
+        "logprob": -10001.555687858998,
+        "probability": 0,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "record the antonym for the given word.",
+        "rawPrompt": " record the antonym for the given word.",
+        "finishReason": "stop",
+        "logprob": -7.082690154000001,
+        "probability": 0.0008395116921729069,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      }
+    ]
+  },
+  {
+    "id": "7314ef68-43b0-4a39-89af-68e7ce059664",
+    "type": "openai_resample",
+    "createdAt": "2026-08-28T17:54:10.013Z",
+    "mode": "custom",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "write the antonym of the word.",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+    "run": {
+      "id": "8b0c0022-1d32-43d5-a3be-8fd0ff6fc579",
+      "requestedCount": 6,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 6
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "n": 6,
+        "temperature": 0.9,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "logprobs": 20
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EHv4DVWjvLIKvPCGCQdYqGroC7I1p",
+        "object": "text_completion",
+        "created": 1787939649,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " type the opposite of the given term.",
+            "index": 0,
+            "logprobs": {
+              "tokens": [
+                " type",
+                " the",
+                " opposite",
+                " of",
+                " the",
+                " given",
+                " term",
+                "."
+              ],
+              "token_logprobs": [
+                -2.4509423,
+                -0.11280878,
+                -0.42873996,
+                -0.19500935,
+                -0.015396808,
+                -1.1676298,
+                -0.17887805,
+                -0.0503855
+              ],
+              "top_logprobs": [
+                {
+                  " type": -2.4509423,
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " record": -2.562133,
+                  " please": -2.7030823,
+                  " enter": -2.848777,
+                  " produce": -3.3562005,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " the": -0.11280878,
+                  " out": -2.7824235,
+                  " in": -3.6015038,
+                  " a": -5.390618,
+                  " an": -6.013581,
+                  " down": -6.197663,
+                  "/write": -6.4179597,
+                  " ant": -6.883948,
+                  " up": -7.0759797,
+                  " or": -7.10084,
+                  " opposite": -7.3420663,
+                  " ": -7.742516,
+                  " th": -8.082267,
+                  " word": -8.250937,
+                  " its": -8.262668,
+                  " another": -8.404954,
+                  " t": -8.503074,
+                  " what": -8.9031515,
+                  " of": -8.992311,
+                  "/s": -9.013831
+                },
+                {
+                  " opposite": -0.42873996,
+                  " ant": -1.6643586,
+                  " word": -2.0474076,
+                  " term": -4.845425,
+                  " opposing": -5.325934,
+                  " contrary": -5.5347295,
+                  " synonym": -6.5391088,
+                  " reverse": -6.542229,
+                  " contrasting": -6.633631,
+                  " inverse": -6.708405,
+                  " converse": -6.972834,
+                  " meaning": -7.249663,
+                  " oppos": -7.588902,
+                  " opposition": -7.819493,
+                  " corresponding": -8.028572,
+                  " exact": -8.151413,
+                  " negative": -8.204218,
+                  " definition": -8.297714,
+                  " contradictory": -8.475023,
+                  " ": -8.521915
+                },
+                {
+                  " of": -0.19500935,
+                  " meaning": -2.2996883,
+                  " word": -3.465355,
+                  " term": -3.694769,
+                  " for": -4.938984,
+                  " definition": -5.870455,
+                  " version": -6.087473,
+                  " to": -6.587364,
+                  " expression": -7.1868725,
+                  " synonym": -7.381422,
+                  " (": -7.384741,
+                  " or": -7.6985397,
+                  " form": -7.803364,
+                  " in": -8.062788,
+                  " ": -8.090307,
+                  "/": -8.410952,
+                  " from": -8.562778,
+                  "\n": -8.766228,
+                  " the": -9.074028,
+                  " den": -9.082548
+                },
+                {
+                  " the": -0.015396808,
+                  " this": -5.427092,
+                  " that": -5.538592,
+                  " said": -6.6797338,
+                  " word": -7.0297494,
+                  " given": -7.2734685,
+                  " \"": -7.4940877,
+                  "\n": -7.6027646,
+                  " a": -7.746638,
+                  " your": -8.32968,
+                  " '": -8.508313,
+                  " th": -8.533593,
+                  " ": -8.537375,
+                  "<|endoftext|>": -8.569631,
+                  " what": -8.633277,
+                  " t": -8.705844,
+                  " term": -8.837373,
+                  " provided": -9.501065,
+                  " synonym": -9.679061,
+                  " its": -9.775943
+                },
+                {
+                  " given": -1.1676298,
+                  " term": -0.51195776,
+                  " word": -3.062573,
+                  " specified": -4.5172944,
+                  " provided": -4.584315,
+                  " selected": -5.153399,
+                  " chosen": -5.533137,
+                  " input": -6.0089498,
+                  " designated": -6.165343,
+                  " following": -6.8599324,
+                  " entry": -7.1054635,
+                  " entered": -7.1830277,
+                  " indicated": -7.8407273,
+                  " initial": -7.8769403,
+                  " stated": -8.012019,
+                  " expression": -8.026948,
+                  " supplied": -8.049809,
+                  " original": -8.05531,
+                  " listed": -8.45773,
+                  " defined": -8.509013
+                },
+                {
+                  " term": -0.17887805,
+                  " word": -1.8333981,
+                  " expression": -6.417966,
+                  " vocabulary": -6.695775,
+                  "\n": -9.305745,
+                  " phrase": -9.496741,
+                  " noun": -9.567451,
+                  " terminology": -9.589631,
+                  " entry": -9.627936,
+                  " text": -9.74558,
+                  ".": -10.002299,
+                  " synonym": -10.096774,
+                  "\n\n": -10.103999,
+                  " definition": -10.115794,
+                  " lexical": -10.194766,
+                  " ": -10.273536,
+                  " language": -10.431294,
+                  " terms": -10.786771,
+                  " concept": -10.938066,
+                  " input": -11.0775
+                },
+                {
+                  ".": -0.0503855,
+                  ".\n": -3.330186,
+                  "<|endoftext|>": -5.294734,
+                  " ": -5.595214,
+                  "\n": -6.277976,
+                  ".\n\n": -6.8254824,
+                  " \n": -7.499715,
+                  " in": -8.484347,
+                  ",": -9.10056,
+                  "\n\n": -9.253177,
+                  " and": -9.512334,
+                  "'s": -9.806429,
+                  " .": -9.85796,
+                  " into": -9.963056,
+                  " on": -10.179805,
+                  ".\"": -10.210695,
+                  " or": -10.93756,
+                  " from": -10.94543,
+                  " to": -10.967437,
+                  "..": -11.057311
+                }
+              ],
+              "text_offset": [
+                132,
+                137,
+                141,
+                150,
+                153,
+                157,
+                163,
+                168
+              ]
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "text": " produce the opposite of the term.",
+            "index": 1,
+            "logprobs": {
+              "tokens": [
+                " produce",
+                " the",
+                " opposite",
+                " of",
+                " the",
+                " term",
+                "."
+              ],
+              "token_logprobs": [
+                -3.3562005,
+                -0.043382224,
+                -0.2989323,
+                -0.09614774,
+                -0.006277979,
+                -0.87365603,
+                -0.08233878
+              ],
+              "top_logprobs": [
+                {
+                  " produce": -3.3562005,
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " please": -2.7030823,
+                  " enter": -2.848777,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " the": -0.043382224,
+                  " a": -3.6584868,
+                  " an": -4.4320483,
+                  " ant": -7.334165,
+                  "/write": -7.7335734,
+                  " opposite": -7.8158374,
+                  " ": -7.824653,
+                  " or": -8.185867,
+                  " word": -8.201611,
+                  " another": -8.223831,
+                  " t": -8.342878,
+                  "/": -8.402178,
+                  " th": -8.576046,
+                  " its": -8.931492,
+                  " to": -9.206745,
+                  "/s": -9.329868,
+                  " synonym": -9.399723,
+                  "/d": -9.59473,
+                  "/t": -10.045376,
+                  ",": -10.123535
+                },
+                {
+                  " opposite": -0.2989323,
+                  " ant": -1.5153306,
+                  " word": -4.6174383,
+                  " contrary": -4.8249464,
+                  " reverse": -5.4840727,
+                  " converse": -5.613467,
+                  " inverse": -5.765258,
+                  " opposing": -5.790797,
+                  " contrasting": -6.529731,
+                  " synonym": -7.041354,
+                  " term": -7.1152506,
+                  " counter": -7.744849,
+                  " contradictory": -7.8569765,
+                  " counterpart": -8.168708,
+                  " negative": -8.694718,
+                  " contrast": -8.727763,
+                  " opposition": -8.747823,
+                  " oppos": -8.76304,
+                  " contra": -8.77311,
+                  " reversed": -9.300523
+                },
+                {
+                  " of": -0.09614774,
+                  " meaning": -3.278166,
+                  " word": -3.790024,
+                  " term": -4.2051544,
+                  " version": -5.3777924,
+                  " for": -5.6496563,
+                  " definition": -6.7797985,
+                  " or": -7.114641,
+                  " synonym": -7.1505165,
+                  " (": -7.4854107,
+                  " to": -7.495081,
+                  " form": -7.601591,
+                  " expression": -8.115341,
+                  " in": -8.150616,
+                  "/": -8.192114,
+                  "\n": -8.445202,
+                  " the": -8.614197,
+                  " counterpart": -8.744837,
+                  "of": -8.9734535,
+                  " variant": -9.218063
+                },
+                {
+                  " the": -0.006277979,
+                  " given": -6.8417883,
+                  " this": -6.900506,
+                  " said": -7.135741,
+                  " word": -7.2872515,
+                  " a": -7.647214,
+                  "\n": -7.9970083,
+                  " that": -8.334929,
+                  " \"": -8.496745,
+                  " what": -8.538293,
+                  "the": -8.877944,
+                  "\n\n": -9.100749,
+                  " ": -9.3741045,
+                  " term": -9.8232355,
+                  " '": -9.84022,
+                  " specified": -9.904967,
+                  " provided": -10.256501,
+                  " \n\n": -10.257354,
+                  " th": -10.295217,
+                  " your": -10.29696
+                },
+                {
+                  " term": -0.87365603,
+                  " given": -0.8934791,
+                  " word": -2.5301006,
+                  " specified": -3.767966,
+                  " provided": -3.9697292,
+                  " input": -4.2828856,
+                  " designated": -4.704772,
+                  " selected": -5.444125,
+                  " following": -5.5073404,
+                  " chosen": -5.6963606,
+                  " indicated": -6.416463,
+                  " supplied": -6.480384,
+                  " entered": -6.5150537,
+                  " stated": -6.5802965,
+                  " initial": -6.922303,
+                  " entry": -7.312766,
+                  " requested": -7.433156,
+                  " aforementioned": -7.504552,
+                  " original": -7.517461,
+                  " vocabulary": -7.5415754
+                },
+                {
+                  ".": -0.08233878,
+                  ".\n": -3.0700421,
+                  "<|endoftext|>": -4.625977,
+                  " ": -5.5422635,
+                  "\n": -5.579945,
+                  ".\n\n": -5.851752,
+                  " by": -5.9370008,
+                  "'s": -6.1551137,
+                  " in": -6.5260663,
+                  " \"": -7.078419,
+                  ",": -7.3786836,
+                  " \n": -7.4481244,
+                  " provided": -7.6726785,
+                  " written": -7.8437715,
+                  "\n\n": -7.874047,
+                  ".\"": -8.356541,
+                  " given": -8.712933,
+                  " from": -9.302218,
+                  " .": -9.38152,
+                  " write": -9.38337
+                }
+              ],
+              "text_offset": [
+                132,
+                140,
+                144,
+                153,
+                156,
+                160,
+                165
+              ]
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "text": " please compose the antonym for the given word.",
+            "index": 2,
+            "logprobs": {
+              "tokens": [
+                " please",
+                " compose",
+                " the",
+                " ant",
+                "onym",
+                " for",
+                " the",
+                " given",
+                " word",
+                "."
+              ],
+              "token_logprobs": [
+                -2.7030823,
+                -2.9121265,
+                -0.110500954,
+                -0.5549203,
+                -0.089668915,
+                -0.55852836,
+                -0.05877138,
+                -0.39830637,
+                -0.51396495,
+                -0.089115806
+              ],
+              "top_logprobs": [
+                {
+                  " please": -2.7030823,
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " enter": -2.848777,
+                  " produce": -3.3562005,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " compose": -2.9121265,
+                  " write": -0.9288939,
+                  " provide": -2.0910568,
+                  " record": -2.454527,
+                  " enter": -2.469801,
+                  " type": -2.5302868,
+                  " produce": -3.563017,
+                  " jot": -4.0890636,
+                  " s": -4.1108837,
+                  " list": -4.3017693,
+                  " indicate": -4.524399,
+                  " input": -4.620226,
+                  ",": -4.83778,
+                  " put": -4.895506,
+                  " pen": -5.0322857,
+                  " print": -5.190336,
+                  " express": -5.409918,
+                  " give": -5.4328594,
+                  " generate": -5.6915607,
+                  " include": -5.7406063
+                },
+                {
+                  " the": -0.110500954,
+                  " an": -2.796809,
+                  " a": -3.3266685,
+                  " ant": -6.544436,
+                  " and": -6.7793756,
+                  "/write": -7.25668,
+                  " for": -7.51504,
+                  " ": -7.609343,
+                  " another": -7.8992906,
+                  " its": -7.972138,
+                  " th": -8.525531,
+                  " word": -8.557952,
+                  " t": -8.582477,
+                  " what": -8.693303,
+                  " to": -8.792199,
+                  " me": -8.90125,
+                  " synonym": -8.942521,
+                  " or": -9.017003,
+                  "/": -9.30503,
+                  "/s": -9.422879
+                },
+                {
+                  " ant": -0.5549203,
+                  " opposite": -0.9615823,
+                  " contrary": -4.6700554,
+                  " word": -4.947258,
+                  " converse": -5.1444664,
+                  " inverse": -5.288122,
+                  " reverse": -5.4064617,
+                  " opposing": -5.8585777,
+                  " contrasting": -6.321781,
+                  " counter": -6.7280426,
+                  " term": -7.3136444,
+                  " negative": -7.3856544,
+                  " contradictory": -7.6102867,
+                  " opposition": -7.8867493,
+                  " synonym": -8.020643,
+                  " counterpart": -8.323879,
+                  " contrast": -8.358725,
+                  " oppos": -8.42182,
+                  " contra": -8.551355,
+                  " polar": -8.769489
+                },
+                {
+                  "onym": -0.089668915,
+                  "onyms": -2.4592655,
+                  "onymous": -9.5517435,
+                  "ony": -9.856505,
+                  "on": -10.410357,
+                  "o": -10.534776,
+                  "ith": -11.072602,
+                  "ynom": -11.37415,
+                  "<|endoftext|>": -12.07649,
+                  "yn": -12.258566,
+                  "ip": -12.473675,
+                  "ym": -12.7583275,
+                  "in": -12.79906,
+                  "omy": -12.933139,
+                  "y": -13.093285,
+                  "nym": -13.373009,
+                  "ophone": -13.400963,
+                  "ograph": -13.543009,
+                  "onomy": -13.655427,
+                  "om": -13.676896
+                },
+                {
+                  " for": -0.55852836,
+                  " of": -0.8830828,
+                  " to": -4.5289645,
+                  " corresponding": -7.2818427,
+                  " term": -7.6241546,
+                  " word": -7.9868636,
+                  " in": -8.152175,
+                  " opposite": -8.344478,
+                  " from": -8.41656,
+                  " that": -8.893434,
+                  " synonym": -9.014802,
+                  " counterpart": -9.303609,
+                  "\n": -9.442853,
+                  " equivalent": -9.66092,
+                  " ": -9.865035,
+                  " associated": -10.00525,
+                  "for": -10.058312,
+                  "of": -10.11893,
+                  " given": -10.121568,
+                  " expression": -10.458999
+                },
+                {
+                  " the": -0.05877138,
+                  " this": -3.0350726,
+                  " that": -6.248347,
+                  " given": -6.405709,
+                  " your": -6.709624,
+                  " said": -6.86237,
+                  " me": -7.1984506,
+                  " word": -7.8626466,
+                  " us": -7.9949784,
+                  " each": -8.420364,
+                  " \"": -8.775921,
+                  " our": -8.947023,
+                  " provided": -9.05596,
+                  " a": -9.094769,
+                  "\n": -9.266069,
+                  "the": -9.676697,
+                  " specified": -9.724314,
+                  " '": -9.736422,
+                  " ": -10.024504,
+                  " term": -10.210556
+                },
+                {
+                  " given": -0.39830637,
+                  " term": -2.5639157,
+                  " provided": -2.6383042,
+                  " word": -2.8742356,
+                  " specified": -3.1186662,
+                  " following": -3.4320855,
+                  " designated": -4.69311,
+                  " input": -5.1588483,
+                  " selected": -5.233296,
+                  " chosen": -5.282019,
+                  " indicated": -5.580134,
+                  " entered": -6.2306123,
+                  " supplied": -6.3761163,
+                  " aforementioned": -6.484879,
+                  " stated": -6.518252,
+                  " requested": -6.700257,
+                  " corresponding": -7.037556,
+                  " entry": -7.053988,
+                  " listed": -7.5081086,
+                  " mentioned": -7.6227612
+                },
+                {
+                  " word": -0.51396495,
+                  " term": -0.9334081,
+                  " vocabulary": -5.911405,
+                  " expression": -6.022674,
+                  " entry": -7.2051654,
+                  " input": -8.050477,
+                  " concept": -8.261893,
+                  " terminology": -8.297402,
+                  " text": -8.81199,
+                  " prompt": -8.829673,
+                  " noun": -8.847882,
+                  " lexical": -8.902013,
+                  " phrase": -8.904494,
+                  "\n": -9.307551,
+                  " language": -9.31989,
+                  " definition": -9.501983,
+                  " ": -9.594457,
+                  " selection": -9.84055,
+                  " lex": -9.889321,
+                  " keyword": -9.9558935
+                },
+                {
+                  ".": -0.089115806,
+                  ".\n": -2.7996547,
+                  ".\n\n": -5.3039594,
+                  "<|endoftext|>": -5.328858,
+                  " ": -5.438193,
+                  "\n": -5.480969,
+                  ",": -6.9500775,
+                  "\n\n": -7.3179345,
+                  " \n": -7.5851483,
+                  " and": -7.630015,
+                  "?": -8.051061,
+                  " in": -8.1923,
+                  ".\"": -8.299331,
+                  " by": -8.512486,
+                  "!": -8.740678,
+                  " instead": -8.870142,
+                  " to": -9.006789,
+                  ".\n\n\n": -9.20269,
+                  " .": -9.290402,
+                  "..": -9.332057
+                }
+              ],
+              "text_offset": [
+                132,
+                139,
+                147,
+                151,
+                155,
+                159,
+                163,
+                167,
+                173,
+                178
+              ]
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "text": " provide the opposite of the word.",
+            "index": 3,
+            "logprobs": {
+              "tokens": [
+                " provide",
+                " the",
+                " opposite",
+                " of",
+                " the",
+                " word",
+                "."
+              ],
+              "token_logprobs": [
+                -1.500232,
+                -0.06587282,
+                -0.6258032,
+                -0.22551794,
+                -0.0062009734,
+                -2.6108155,
+                -0.20238982
+              ],
+              "top_logprobs": [
+                {
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " please": -2.7030823,
+                  " enter": -2.848777,
+                  " produce": -3.3562005,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " the": -0.06587282,
+                  " an": -3.4125793,
+                  " a": -4.128979,
+                  " me": -4.504378,
+                  " ant": -6.5757604,
+                  " ": -8.101256,
+                  " th": -8.186254,
+                  " t": -8.300302,
+                  " opposite": -8.628949,
+                  " us": -8.798381,
+                  " word": -9.006463,
+                  " to": -9.076964,
+                  " with": -9.444266,
+                  "/write": -9.492211,
+                  " another": -9.538581,
+                  " for": -9.719897,
+                  " synonym": -9.927104,
+                  " as": -10.45102,
+                  "\n": -10.533534,
+                  " its": -10.544738
+                },
+                {
+                  " opposite": -0.6258032,
+                  " ant": -0.84470385,
+                  " word": -4.2209587,
+                  " opposing": -5.4058056,
+                  " contrary": -5.587654,
+                  " inverse": -5.6164856,
+                  " converse": -6.1678886,
+                  " reverse": -6.5194016,
+                  " contrasting": -6.5589046,
+                  " term": -7.140995,
+                  " counter": -7.7075844,
+                  " synonym": -7.9706306,
+                  " counterpart": -8.2919235,
+                  " contradictory": -8.294514,
+                  " corresponding": -8.798283,
+                  " polar": -8.883722,
+                  " negative": -8.905741,
+                  " opposition": -9.110008,
+                  " contrast": -9.364441,
+                  " contra": -9.474293
+                },
+                {
+                  " of": -0.22551794,
+                  " meaning": -1.9396122,
+                  " term": -3.7851589,
+                  " word": -4.370829,
+                  " for": -4.6850896,
+                  " definition": -5.888638,
+                  " version": -6.1422276,
+                  " (": -6.2799554,
+                  " or": -6.6220326,
+                  " to": -7.0429254,
+                  " in": -7.2845254,
+                  "/": -7.416617,
+                  " synonym": -7.522593,
+                  " form": -7.645823,
+                  " expression": -8.118829,
+                  " interpretation": -8.897578,
+                  "/op": -8.921025,
+                  " ": -9.052541,
+                  "/s": -9.06564,
+                  " counterpart": -9.215663
+                },
+                {
+                  " the": -0.0062009734,
+                  " this": -6.4792633,
+                  " said": -6.5717773,
+                  " word": -7.6260185,
+                  " a": -7.7949524,
+                  " \"": -7.8221474,
+                  "\n": -8.027573,
+                  " given": -8.309343,
+                  "\n\n": -8.344055,
+                  " that": -8.488937,
+                  " ": -9.163214,
+                  " what": -9.477978,
+                  "the": -9.569151,
+                  " '": -9.648579,
+                  " th": -9.704374,
+                  " \n\n": -9.845552,
+                  " term": -9.962902,
+                  " t": -10.151249,
+                  " \n": -10.475899,
+                  "<|endoftext|>": -10.579336
+                },
+                {
+                  " word": -2.6108155,
+                  " given": -0.6372323,
+                  " term": -1.1532273,
+                  " specified": -2.9871774,
+                  " following": -5.1831784,
+                  " designated": -5.3650594,
+                  " input": -5.365086,
+                  " selected": -5.818524,
+                  " chosen": -6.087048,
+                  " indicated": -6.1788526,
+                  " stated": -6.4364743,
+                  " provided": -6.48165,
+                  " entered": -7.2487817,
+                  " supplied": -7.703192,
+                  " original": -7.7287564,
+                  " aforementioned": -7.7905316,
+                  " defined": -7.8324704,
+                  " initial": -8.052658,
+                  " mentioned": -8.07024,
+                  " requested": -8.169096
+                },
+                {
+                  ".": -0.20238982,
+                  ".\n": -2.5735903,
+                  "'s": -3.0648832,
+                  "<|endoftext|>": -4.6229525,
+                  " in": -4.766631,
+                  "\n": -4.782016,
+                  " as": -5.2839174,
+                  " ": -5.424615,
+                  ".\n\n": -5.538335,
+                  " written": -5.700019,
+                  " \"": -6.098077,
+                  " meaning": -6.4882574,
+                  " by": -6.644391,
+                  ",": -6.7255106,
+                  " \n": -6.9761686,
+                  " to": -7.0627356,
+                  "\n\n": -7.0776052,
+                  " given": -7.24475,
+                  " requested": -7.2608633,
+                  " selected": -7.555087
+                }
+              ],
+              "text_offset": [
+                132,
+                140,
+                144,
+                153,
+                156,
+                160,
+                165
+              ]
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "text": " provide the opposite of the term.",
+            "index": 4,
+            "logprobs": {
+              "tokens": [
+                " provide",
+                " the",
+                " opposite",
+                " of",
+                " the",
+                " term",
+                "."
+              ],
+              "token_logprobs": [
+                -1.500232,
+                -0.06587282,
+                -0.6258032,
+                -0.22551794,
+                -0.0062009734,
+                -1.1532273,
+                -0.11931478
+              ],
+              "top_logprobs": [
+                {
+                  " provide": -1.500232,
+                  " write": -2.1141713,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " please": -2.7030823,
+                  " enter": -2.848777,
+                  " produce": -3.3562005,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " the": -0.06587282,
+                  " an": -3.4125793,
+                  " a": -4.128979,
+                  " me": -4.504378,
+                  " ant": -6.5757604,
+                  " ": -8.101256,
+                  " th": -8.186254,
+                  " t": -8.300302,
+                  " opposite": -8.628949,
+                  " us": -8.798381,
+                  " word": -9.006463,
+                  " to": -9.076964,
+                  " with": -9.444266,
+                  "/write": -9.492211,
+                  " another": -9.538581,
+                  " for": -9.719897,
+                  " synonym": -9.927104,
+                  " as": -10.45102,
+                  "\n": -10.533534,
+                  " its": -10.544738
+                },
+                {
+                  " opposite": -0.6258032,
+                  " ant": -0.84470385,
+                  " word": -4.2209587,
+                  " opposing": -5.4058056,
+                  " contrary": -5.587654,
+                  " inverse": -5.6164856,
+                  " converse": -6.1678886,
+                  " reverse": -6.5194016,
+                  " contrasting": -6.5589046,
+                  " term": -7.140995,
+                  " counter": -7.7075844,
+                  " synonym": -7.9706306,
+                  " counterpart": -8.2919235,
+                  " contradictory": -8.294514,
+                  " corresponding": -8.798283,
+                  " polar": -8.883722,
+                  " negative": -8.905741,
+                  " opposition": -9.110008,
+                  " contrast": -9.364441,
+                  " contra": -9.474293
+                },
+                {
+                  " of": -0.22551794,
+                  " meaning": -1.9396122,
+                  " term": -3.7851589,
+                  " word": -4.370829,
+                  " for": -4.6850896,
+                  " definition": -5.888638,
+                  " version": -6.1422276,
+                  " (": -6.2799554,
+                  " or": -6.6220326,
+                  " to": -7.0429254,
+                  " in": -7.2845254,
+                  "/": -7.416617,
+                  " synonym": -7.522593,
+                  " form": -7.645823,
+                  " expression": -8.118829,
+                  " interpretation": -8.897578,
+                  "/op": -8.921025,
+                  " ": -9.052541,
+                  "/s": -9.06564,
+                  " counterpart": -9.215663
+                },
+                {
+                  " the": -0.0062009734,
+                  " this": -6.4792633,
+                  " said": -6.5717773,
+                  " word": -7.6260185,
+                  " a": -7.7949524,
+                  " \"": -7.8221474,
+                  "\n": -8.027573,
+                  " given": -8.309343,
+                  "\n\n": -8.344055,
+                  " that": -8.488937,
+                  " ": -9.163214,
+                  " what": -9.477978,
+                  "the": -9.569151,
+                  " '": -9.648579,
+                  " th": -9.704374,
+                  " \n\n": -9.845552,
+                  " term": -9.962902,
+                  " t": -10.151249,
+                  " \n": -10.475899,
+                  "<|endoftext|>": -10.579336
+                },
+                {
+                  " term": -1.1532273,
+                  " given": -0.6372323,
+                  " word": -2.6108155,
+                  " specified": -2.9871774,
+                  " following": -5.1831784,
+                  " designated": -5.3650594,
+                  " input": -5.365086,
+                  " selected": -5.818524,
+                  " chosen": -6.087048,
+                  " indicated": -6.1788526,
+                  " stated": -6.4364743,
+                  " provided": -6.48165,
+                  " entered": -7.2487817,
+                  " supplied": -7.703192,
+                  " original": -7.7287564,
+                  " aforementioned": -7.7905316,
+                  " defined": -7.8324704,
+                  " initial": -8.052658,
+                  " mentioned": -8.07024,
+                  " requested": -8.169096
+                },
+                {
+                  ".": -0.11931478,
+                  ".\n": -2.766335,
+                  "'s": -4.6770234,
+                  "\n": -4.765799,
+                  "<|endoftext|>": -4.9006963,
+                  " in": -5.30708,
+                  " ": -5.3255067,
+                  ".\n\n": -6.023476,
+                  " written": -6.247563,
+                  " \n": -6.443543,
+                  " \"": -6.6166673,
+                  ",": -7.27566,
+                  " requested": -7.3308625,
+                  " by": -7.335919,
+                  " to": -7.433295,
+                  "\n\n": -7.4575677,
+                  " given": -8.324788,
+                  " selected": -8.361058,
+                  " for": -8.51998,
+                  " provided": -8.53189
+                }
+              ],
+              "text_offset": [
+                132,
+                140,
+                144,
+                153,
+                156,
+                160,
+                165
+              ]
+            },
+            "finish_reason": "stop"
+          },
+          {
+            "text": " write the opposite of the given term.",
+            "index": 5,
+            "logprobs": {
+              "tokens": [
+                " write",
+                " the",
+                " opposite",
+                " of",
+                " the",
+                " given",
+                " term",
+                "."
+              ],
+              "token_logprobs": [
+                -2.1141713,
+                -0.0905405,
+                -0.020443432,
+                -0.106914386,
+                -0.00034368722,
+                -0.40305868,
+                -0.8698501,
+                -0.05419878
+              ],
+              "top_logprobs": [
+                {
+                  " write": -2.1141713,
+                  " provide": -1.500232,
+                  " type": -2.4509423,
+                  " record": -2.562133,
+                  " please": -2.7030823,
+                  " enter": -2.848777,
+                  " produce": -3.3562005,
+                  " find": -3.4021065,
+                  " list": -3.527963,
+                  " Please": -3.8515522,
+                  " compose": -4.291854,
+                  "\n": -4.517104,
+                  " generate": -4.533395,
+                  " output": -4.583352,
+                  " Provide": -4.701165,
+                  " give": -4.7120047,
+                  " jot": -4.743102,
+                  " determine": -4.7729673,
+                  " state": -4.7883654,
+                  " input": -4.824092
+                },
+                {
+                  " the": -0.0905405,
+                  " down": -2.94974,
+                  " a": -3.8973565,
+                  " out": -5.5787187,
+                  " an": -5.604573,
+                  " what": -6.5651593,
+                  " word": -7.087502,
+                  " another": -7.089751,
+                  " ": -7.5759816,
+                  " opposite": -7.653786,
+                  " ant": -7.961308,
+                  " th": -8.281634,
+                  " t": -8.516086,
+                  " which": -8.701999,
+                  " something": -9.134477,
+                  " its": -9.249377,
+                  " one": -9.316232,
+                  " that": -9.461347,
+                  " synonym": -9.543736,
+                  " up": -9.740108
+                },
+                {
+                  " opposite": -0.020443432,
+                  " word": -3.9194741,
+                  " opposing": -9.376081,
+                  " ant": -9.486124,
+                  " term": -9.62977,
+                  " synonym": -9.993597,
+                  " reverse": -10.6329365,
+                  " oppos": -11.04954,
+                  " contrary": -11.142599,
+                  " inverse": -11.338095,
+                  " meaning": -11.702826,
+                  " contrasting": -11.839958,
+                  " counterpart": -12.676264,
+                  " polar": -12.822037,
+                  " opposition": -12.996979,
+                  " Opp": -13.261299,
+                  " corresponding": -13.276548,
+                  " opp": -13.367678,
+                  " the": -13.654835,
+                  " ": -13.7296505
+                },
+                {
+                  " of": -0.106914386,
+                  " meaning": -2.3776433,
+                  " word": -5.1415005,
+                  " term": -7.3081913,
+                  "/": -7.56847,
+                  "/op": -7.811098,
+                  " version": -8.158415,
+                  " (": -8.654072,
+                  " or": -8.809969,
+                  "/s": -9.591822,
+                  " synonym": -9.687353,
+                  "/h": -9.728619,
+                  " definition": -9.977453,
+                  " in": -10.088341,
+                  "\n": -10.356155,
+                  " for": -10.664999,
+                  "of": -10.871836,
+                  " ": -10.954321,
+                  "/n": -11.046944,
+                  "/d": -11.105257
+                },
+                {
+                  " the": -0.00034368722,
+                  " this": -8.774908,
+                  " that": -9.874304,
+                  "\n": -10.050661,
+                  " \"": -10.632544,
+                  " said": -11.040014,
+                  " word": -11.585062,
+                  "\n\n": -11.639845,
+                  " ": -11.705563,
+                  "the": -11.952372,
+                  " given": -12.559362,
+                  " th": -12.781765,
+                  " '": -12.957533,
+                  " t": -13.23728,
+                  " \n": -13.327595,
+                  " a": -13.706434,
+                  " what": -14.180954,
+                  "<|endoftext|>": -14.21744,
+                  " \n\n": -14.259935,
+                  "...": -14.51918
+                },
+                {
+                  " given": -0.40305868,
+                  " word": -1.6062905,
+                  " term": -2.1068418,
+                  " specified": -5.013828,
+                  " provided": -6.5010295,
+                  " selected": -8.261423,
+                  " chosen": -8.307877,
+                  " input": -8.751036,
+                  " designated": -8.908106,
+                  " stated": -9.208805,
+                  " following": -9.600536,
+                  " mentioned": -9.6194935,
+                  " indicated": -9.675627,
+                  " supplied": -10.28787,
+                  " listed": -10.465908,
+                  " aforementioned": -10.898443,
+                  "\n": -11.174664,
+                  " entered": -11.264509,
+                  " assigned": -11.8194275,
+                  " displayed": -11.912001
+                },
+                {
+                  " term": -0.8698501,
+                  " word": -0.5435218,
+                  " vocabulary": -8.79561,
+                  " expression": -9.845255,
+                  "\n": -11.142273,
+                  " noun": -11.525213,
+                  " synonym": -12.047438,
+                  " concept": -12.200941,
+                  " ": -12.395287,
+                  " terminology": -12.618452,
+                  "word": -12.707808,
+                  " phrase": -12.784025,
+                  " lexical": -12.891233,
+                  "\n\n": -13.048292,
+                  " adjective": -13.372179,
+                  " entry": -13.410013,
+                  " words": -13.427414,
+                  " language": -13.437786,
+                  " keyword": -13.486254,
+                  ".": -13.678156
+                },
+                {
+                  ".": -0.05419878,
+                  ".\n": -2.9879107,
+                  " ": -7.191995,
+                  "<|endoftext|>": -7.298597,
+                  ".\n\n": -7.6998916,
+                  "\n": -8.310469,
+                  " \n": -9.0761795,
+                  ",": -10.569723,
+                  "'s": -10.739471,
+                  " or": -11.626326,
+                  " instead": -11.644865,
+                  " .": -11.666288,
+                  ".\n\n\n": -12.150734,
+                  ".\"": -12.3021145,
+                  "\n\n": -12.344389,
+                  " in": -12.359268,
+                  "/": -12.912703,
+                  " and": -13.186888,
+                  " (": -13.280613,
+                  "/s": -13.351621
+                }
+              ],
+              "text_offset": [
+                132,
+                138,
+                142,
+                151,
+                154,
+                158,
+                164,
+                169
+              ]
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 25,
+          "completion_tokens": 47,
+          "total_tokens": 72
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "type the opposite of the given term.",
+        "rawPrompt": " type the opposite of the given term.",
+        "finishReason": "stop",
+        "logprob": -4.599790548,
+        "probability": 0.010053941342237086,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "produce the opposite of the term.",
+        "rawPrompt": " produce the opposite of the term.",
+        "finishReason": "stop",
+        "logprob": -4.756935553,
+        "probability": 0.008591898513748046,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "please compose the antonym for the given word.",
+        "rawPrompt": " please compose the antonym for the given word.",
+        "finishReason": "stop",
+        "logprob": -7.9889858349999985,
+        "probability": 0.00033917789134112176,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "provide the opposite of the word.",
+        "rawPrompt": " provide the opposite of the word.",
+        "finishReason": "stop",
+        "logprob": -5.2368322534,
+        "probability": 0.005317073327571307,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "provide the opposite of the term.",
+        "rawPrompt": " provide the opposite of the term.",
+        "finishReason": "stop",
+        "logprob": -3.6961690133999996,
+        "probability": 0.02481842362775842,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      },
+      {
+        "prompt": "write the opposite of the given term.",
+        "rawPrompt": " write the opposite of the given term.",
+        "finishReason": "stop",
+        "logprob": -3.65952086522,
+        "probability": 0.02574484502236397,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: write the antonym of the word.\nOutput:",
+        "parentInstruction": "write the antonym of the word."
+      }
+    ]
+  },
+  {
+    "id": "3112a547-8775-4dd0-b2bf-63be58753acb",
+    "type": "openai_resample",
+    "createdAt": "2026-09-10T07:52:35.013Z",
+    "mode": "meta",
+    "backend": "completions",
+    "model": "gpt-3.5-turbo-instruct",
+    "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+    "template": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:",
+    "run": {
+      "id": "fc884173-bd2e-4c17-a189-8345d8c68732",
+      "requestedCount": 1,
+      "index": 1,
+      "total": 1,
+      "backend": "completions",
+      "n": 1
+    },
+    "request": {
+      "url": "https://api.openai.com/v1/completions",
+      "body": {
+        "model": "gpt-3.5-turbo-instruct",
+        "prompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "temperature": 0,
+        "top_p": 0.9,
+        "max_tokens": 50,
+        "frequency_penalty": 0,
+        "presence_penalty": 0,
+        "logprobs": 20
+      },
+      "backend": "completions"
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "id": "cmpl-EMTs9Z0SdGSvkxkLNMLrDnAjscMeo",
+        "object": "text_completion",
+        "created": 1789026753,
+        "model": "gpt-3.5-turbo-instruct:20230824-v2",
+        "choices": [
+          {
+            "text": " Create a different version of the given instruction while maintaining its semantic meaning.",
+            "index": 0,
+            "logprobs": {
+              "tokens": [
+                " Create",
+                " a",
+                " different",
+                " version",
+                " of",
+                " the",
+                " given",
+                " instruction",
+                " while",
+                " maintaining",
+                " its",
+                " semantic",
+                " meaning",
+                "."
+              ],
+              "token_logprobs": [
+                -0.61303526,
+                -0.063968726,
+                -0.9386593,
+                -0.0073902216,
+                -0.00018577903,
+                -0.023769118,
+                -0.19390044,
+                -0.057982564,
+                -0.6172189,
+                -0.4392357,
+                -0.40660366,
+                -1.1891658,
+                -0.058962107,
+                -0.04069512
+              ],
+              "top_logprobs": [
+                {
+                  " Create": -0.61303526,
+                  " Generate": -1.0236626,
+                  " Produce": -2.609991,
+                  " Alter": -5.701971,
+                  "Create": -5.8517895,
+                  " V": -6.090523,
+                  " Develop": -6.1747,
+                  " Come": -6.3114643,
+                  " [": -6.574051,
+                  " Form": -6.593054,
+                  " Make": -6.826891,
+                  " Provide": -6.9367065,
+                  "Generate": -7.0549126,
+                  " Modify": -7.1849155,
+                  " Keep": -7.285328,
+                  " Construct": -7.5075054,
+                  "\n": -7.534256,
+                  " Craft": -7.772537,
+                  " Pro": -8.007549,
+                  " Write": -8.077646
+                },
+                {
+                  " a": -0.063968726,
+                  " an": -2.8424873,
+                  " another": -5.712126,
+                  " different": -8.43367,
+                  " multiple": -9.755592,
+                  " alternative": -10.038561,
+                  " alternate": -11.184677,
+                  " various": -11.190945,
+                  " variations": -12.254234,
+                  " several": -12.3708515,
+                  " ": -12.644945,
+                  "a": -12.705378,
+                  " [": -12.819677,
+                  " alternatives": -13.430986,
+                  " and": -13.672419,
+                  " diverse": -13.726034,
+                  " additional": -13.768244,
+                  " one": -13.8652935,
+                  " new": -13.9263935,
+                  " some": -14.102161
+                },
+                {
+                  " different": -0.9386593,
+                  " modified": -1.3597447,
+                  " version": -2.0587363,
+                  " variation": -2.5981612,
+                  " new": -2.8319354,
+                  " modification": -3.1305404,
+                  " variant": -3.5815768,
+                  " diverse": -5.227241,
+                  " revised": -5.5911403,
+                  " deviation": -6.367809,
+                  " similar": -6.572389,
+                  " change": -6.611789,
+                  " derivative": -7.1203036,
+                  " unique": -7.239988,
+                  " slightly": -7.5257087,
+                  " revision": -7.6448073,
+                  " alternative": -7.704126,
+                  " changed": -7.9590735,
+                  " differing": -8.195435,
+                  " altered": -8.200033
+                },
+                {
+                  " version": -0.0073902216,
+                  " form": -5.2571745,
+                  " iteration": -7.5306425,
+                  " variation": -7.5430727,
+                  " rendition": -8.268174,
+                  " interpretation": -8.842986,
+                  " option": -9.044637,
+                  " [": -9.194264,
+                  " format": -9.447135,
+                  " wording": -9.47255,
+                  " set": -9.842828,
+                  " variant": -9.907075,
+                  " instruction": -10.169051,
+                  " formulation": -10.647449,
+                  " example": -10.91398,
+                  " adaptation": -11.034383,
+                  " ver": -11.112033,
+                  " type": -11.469621,
+                  " ph": -11.779071,
+                  " instance": -11.911071
+                },
+                {
+                  " of": -0.00018577903,
+                  " [": -9.687413,
+                  " for": -9.8477335,
+                  " ": -10.795121,
+                  " from": -11.676606,
+                  " or": -11.772857,
+                  " o": -11.964665,
+                  " with": -12.753779,
+                  " using": -12.773898,
+                  "/": -12.776582,
+                  " but": -13.081895,
+                  " the": -13.102891,
+                  "\n": -13.259587,
+                  " while": -13.420039,
+                  "of": -13.509913,
+                  " based": -13.682473,
+                  " \n": -13.764152,
+                  " that": -13.951119,
+                  ",": -14.159966,
+                  " to": -14.366023
+                },
+                {
+                  " the": -0.023769118,
+                  " [": -4.297998,
+                  " this": -4.623075,
+                  " these": -10.612368,
+                  " th": -11.308933,
+                  " ": -11.549368,
+                  " IN": -12.629671,
+                  " said": -12.832975,
+                  " t": -12.852945,
+                  " that": -13.091877,
+                  "\n": -13.428009,
+                  " what": -13.733477,
+                  "the": -13.762779,
+                  " given": -14.1312275,
+                  " a": -14.300713,
+                  " \"": -14.602245,
+                  " __": -14.778803,
+                  " following": -14.872839,
+                  " \n": -14.921274,
+                  "[": -15.015894
+                },
+                {
+                  " given": -0.19390044,
+                  " following": -2.93423,
+                  " provided": -3.1973393,
+                  " [": -3.5388176,
+                  " instruction": -3.6906388,
+                  " specified": -5.000837,
+                  " subsequent": -5.5780997,
+                  " previous": -5.7381473,
+                  " preceding": -6.0062213,
+                  " above": -6.2162795,
+                  " stated": -6.4565616,
+                  " original": -6.472301,
+                  " same": -6.862352,
+                  " input": -7.1676173,
+                  " below": -7.7066684,
+                  " aforementioned": -7.7856135,
+                  " current": -7.854297,
+                  " supplied": -7.9616694,
+                  " mentioned": -8.029145,
+                  " presented": -8.202409
+                },
+                {
+                  " instruction": -0.057982564,
+                  " [": -4.305457,
+                  " direction": -4.3894186,
+                  " directive": -4.828992,
+                  " instructions": -5.2285185,
+                  " guideline": -5.4390516,
+                  " command": -5.761483,
+                  " set": -6.102977,
+                  " guidance": -6.3119383,
+                  " prompt": -6.671214,
+                  " guide": -7.1299925,
+                  " task": -7.1568995,
+                  " directions": -7.609479,
+                  " input": -7.7060575,
+                  " statement": -7.740119,
+                  " step": -7.9524965,
+                  " IN": -8.387126,
+                  " guidelines": -8.684747,
+                  " instructional": -9.386186,
+                  " procedure": -9.505485
+                },
+                {
+                  " while": -0.6172189,
+                  " without": -1.0758104,
+                  " with": -2.8912344,
+                  ",": -3.587697,
+                  " that": -3.653554,
+                  " but": -4.742116,
+                  " maintaining": -7.327594,
+                  " using": -8.0975275,
+                  " preserving": -8.687097,
+                  " whilst": -8.903058,
+                  " which": -8.971995,
+                  " retaining": -9.170165,
+                  " by": -9.2553625,
+                  " keeping": -10.227529,
+                  " and": -10.63856,
+                  "\n": -10.953067,
+                  " to": -11.395432,
+                  " ": -11.7178755,
+                  " ensuring": -11.975545,
+                  " in": -12.079583
+                },
+                {
+                  " maintaining": -0.4392357,
+                  " preserving": -1.7227211,
+                  " retaining": -1.7774544,
+                  " still": -5.1781654,
+                  " ensuring": -6.640131,
+                  " keeping": -8.191822,
+                  " staying": -8.23987,
+                  " remaining": -8.840904,
+                  " maint": -9.6020355,
+                  " not": -10.459679,
+                  " conveying": -10.685432,
+                  " maintain": -10.9178505,
+                  " also": -11.110943,
+                  "maint": -11.76099,
+                  " holding": -11.830147,
+                  " making": -12.384365,
+                  " up": -12.456205,
+                  " accurately": -13.66481,
+                  " having": -13.694143,
+                  "\n": -13.697102
+                },
+                {
+                  " its": -0.40660366,
+                  " the": -1.0968732,
+                  " semantic": -9.432759,
+                  " it": -10.484838,
+                  " a": -11.110953,
+                  " identical": -11.202245,
+                  " ": -11.760154,
+                  "\n": -11.985591,
+                  "its": -12.651689,
+                  "the": -12.784287,
+                  " their": -12.819322,
+                  " meaning": -13.201695,
+                  " semantics": -13.209365,
+                  " th": -13.431111,
+                  " an": -13.556449,
+                  " similar": -13.623025,
+                  " equivalent": -13.761365,
+                  " consistent": -13.886249,
+                  " t": -13.954679,
+                  " overall": -14.009299
+                },
+                {
+                  " semantic": -1.1891658,
+                  " intended": -1.2211177,
+                  " meaning": -1.3215549,
+                  " underlying": -2.8340938,
+                  " original": -3.1000144,
+                  " overall": -4.396407,
+                  " semantics": -4.963149,
+                  " core": -5.54387,
+                  " same": -6.589162,
+                  " essence": -6.6516848,
+                  " inherent": -7.0363607,
+                  " significance": -7.662257,
+                  " intent": -8.039624,
+                  " implied": -8.1228895,
+                  " fundamental": -8.260337,
+                  " essential": -8.4961,
+                  " contextual": -8.5352125,
+                  " basic": -8.537072,
+                  " context": -8.987519,
+                  " sem": -9.010837
+                },
+                {
+                  " meaning": -0.058962107,
+                  " significance": -3.7189295,
+                  " interpretation": -3.9773352,
+                  " intent": -5.945797,
+                  " context": -5.948038,
+                  " essence": -6.559227,
+                  " value": -6.8097267,
+                  " understanding": -6.961035,
+                  " definition": -7.043907,
+                  " con": -7.250242,
+                  " message": -7.322506,
+                  " content": -7.392082,
+                  " representation": -7.4472847,
+                  " sense": -7.9757633,
+                  " relevance": -7.9842186,
+                  " purpose": -8.036402,
+                  " implication": -8.434742,
+                  " intention": -8.687435,
+                  " importance": -8.919643,
+                  " equivalence": -8.969097
+                },
+                {
+                  ".": -0.04069512,
+                  ".\n": -3.2318668,
+                  ".\n\n": -8.153059,
+                  " ": -10.075056,
+                  "<|endoftext|>": -10.742296,
+                  ".\n\n\n": -11.345825,
+                  "\n": -12.212383,
+                  ".\"": -12.469809,
+                  " \n": -12.694891,
+                  ",": -12.762863,
+                  " .": -12.781015,
+                  ".\n\n\n\n": -12.836674,
+                  "..": -13.411858,
+                  ".[": -13.770138,
+                  ".\n\n\n\n\n\n": -14.298281,
+                  ".\"\n": -14.371935,
+                  " and": -14.476551,
+                  "./": -14.527725,
+                  ".\n\n\n\n\n": -14.629114,
+                  " [": -14.745934
+                }
+              ],
+              "text_offset": [
+                217,
+                224,
+                226,
+                236,
+                244,
+                247,
+                251,
+                257,
+                269,
+                275,
+                287,
+                291,
+                300,
+                308
+              ]
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 38,
+          "completion_tokens": 14,
+          "total_tokens": 52
+        }
+      }
+    },
+    "generatedPrompts": [
+      {
+        "prompt": "Create a different version of the given instruction while maintaining its semantic meaning.",
+        "rawPrompt": " Create a different version of the given instruction while maintaining its semantic meaning.",
+        "finishReason": "stop",
+        "logprob": -4.65077269563,
+        "probability": 0.00955421657619895,
+        "parentPrompt": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:\nOutput:",
+        "parentInstruction": "Generate a variation of the following instruction while keeping the semantic meaning.\n\nInput: [INSTRUCTION]\nOutput:"
+      }
+    ]
+  }
+]

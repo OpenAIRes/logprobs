@@ -1,0 +1,14 @@
+node_modules/
+
+# Clone of OpenAIRes/logprobs — its own git repo, kept alongside so the token
+# probabilities from this study can be viewed there. `node export-logprobs.mjs`
+# writes into it. Not tracked here; clone it with:
+#   git clone https://github.com/OpenAIRes/logprobs.git logprobs
+logprobs/
+
+# Empty stdout/stderr sinks from the process launcher, not project output.
+server.out.log
+server.err.log
+
+# data/prompt-log.json is tracked on purpose: after the completions endpoint
+# retires on 2026-09-28 the logged runs are the only reproducible record.

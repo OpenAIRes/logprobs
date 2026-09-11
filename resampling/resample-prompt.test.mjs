@@ -1,0 +1,383 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  BASE_RESAMPLING_PROMPT,
+  buildOpenAIRequestBody,
+  buildResamplingPrompt,
+  extractVariations,
+  getInstructionForMode,
+  INSTRUCTION_PLACEHOLDER,
+  templateError,
+  templateWarnings,
+  maxLogprobs,
+  minMaxTokens,
+  planRequests,
+  resolveBackendParams,
+  unsupportedParams,
+} from "./resample-prompt.mjs";
+
+test("builds the APE resampling prompt from the paper", () => {
+  assert.equal(
+    buildResamplingPrompt("write the antonym of the word."),
+    [
+      "Generate a variation of the following instruction while keeping the semantic meaning.",
+      "",
+      "Input: write the antonym of the word.",
+      "Output:",
+    ].join("\n"),
+  );
+});
+
+test("rejects an empty instruction", () => {
+  assert.throws(() => buildResamplingPrompt("  "), /Instruction is empty/);
+});
+
+test("meta mode uses the full base resampling prompt as INSTRUCTION", () => {
+  assert.equal(
+    getInstructionForMode({ instruction: "ignored", mode: "meta" }),
+    BASE_RESAMPLING_PROMPT,
+  );
+});
+
+test("builds the literal meta resampling prompt", () => {
+  assert.equal(
+    buildResamplingPrompt(BASE_RESAMPLING_PROMPT),
+    [
+      "Generate a variation of the following instruction while keeping the semantic meaning.",
+      "",
+      "Input: Generate a variation of the following instruction while keeping the semantic meaning.",
+      "",
+      "Input: [INSTRUCTION]",
+      "Output:",
+      "Output:",
+    ].join("\n"),
+  );
+});
+
+test("the prompt sent to the API has no trailing whitespace after Output:", () => {
+  // llm.py strips every prompt before sending, so `Output:` ends the string.
+  const prompt = buildResamplingPrompt("write the antonym of the word.");
+  assert.equal(prompt, prompt.trimEnd());
+  assert.ok(prompt.endsWith("Output:"));
+});
+
+test("the default template substitutes where the old hand-built prompt pasted", () => {
+  // Guards the switch from `Input: ${instruction}` to a real substitution: the
+  // prompt must stay byte-identical, because 13 months of logged calls used it.
+  assert.equal(
+    buildResamplingPrompt("write the antonym of the word.", BASE_RESAMPLING_PROMPT),
+    buildResamplingPrompt("write the antonym of the word."),
+  );
+});
+
+test("a custom template replaces the paper's, verbatim", () => {
+  assert.equal(
+    buildResamplingPrompt("write the antonym of the word.", [
+      "Reword the instruction.",
+      "",
+      `Instruction: ${INSTRUCTION_PLACEHOLDER}`,
+      "Output:",
+    ].join("\n")),
+    [
+      "Reword the instruction.",
+      "",
+      "Instruction: write the antonym of the word.",
+      "Output:",
+    ].join("\n"),
+  );
+});
+
+test("refuses a template with no slot for the instruction", () => {
+  // This is what meta mode actually returned from gpt-3.5-turbo-instruct: the
+  // paraphrased instruction sentence, with the Input:/Output: scaffolding gone.
+  // Used as a template it builds a prompt that never states what to resample,
+  // and the call would look perfectly successful.
+  const generated = "Create a different version of the given instruction while maintaining its semantic meaning.";
+
+  assert.match(templateError(generated), /\[INSTRUCTION\]/);
+  assert.throws(() => buildResamplingPrompt("write the antonym of the word.", generated), /\[INSTRUCTION\]/);
+  assert.throws(() => buildResamplingPrompt("x", "   "), /empty/);
+  assert.equal(templateError(BASE_RESAMPLING_PROMPT), null);
+});
+
+test("warns about a missing Output: cue without refusing the template", () => {
+  const noCue = `Reword the instruction: ${INSTRUCTION_PLACEHOLDER}`;
+  assert.equal(templateError(noCue), null);
+  assert.deepEqual(templateWarnings(noCue), [
+    'The template does not end with "Output:", the cue the model completes after.',
+  ]);
+  assert.deepEqual(templateWarnings(BASE_RESAMPLING_PROMPT), []);
+  assert.match(templateWarnings(`${BASE_RESAMPLING_PROMPT}\n`).join(" "), /whitespace/);
+});
+
+test("meta mode resamples whichever template is in use", () => {
+  const template = `Reword it.\n\nInput: ${INSTRUCTION_PLACEHOLDER}\nOutput:`;
+  assert.equal(getInstructionForMode({ instruction: "ignored", mode: "meta", template }), template);
+  // Without a template it still means the paper's, so old callers are unaffected.
+  assert.equal(getInstructionForMode({ instruction: "ignored", mode: "meta" }), BASE_RESAMPLING_PROMPT);
+  assert.equal(getInstructionForMode({ instruction: "kept", mode: "custom", template }), "kept");
+});
+
+test("the inserted instruction is never rescanned or treated as a pattern", () => {
+  // Meta mode feeds in an instruction that itself contains [INSTRUCTION]; the
+  // inner one must survive as literal text rather than being substituted again.
+  const built = buildResamplingPrompt(BASE_RESAMPLING_PROMPT);
+  assert.equal(built.split(INSTRUCTION_PLACEHOLDER).length - 1, 1);
+  assert.ok(built.includes(`Input: ${INSTRUCTION_PLACEHOLDER}`));
+
+  // `$&` and friends are replacement patterns for String.replaceAll; a bare
+  // string replacement would expand them and corrupt the instruction.
+  assert.ok(buildResamplingPrompt("keep $& and $` verbatim").includes("Input: keep $& and $` verbatim"));
+});
+
+test("completions sampling defaults come from instruction_induction.yaml", () => {
+  // logprobs is ours, not the paper's, so it is checked separately below.
+  const { logprobs, ...fromPaper } = resolveBackendParams("completions");
+  assert.deepEqual(fromPaper, {
+    temperature: 0.9,
+    topP: 0.9,
+    maxTokens: 50,
+    frequencyPenalty: 0,
+    presencePenalty: 0,
+  });
+});
+
+test("responses backend sends nothing unless asked", () => {
+  assert.deepEqual(resolveBackendParams("responses"), {});
+});
+
+test("explicit values override backend defaults, null forces omission", () => {
+  assert.deepEqual(
+    resolveBackendParams("completions", { temperature: 0, maxTokens: null }),
+    {
+      temperature: 0,
+      topP: 0.9,
+      frequencyPenalty: 0,
+      presencePenalty: 0,
+      logprobs: 20,
+    },
+  );
+});
+
+test("builds the faithful legacy completions request body", () => {
+  // logprobs off gives a body literally identical to the paper's config.
+  assert.deepEqual(
+    buildOpenAIRequestBody({
+      backend: "completions",
+      prompt: "Prompt",
+      n: 30,
+      params: resolveBackendParams("completions", { logprobs: null }),
+    }),
+    {
+      model: "gpt-3.5-turbo-instruct",
+      prompt: "Prompt",
+      n: 30,
+      temperature: 0.9,
+      top_p: 0.9,
+      max_tokens: 50,
+      frequency_penalty: 0,
+      presence_penalty: 0,
+    },
+  );
+});
+
+test("the default body adds only logprobs on top of the paper's config", () => {
+  const body = buildOpenAIRequestBody({
+    backend: "completions",
+    prompt: "Prompt",
+    n: 30,
+    params: resolveBackendParams("completions"),
+  });
+  assert.equal(body.logprobs, 20);
+  // Observational only: it cannot change which tokens get generated.
+  assert.equal(body.temperature, 0.9);
+  assert.equal(body.top_p, 0.9);
+});
+
+test("omits n when only one completion is requested", () => {
+  const body = buildOpenAIRequestBody({
+    backend: "completions",
+    prompt: "Prompt",
+    n: 1,
+    params: {},
+  });
+  assert.equal("n" in body, false);
+});
+
+test("builds a bare Responses request body", () => {
+  assert.deepEqual(
+    buildOpenAIRequestBody({
+      backend: "responses",
+      prompt: "Prompt",
+      params: resolveBackendParams("responses"),
+    }),
+    {
+      model: "gpt-5.5",
+      input: "Prompt",
+    },
+  );
+});
+
+test("Responses backend renames maxTokens to max_output_tokens", () => {
+  assert.deepEqual(
+    buildOpenAIRequestBody({
+      backend: "responses",
+      prompt: "Prompt",
+      model: "gpt-5.5",
+      params: { maxTokens: 200 },
+    }),
+    {
+      model: "gpt-5.5",
+      input: "Prompt",
+      max_output_tokens: 200,
+    },
+  );
+});
+
+test("reports which parameters a backend cannot send", () => {
+  // Feeding the completions config to the modern backend leaves only max_tokens.
+  assert.deepEqual(
+    unsupportedParams("responses", resolveBackendParams("completions")),
+    ["temperature", "topP", "frequencyPenalty", "presencePenalty", "logprobs"],
+  );
+  assert.deepEqual(unsupportedParams("completions", resolveBackendParams("completions")), []);
+});
+
+test("completions asks for every variation in one request, Responses loops", () => {
+  assert.deepEqual(planRequests("completions", 5), [5]);
+  assert.deepEqual(planRequests("responses", 5), [1, 1, 1, 1, 1]);
+  assert.deepEqual(planRequests("completions", 1), [1]);
+});
+
+test("rejects an unknown backend", () => {
+  assert.throws(() => planRequests("insert", 1), /Unknown backend/);
+});
+
+test("keeps completion text verbatim and orders choices by index", () => {
+  const variations = extractVariations("completions", {
+    choices: [
+      { index: 1, text: " second variation.", finish_reason: "length" },
+      { index: 0, text: " first variation.", finish_reason: "stop" },
+    ],
+  });
+
+  assert.deepEqual(variations, [
+    { raw: " first variation.", text: "first variation.", finishReason: "stop", logprob: null, probability: null },
+    { raw: " second variation.", text: "second variation.", finishReason: "length", logprob: null, probability: null },
+  ]);
+});
+
+test("reads a Responses payload from output_text or the output array", () => {
+  assert.deepEqual(
+    extractVariations("responses", { output_text: " a variation. ", status: "completed" }),
+    [{ raw: " a variation. ", text: "a variation.", finishReason: "completed", logprob: null, probability: null }],
+  );
+
+  assert.deepEqual(
+    extractVariations("responses", {
+      output: [{ content: [{ type: "output_text", text: "a " }, { type: "output_text", text: "variation." }] }],
+    }),
+    [{ raw: "a variation.", text: "a variation.", finishReason: null, logprob: null, probability: null }],
+  );
+});
+
+test("the Responses backend advertises only max_output_tokens", () => {
+  // Verified against gpt-5.5: temperature and top_p return HTTP 400
+  // "Unsupported parameter", so they must not be offered.
+  assert.deepEqual(
+    unsupportedParams("responses", { temperature: 0.9, topP: 0.9, maxTokens: 200 }),
+    ["temperature", "topP"],
+  );
+
+  assert.deepEqual(
+    buildOpenAIRequestBody({
+      backend: "responses",
+      prompt: "Prompt",
+      params: { temperature: 0.9, topP: 0.9, maxTokens: 200 },
+    }),
+    { model: "gpt-5.5", input: "Prompt", max_output_tokens: 200 },
+  );
+});
+
+test("exposes the endpoint's max_output_tokens floor", () => {
+  assert.equal(minMaxTokens("responses"), 16);
+  assert.equal(minMaxTokens("completions"), 1);
+});
+
+test("completions asks for logprobs by default, Responses cannot", () => {
+  assert.equal(resolveBackendParams("completions").logprobs, 20);
+  assert.equal(resolveBackendParams("responses").logprobs, undefined);
+  assert.equal(maxLogprobs("completions"), 20);
+  assert.equal(maxLogprobs("responses"), 0);
+
+  // Verified against gpt-5.5: "logprobs are not supported with reasoning models."
+  assert.deepEqual(unsupportedParams("responses", { logprobs: 5 }), ["logprobs"]);
+  assert.equal(
+    "logprobs" in buildOpenAIRequestBody({ backend: "responses", prompt: "P", params: { logprobs: 5 } }),
+    false,
+  );
+});
+
+test("logprobs 0 is sent, not treated as absent", () => {
+  // 0 still returns the chosen tokens' probabilities, which is what P(sequence)
+  // needs, so it must survive the falsy checks.
+  const body = buildOpenAIRequestBody({
+    backend: "completions",
+    prompt: "P",
+    params: resolveBackendParams("completions", { logprobs: 0 }),
+  });
+  assert.equal(body.logprobs, 0);
+
+  const off = buildOpenAIRequestBody({
+    backend: "completions",
+    prompt: "P",
+    params: resolveBackendParams("completions", { logprobs: null }),
+  });
+  assert.equal("logprobs" in off, false);
+});
+
+test("sums token logprobs into an exact sequence probability", () => {
+  const [variation] = extractVariations("completions", {
+    choices: [{
+      index: 0,
+      text: " provide the opposite.",
+      finish_reason: "stop",
+      logprobs: { token_logprobs: [-1.5, -0.5, -0.25] },
+    }],
+  });
+
+  assert.equal(variation.logprob, -2.25);
+  assert.ok(Math.abs(variation.probability - Math.exp(-2.25)) < 1e-12);
+});
+
+test("reports no probability when logprobs were not requested", () => {
+  const [none] = extractVariations("completions", {
+    choices: [{ index: 0, text: " x", finish_reason: "stop", logprobs: null }],
+  });
+  assert.equal(none.logprob, null);
+  assert.equal(none.probability, null);
+
+  // echo mode can return a null for the first token; refuse to sum that.
+  const [partial] = extractVariations("completions", {
+    choices: [{ index: 0, text: " x", logprobs: { token_logprobs: [null, -0.5] } }],
+  });
+  assert.equal(partial.logprob, null);
+});
+
+test("refuses to sum the -9999 sentinel into a probability", () => {
+  // Seen live: a sampled token absent from top_logprobs even at 20 gets -9999.
+  // Summing it produced logprob -10001.56 and p=0, which looks authoritative
+  // and is meaningless.
+  const [variation] = extractVariations("completions", {
+    choices: [{
+      index: 0,
+      text: "provide the antonym of the given word.",
+      finish_reason: "stop",
+      logprobs: { token_logprobs: [-9999, -0.0544, -0.8023, -0.0555] },
+    }],
+  });
+
+  assert.equal(variation.logprob, null);
+  assert.equal(variation.probability, null);
+  assert.equal(variation.text, "provide the antonym of the given word.");
+});
