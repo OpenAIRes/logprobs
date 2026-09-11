@@ -47,12 +47,21 @@
      + 'stovky volání, klik na token je jedno.'],
   ];
 
-  const DEFAULT = {always: true, big: false, batch: false};
+  const DEFAULT = {always: true, big: false, batch: false, max_tokens: 0};
+
+  /* 0 means "per model". A number means that many tokens for every call the
+     viewers make -- the token click, the deviations, the branches. Clamped the
+     same way the server clamps it, so a typed 40000 cannot become a request. */
+  const cleanMax = v => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 1 ? Math.min(Math.floor(n), 4096) : 0;
+  };
 
   const clean = p => ({
     always: !!(p && p.always),
     big: !!(p && p.big),
     batch: !!(p && p.batch),
+    max_tokens: cleanMax(p && p.max_tokens),
   });
 
   let cached = null;
@@ -151,13 +160,19 @@
      position however many are asked for (measured: ntop=5 on all 17 base-model
      records, against 20 for gpt). */
   const BASE_MODEL = /^(ada|babbage|curie|davinci)/;
-  const maxTokensFor = model => (BASE_MODEL.test(String(model || '')) ? 5 : 20);
+  const perModelMax = model => (BASE_MODEL.test(String(model || '')) ? 5 : 20);
+  /* The setting wins where it is set. Worth knowing when changing it: a record
+     generated at 20 can answer a request for 5 by being cut down, but not the
+     other way round, so asking for more than the sweeps used turns cache hits
+     into paid calls. */
+  const maxTokensFor = model => get().max_tokens || perModelMax(model);
+  // Not a choice: it is the API's own cap, silently applied by the base models.
   const logprobsFor = model => (BASE_MODEL.test(String(model || '')) ? 5 : 20);
 
   root.AskPolicy = {
     CONDITIONS, DEFAULT, KEY,
     get, load, set, shouldAsk, guard, describe,
-    maxTokensFor, logprobsFor,
+    maxTokensFor, logprobsFor, perModelMax,
     // Testing seam: drops the memoised value so the next get() re-reads.
     forget: () => { cached = null; },
   };

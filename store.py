@@ -1136,6 +1136,13 @@ class RecordStore:
                     'node_kind': self.node_kind(path, start),
                 })
 
+        # Cheapest departure first, and the same for the ones that have to be
+        # bought: the plan is walked in position order, but whoever stops after
+        # thirty calls wants the thirty likeliest deviations, not every
+        # alternative at the first two positions. Cost is the only criterion
+        # available here -- the others need the string, which is what is missing.
+        missing.sort(key=lambda m: m['cost'])
+
         visible = [e for e in entries
                    if (not ends or e.get('end') in ends)
                    and (not nodes or e.get('node_kind') in nodes)]

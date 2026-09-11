@@ -353,6 +353,17 @@
       <dt>nikdy</dt>
       <dd>No question at all. Calls go out on a click.</dd>
     </dl>
+    <p>Beside it, <b>délka volání</b> sets <code>max_tokens</code> for every call these
+      viewers make — the token click, the deviations, the branches. Empty means per model:
+      20 for gpt-3.5-turbo-instruct, 5 for the base models. Worth knowing before raising it:
+      a record generated at 20 can answer a request for 5 by being cut down, but not the
+      other way round, so asking for more than the sweeps used turns cache hits into paid
+      calls. The <code>logprobs</code> count is not settable — it is the API's own cap,
+      silently 5 on the base models whatever is asked.</p>
+    <p>The deviations are bought <b>cheapest departure first</b>, the same order the rows
+      are ranked in, not position by position. Stopping after thirty calls then leaves you
+      with the thirty likeliest deviations rather than every alternative at the first two
+      positions.</p>
     <p>The dialog carries the <b>exact request body</b> — the prompt with spaces and
       newlines made visible, plus every parameter — and the object on screen is the object
       that is posted; nothing is rebuilt in between. <i>Poslat</i> sends this one,

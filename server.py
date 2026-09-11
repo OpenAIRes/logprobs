@@ -117,7 +117,22 @@ def bounded_variants(rec, k=None, limit=None, budget=VARIANT_CHAR_BUDGET):
 
 ASK_POLICY_FILE = 'ask_policy.json'
 ASK_POLICY_KEYS = ('always', 'big', 'batch')
-ASK_POLICY_DEFAULT = {'always': True, 'big': False, 'batch': False}
+# 0 means "per model": 20 for gpt-3.5-turbo-instruct, 5 for the base models.
+# Anything else is that many tokens for every call the viewers make.
+ASK_POLICY_DEFAULT = {'always': True, 'big': False, 'batch': False, 'max_tokens': 0}
+
+
+def _clamp_max_tokens(value):
+    """0 (or anything unusable) means the per-model default; otherwise 1..4096.
+
+    Clamped rather than rejected: this is a number typed into a box, and a
+    typo should not be able to ask for a 40,000-token completion.
+    """
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return 0 if n <= 0 else min(n, 4096)
 
 
 def read_ask_policy():
@@ -132,7 +147,9 @@ def read_ask_policy():
     try:
         with open(path, encoding='utf-8') as fh:
             saved = json.load(fh)
-        return {k: bool(saved.get(k, ASK_POLICY_DEFAULT[k])) for k in ASK_POLICY_KEYS}
+        out = {k: bool(saved.get(k, ASK_POLICY_DEFAULT[k])) for k in ASK_POLICY_KEYS}
+        out['max_tokens'] = _clamp_max_tokens(saved.get('max_tokens'))
+        return out
     except (OSError, ValueError, AttributeError):
         return dict(ASK_POLICY_DEFAULT)
 
@@ -142,6 +159,7 @@ def write_ask_policy(policy):
     back as the default on the next read, which is the strictest option and so
     harmless -- but a truncated file that still parses is not, so do not risk it."""
     clean = {k: bool((policy or {}).get(k)) for k in ASK_POLICY_KEYS}
+    clean['max_tokens'] = _clamp_max_tokens((policy or {}).get('max_tokens'))
     path = os.path.join(ROOT, ASK_POLICY_FILE)
     temp = None
     try:

@@ -44,7 +44,7 @@ assert.equal(ask({always: false, big: false, batch: false}, BIG, {total: 900}), 
 
 // ---- the default is "každé" -------------------------------------------------
 AskPolicy.forget();
-assert.deepEqual(AskPolicy.get(), {always: true, big: false, batch: false});
+assert.deepEqual(AskPolicy.get(), {always: true, big: false, batch: false, max_tokens: 0});
 assert.equal(AskPolicy.describe(), 'před každým voláním');
 AskPolicy.set({big: true, batch: true});
 assert.equal(AskPolicy.describe(), 'jen od 4096 tokenů nebo víc než jedno volání');
@@ -54,8 +54,25 @@ assert.equal(AskPolicy.describe(), 'nikdy');
 // ---- garbage in the stored policy is not a licence to spend -----------------
 AskPolicy.forget();
 AskPolicy.set({always: 'no', big: null, batch: 0});
-assert.deepEqual(AskPolicy.get(), {always: true, big: false, batch: false},
+assert.deepEqual(AskPolicy.get(), {always: true, big: false, batch: false, max_tokens: 0},
   'truthiness only: the strings a hand-edited file might hold must not mean "off"');
+
+// ---- max_tokens: 0 means per model, a number means that number -------------
+AskPolicy.forget();
+AskPolicy.set({});
+assert.equal(AskPolicy.maxTokensFor('gpt-3.5-turbo-instruct'), 20);
+assert.equal(AskPolicy.maxTokensFor('davinci-002'), 5);
+AskPolicy.set({max_tokens: 100});
+assert.equal(AskPolicy.maxTokensFor('gpt-3.5-turbo-instruct'), 100);
+assert.equal(AskPolicy.maxTokensFor('davinci-002'), 100, 'a set length applies to every model');
+assert.equal(AskPolicy.logprobsFor('davinci-002'), 5, 'the alternative cap is the API, not a choice');
+AskPolicy.set({max_tokens: 40000});
+assert.equal(AskPolicy.maxTokensFor('gpt-3.5-turbo-instruct'), 4096, 'clamped, not obeyed');
+for (const bad of [0, -5, 'twenty', null, undefined, NaN]) {
+  AskPolicy.set({max_tokens: bad});
+  assert.equal(AskPolicy.maxTokensFor('davinci-002'), 5, `${bad} falls back to per model`);
+}
+AskPolicy.set({});
 
 // ---- guard(): asks, and fails closed with no dialog available ---------------
 (async () => {
@@ -81,6 +98,7 @@ assert.deepEqual(AskPolicy.get(), {always: true, big: false, batch: false},
   assert.equal(seen.length, 0, 'nothing was shown, because nothing was meant to be');
 
   // ---- the per-model limits, in their one home -----------------------------
+  AskPolicy.set({});
   assert.equal(AskPolicy.maxTokensFor('gpt-3.5-turbo-instruct'), 20);
   assert.equal(AskPolicy.logprobsFor('gpt-3.5-turbo-instruct'), 20);
   for (const m of ['davinci-002', 'babbage-002', 'ada-002', 'curie-001']) {

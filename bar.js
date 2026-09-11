@@ -384,6 +384,9 @@ const ICON = {
       <div class="sfield" id="sAskWrap"><span title="Kdy se program zeptá, než pošle volání na API. Volání, na které je odpověď v databázi, se neděje, takže se na ně ani neptá. Nastavení platí pro celý program a je uložené na serveru, ne v prohlížeči.">ptát se před API</span>
         <span class="sends" id="sAsk"></span>
       </div>
+      <label class="sfield" id="sCallMaxWrap" title="max_tokens každého volání, které tenhle prohlížeč pošle: klik na token, odchylky, větve. Prázdné = podle modelu (20 pro gpt-3.5-turbo-instruct, 5 pro base modely). Pozor: záznam vyrobený na 20 umí odpovědět na dotaz na 5 tím, že se zkrátí, ale ne naopak — víc, než na kolik běžely sweepy, tedy mění trefy v databázi na placená volání."><span>délka volání</span>
+        <input type="number" id="sCallMax" min="1" max="4096" step="1" placeholder="podle modelu">
+      </label>
       <details class="sadv" id="sAdv"><summary>advanced — what shows</summary>
         <p class="sadvhint">On the strip: ticked controls sit on the visible strip
           instead of in here. Nothing is duplicated — the control moves. Untick
@@ -525,6 +528,22 @@ const ICON = {
       + '<label title="Neptat se nikdy. Volání pak odcházejí bez potvrzení."><input type="checkbox" class="sAskBox" value="never"> nikdy</label>';
   }
   const askBoxes = () => [...document.querySelectorAll('.sAskBox')];
+  /* Empty means "per model" -- the box shows what that comes to for the model in
+     force, as a placeholder, so the number is never a mystery. */
+  function paintCallMax() {
+    if (!ASK) return;
+    const box = el('sCallMax');
+    const set = ASK.get().max_tokens;
+    if (document.activeElement !== box) box.value = set ? String(set) : '';
+    box.placeholder = `podle modelu (${ASK.perModelMax(greedyModel())})`;
+  }
+  el('sCallMax').addEventListener('change', async () => {
+    const box = el('sCallMax');
+    if (box.value && !box.reportValidity()) return;
+    await ASK.set({ ...ASK.get(), max_tokens: box.value ? Number(box.value) : 0 });
+    paintCallMax();
+  });
+
   function paintAsk() {
     if (!ASK) return;
     const p = ASK.get();
@@ -548,7 +567,8 @@ const ICON = {
         next = {always: false, big: p.big, batch: p.batch};
         next[v] = b.checked;
       }
-      await ASK.set(next);
+      // Carry the length through: it lives in the same policy object.
+      await ASK.set({ ...ASK.get(), ...next });
       paintAsk();
     });
   }
@@ -760,6 +780,7 @@ const ICON = {
 
   function repaint() {
     paintAsk();
+    paintCallMax();
     // repaint() is where every other "can this control do anything right now"
     // decision is made, so putting it here is what keeps the button in step with
     // the record on screen.
@@ -921,7 +942,7 @@ const ICON = {
   paintBlocks();
   // The server is the source of truth for the ask policy, so refresh once and
   // repaint when it answers; until then the cached value applies.
-  if (ASK) ASK.load().then(paintAsk);
+  if (ASK) ASK.load().then(() => { paintAsk(); paintCallMax(); });
 
   let tokenLimit = 0;
   try { tokenLimit = Math.max(0, Number(localStorage.getItem(TOKEN_LIMIT_KEY)) || 0); } catch {}
