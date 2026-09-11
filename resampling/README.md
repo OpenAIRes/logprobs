@@ -235,9 +235,11 @@ U vysledku a radku historie s ulozenymi tokenovymi logprobs je odkaz
 `Zobrazit logprobs`. Otevre konkretni variantu v nove zalozce bez volani API.
 Funguje i pro vice variants v jednom requestu a pro existujici historii.
 
-Server pouziva primo novejsi viewer z `../gpt/extracted` (verze z 5. 9. 2026),
+Server pouziva primo viewer z nadrazene slozky `..` -- tenhle program je od
+zari 2026 podslozkou `resampling/` v repozitari logprobs, drive samostatne repo
+vedle nej (verze z 5. 9. 2026),
 ktery je shodny s `Documents/ChatGPT/chat 2/logprobs.html`. Kopie v
-`AI/logprobs` je starsi (28. 8. 2026). Nevytvari se dalsi kopie vieweru.
+`AI/logprobs` byla starsi (28. 8. 2026). Nevytvari se dalsi kopie vieweru.
 Jine umisteni lze nastavit promennou `LOGPROBS_VIEWER_DIR` pred spustenim.
 
 Na portu 8787 se viewer napojuje na historii resamplingu; nejde o cely
@@ -258,7 +260,8 @@ Testy propojeni: `node --test viewer-link.test.mjs`.
 
 ## Shared viewer and single-token variants
 
-The sole maintained Logprobs Viewer HTML lives in `C:/Users/Jan/Desktop/gpt/extracted/logprobs.html`.
+The sole maintained Logprobs Viewer HTML lives one directory up, in the package
+root (`../logprobs.html`).
 The old `AI/logprobs/logprobs.html` and `Documents/ChatGPT/chat 2/logprobs.html`
 are forwarding pages, preserving query parameters and fragment. They contain no viewer implementation.
 Historical JSON datasets stay in their existing locations.

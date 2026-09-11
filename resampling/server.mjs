@@ -5,6 +5,7 @@ import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { extname, join, normalize } from "node:path";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { choicesInOrder, viewerUrl, viewerEntries } from "./viewer-link.mjs";
 import { appendPromptLogEvent, promptRowsFromEvents, readPromptLog } from "./prompt-log.mjs";
@@ -31,7 +32,10 @@ import {
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 const PUBLIC_DIR = join(ROOT, "public");
-const VIEWER_DIR = process.env.LOGPROBS_VIEWER_DIR || join(ROOT, '..', 'gpt', 'extracted');
+// The viewer package is the parent directory now: this program used to live in
+// a repository of its own beside it, which meant a clone of either one was
+// half a program. LOGPROBS_VIEWER_DIR still overrides it.
+const VIEWER_DIR = process.env.LOGPROBS_VIEWER_DIR || join(ROOT, '..');
 /* The viewer package's own server. Everything shared lives there: the record
    store every view reads, the ask-before-calling policy, and the deviation
    engine behind the branch button. This program keeps its own prompt log -- that
@@ -171,8 +175,25 @@ function normalizeOptions(body) {
   };
 }
 
+/* First of these that exists on disk; `py` is the Windows launcher and is
+   assumed to be on PATH rather than checked for. */
+function defaultPython() {
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  const bundled = home
+    ? join(home, '.cache', 'codex-runtimes', 'codex-primary-runtime',
+           'dependencies', 'python', 'python.exe')
+    : '';
+  if (bundled && existsSync(bundled)) return bundled;
+  return process.platform === 'win32' ? 'py' : 'python3';
+}
+
 async function singleTokenVariants(record) {
-  const python = process.env.LOGPROBS_PYTHON || join(ROOT, '..', '..', '.cache', 'codex-runtimes', 'codex-primary-runtime', 'dependencies', 'python', 'python.exe');
+  /* The path to the bundled runtime was written relative to the old location,
+     two levels up from a sibling directory; from here that resolves somewhere
+     else entirely. It is spelled from the home directory instead, and if it is
+     not there the launcher is tried -- `python` alone is a Microsoft Store stub
+     on this machine and fails in a way that reads like a code error. */
+  const python = process.env.LOGPROBS_PYTHON || defaultPython();
   return new Promise((resolve, reject) => {
     const child = spawn(python, [join(VIEWER_DIR, 'single_token_variants.py')], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '', errors = '';
