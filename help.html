@@ -360,10 +360,11 @@
       other way round, so asking for more than the sweeps used turns cache hits into paid
       calls. The <code>logprobs</code> count is not settable — it is the API's own cap,
       silently 5 on the base models whatever is asked.</p>
-    <p>The deviations are bought <b>cheapest departure first</b>, the same order the rows
-      are ranked in, not position by position. Stopping after thirty calls then leaves you
-      with the thirty likeliest deviations rather than every alternative at the first two
-      positions.</p>
+    <p>The deviations are bought in <b>reading order</b>: position by position from the
+      left, and within a position from the likeliest alternative down. So a partial run is
+      legible — you know how far along the string you got. The rows in the table are ranked
+      by <code>deviation cost</code> instead, which is a different question and does not
+      change what gets bought first.</p>
     <p>The dialog carries the <b>exact request body</b> — the prompt with spaces and
       newlines made visible, plus every parameter — and the object on screen is the object
       that is posted; nothing is rebuilt in between. <i>Poslat</i> sends this one,
