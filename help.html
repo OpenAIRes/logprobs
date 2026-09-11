@@ -110,7 +110,14 @@
         is the whole string the model wanted to write.</p></dd>
 
       <dt>Greedy path + next best <span class="std">one-token departures, ranked</span></dt>
-      <dd>Rank 1 is the greedy path. Every other row is that path with <b>one token
+      <dd><p><b>Where each of these lives now.</b> Since the split into greedy I and
+        greedy II, <b>greedy II</b> departs at exactly one position — the first generated
+        token after the prompt — which is the right question when you start from a prompt
+        rather than from a string. <b>Greedy I</b> departs at any position of any string it
+        has already found, best-first by the departure prefix. Departures at every position
+        of <i>one</i> string, with the continuation regenerated, are
+        <b>one-token deviations</b>, below.</p>
+        Rank 1 is the greedy path. Every other row is that path with <b>one token
         changed, then greedy again</b> — so "second best by the greedy criterion" is
         the cheapest departure. The cost of every departure is already in
         <code>top_logprobs</code>, so the ranking is free; only having a continuation
@@ -125,6 +132,43 @@
         expensive first step ends up about <b>8.8 nats — some 6800× — more probable</b>
         than greedy decoding. That is the textbook fact that greedy is locally optimal
         and not MAP, and on this data the gap is not subtle.</p></dd>
+
+      <dt>One-token deviations <span class="std">the sweep, for one string, on demand</span></dt>
+      <dd>Every position of one string × every alternative the model recorded at that
+        position. Each pair is a <b>new prompt</b> — the tokens before that position, then
+        the alternative — and the row is <b>what the model actually generates from it</b>.
+        The tail after the change is therefore real; it is not the original tail. A
+        16-token string gives about 300 strings (16 × 19).
+        <p>Reached from the <code>⑂</code> button: on the bar in the single-string viewer,
+        and on every row of greedy II. Continuations are taken from the database first — on
+        a base the sweeps already covered, all ~300 are there and <b>nothing is called</b>.
+        Only what is missing costs anything, it is fetched only when you agree, and the
+        question says how many calls that is: <i>2015 deviations, 359 in the database, 1655
+        missing</i>.</p>
+        <p><code>&lt;|endoftext|&gt;</code> is skipped rather than fetched. Deviating to it
+        means the string stops there, so there is no continuation to ask for — and since EOS
+        sits in <code>top_logprobs</code> at 22.7% of positions, leaving it in would make
+        about one call in nineteen a request about the literal 13 characters. The count is
+        reported separately.</p>
+        <p><b>A given prompt is never deviated.</b> The API returns logprobs only for
+        tokens it generated, so the prompt has none — no alternatives, and no question to
+        ask about it. It stays in front of every call exactly as it is, and only the
+        generated part is perturbed. This is also what decides where the walk starts: a
+        record's generated tokens hang under its prompt in the trie, and a prompt node has
+        no logprob, so starting at the root instead would either stop at once or follow
+        some other record's branch that happens to begin with the same token — and score
+        the string against the wrong context. 8487 of 8493 records have a non-empty prompt,
+        so this is the normal case, not the corner.</p>
+        <p><b>Calls are shown before they are made</b> — see <i>asking before a call</i>
+        below for when.</p>
+        <p>Bounded at <b>2000 deviations per request</b>. The 4096-token greedy path has
+        about 78,000, which is neither a page nor a bill anyone wants from one click; the
+        answer says it stopped and at which position.</p>
+        <p><b>Not the same as single-token variants</b>
+        (<code>/single-token-variants.html</code>), which swaps one token and <b>keeps the
+        original tail</b>. That needs no model at all and costs nothing, but its strings are
+        ones the model never produced, and the replacement's logprob belongs to the original
+        prefix rather than to the string it appears in.</p></dd>
 
       <dt>Completions <span class="std">whole sequences</span></dt>
       <dd>One entry per recorded call: the whole string that call produced, prompt
@@ -290,6 +334,65 @@
         strings are on screen: view, results, ranked by, how complete, prompt,
         starts with, model, base, steps, extend, recovered tokens, endings.</td></tr>
     </table>
+    <h3>asking before a call</h3>
+    <p>One setting, in the panel under <b>ptát se před API</b>, decides when the program
+      shows a call before making it. It covers <b>every</b> paid path: the token click and
+      Generate 4096 in the browser, a new tree, the one-token deviations, and the builder.
+      Four options, and the two middle ones combine:</p>
+    <dl>
+      <dt>každé volání <span class="std">the default</span></dt>
+      <dd>Before every call that actually happens. A deviation whose continuation is
+        already in the database is not a call, so it is not asked about — which is why
+        deviating a swept base asks nothing at all and costs nothing.</dd>
+      <dt>od 4096 tokenů</dt>
+      <dd>Only calls with <code>max_tokens</code> ≥ 4096 — the ones that generate to the
+        model's ceiling and cost the most.</dd>
+      <dt>víc než jedno volání</dt>
+      <dd>Only when the operation is not a single call: a click is one, the deviations of a
+        16-token string are about 300.</dd>
+      <dt>nikdy</dt>
+      <dd>No question at all. Calls go out on a click.</dd>
+    </dl>
+    <p>The dialog carries the <b>exact request body</b> — the prompt with spaces and
+      newlines made visible, plus every parameter — and the object on screen is the object
+      that is posted; nothing is rebuilt in between. <i>Poslat</i> sends this one,
+      <i>Přeskočit</i> leaves it, <i>Poslat i zbývajících N</i> stops the asking,
+      <i>Zastavit</i> ends the run. Escape and a click outside mean stop, because the safe
+      reading of a dismissed dialog is "do not spend anything".</p>
+    <p>It fails closed in three places, which matters more than the options do: a call site
+      with no approval hook configured makes no calls; a page where the dialog failed to
+      load refuses rather than sends; and a policy file that has been hand-edited into
+      nonsense reads back as <i>every call</i>, not as <i>never</i>.</p>
+    <p>The setting lives <b>on the server</b> (<code>ask_policy.json</code>), not in the
+      browser, because Prompt Studio runs on its own dev server — a different origin, so a
+      different <code>localStorage</code>. A setting that covers the whole package has to
+      live where every part of it can read it. The browser keeps a copy so a page still
+      behaves sensibly with the server down; when it cannot tell, it asks.</p>
+    <p><b>Prompt Studio obeys the same policy</b>, through the same two files: it loads
+      <code>ask-policy.js</code> and <code>approve-request.js</code> from
+      <code>127.0.0.1:8899</code> rather than bundling its own copies, so there is one rule
+      and one dialog for the whole package. Its own one-line <i>„Provést placené API
+      volání?"</i> confirm is gone — it said less than the request itself does. If those
+      files cannot be loaded, the studio refuses to call rather than falling back to asking
+      nothing.</p>
+
+    <h3>where things live</h3>
+    <p>One folder, one repository:</p>
+    <dl>
+      <dt>the package root</dt>
+      <dd><code>server.py</code> and the store, the viewers (<code>logprobs.html</code>,
+        <code>dijkstra.html</code>, <code>deviations.html</code>,
+        <code>single-token-variants.html</code>, <code>builder.html</code>), the shared
+        scripts (<code>bar.js</code>, <code>app.css</code>, <code>theme.js</code>,
+        <code>ask-policy.js</code>, <code>approve-request.js</code>), the record files, and
+        the tests.</dd>
+      <dt><code>prompt-studio/</code></dt>
+      <dd>The React front end, moved in from a sibling directory so the whole thing is one
+        package. It is a separate build with its own dev server, and it reads the same store
+        over <code>127.0.0.1:8899</code>; what it does not have any more is its own copy of
+        the rules.</dd>
+    </dl>
+
     <h3>full text per row</h3>
     <p>On by default. The string column stops being a fixed fraction of the width &mdash;
       which is what forced the ellipsis &mdash; so the table scrolls sideways instead of

@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>One-token deviations</title>
+<script src="/theme.js"></script>
+<link rel="stylesheet" href="/app.css">
+<style>
+  /* A page of its own rather than a block on the viewer, for the same reason the
+     variants page is: the set runs to hundreds of full-length strings, which
+     wants a table and a download. Deliberately NOT a bar view -- the bar's view
+     machinery ties `results`, `ranked by` and the single-string destination
+     together, and a view keyed to one record does not fit that. */
+  body { max-width: 1200px; margin: 0 auto; padding: 1.25rem; }
+  h1 { font-size: 1.3rem; margin: 0 0 .3rem; }
+  .note { color: var(--ink-dim); font-size: .8125rem; line-height: 1.5; max-width: 62rem; }
+  .base { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+          padding: .7rem .9rem; margin: .8rem 0; white-space: pre-wrap;
+          overflow-wrap: anywhere; font-size: .8125rem; max-height: 11rem; overflow: auto; }
+  .plan { display: flex; flex-wrap: wrap; gap: .3rem .9rem; align-items: baseline;
+          margin: .6rem 0; font-size: .8125rem; }
+  .plan b { font-variant-numeric: tabular-nums; }
+  .warn { color: var(--mid); }
+  .paid { color: var(--danger); }
+  #status { font-size: .8125rem; color: var(--ink-dim); min-height: 1.2rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+  th, td { text-align: left; padding: .3rem .5rem; border-bottom: 1px solid var(--line-soft);
+           vertical-align: top; }
+  th { position: sticky; top: 0; background: var(--bg); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  code { background: var(--chip); border-radius: 3px; padding: 0 .2em; }
+  .row2 { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin: .8rem 0; }
+</style>
+</head>
+<body>
+<p class="note"><a href="/" class="backlink">← the viewer</a></p>
+<h1>One-token deviations</h1>
+<p class="note">Every position of this string × every alternative the model recorded there, each
+  one a new prompt — <code>tokens[:i] + alternative</code> — answered by <b>what the model
+  actually generates from that prompt</b>. So the tail after the change is real, not the original
+  tail. Continuations come from the database; the ones it does not have are only fetched when you
+  ask, and that costs money.</p>
+
+<div id="promptWrap" hidden>
+  <p class="note"><b>Fixed prompt</b> — no logprobs were returned for it, so it has no
+    alternatives and is never deviated. It stays in front of every call, and the strings
+    in the table below are the generated part only.</p>
+  <div class="base" id="prompt"></div>
+</div>
+<div class="base" id="base">…</div>
+<div class="plan" id="plan"></div>
+<div class="row2">
+  <button id="fetch" hidden></button>
+  <button id="json" disabled>Download JSON</button>
+  <button id="txt" disabled>Download text</button>
+</div>
+<p id="status" role="status">Loading…</p>
+
+<table>
+  <thead><tr>
+    <th>#</th><th class="num">position</th><th>change</th><th class="num">cost</th>
+    <th class="num">Σ logprob</th><th class="num">n</th><th>end</th><th>string</th>
+  </tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script src="/ask-policy.js"></script>
+<script src="/approve-request.js"></script>
+<script src="/greedy-branches.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+const model = new URLSearchParams(location.search).get('model') || 'gpt-3.5-turbo-instruct';
+const statusEl = document.getElementById('status');
+const planEl = document.getElementById('plan');
+const fetchBtn = document.getElementById('fetch');
+let current = null;
+
+const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const show = t => String(t).replace(/\n/g, '\\n').replace(/\t/g, '\\t');
+const fmt = (x, d = 4) => (x === null || x === undefined || !isFinite(x)) ? '—' : Number(x).toFixed(d);
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], {type}));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* Says what the answer covers before it says what is in it -- a partial set that
+   looks whole is the one thing this page must not produce. */
+function renderPlan(d) {
+  const bits = [
+    `<span><b>${d.deviations}</b> deviations of ${d.n} tokens</span>`,
+    `<span><b>${d.from_store}</b> answered by the database</span>`,
+  ];
+  if (d.missing_count) bits.push(`<span class="paid"><b>${d.missing_count}</b> would need an API call</span>`);
+  if (d.eos_deviations) bits.push(`<span><b>${d.eos_deviations}</b>× end-of-text — nothing to generate</span>`);
+  if (d.duplicates) bits.push(`<span><b>${d.duplicates}</b> duplicate strings</span>`);
+  if (d.unscorable) bits.push(`<span><b>${d.unscorable}</b> unscorable</span>`);
+  if (d.capped) bits.push(`<span class="warn">stopped at the ${d.cell_cap}-cell limit — positions 1–${d.planned_positions} of ${d.n}</span>`);
+  else if (d.positions_in_trie < d.n) bits.push(`<span class="warn">nothing recorded past position ${d.positions_in_trie} to depart from</span>`);
+  planEl.innerHTML = bits.join('');
+
+  fetchBtn.hidden = !d.missing_count;
+  fetchBtn.textContent = d.missing_count
+    ? `Fetch the missing ${d.missing_count} — each one shown for approval first`
+    : '';
+  fetchBtn.className = 'danger';
+}
+
+function renderRows(d) {
+  const body = document.getElementById('rows');
+  body.textContent = '';
+  const frag = document.createDocumentFragment();
+  for (const e of d.entries) {
+    const dv = e.deviation || {};
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="num">${e.rank}</td>`
+      + `<td class="num">${dv.position + 1}</td>`
+      + `<td><code>${esc(show(dv.original))}</code> → <code>${esc(show(dv.alternative))}</code></td>`
+      + `<td class="num">${fmt(e.cost)}</td>`
+      + `<td class="num">${fmt(e.sum_logprob, 2)}</td>`
+      + `<td class="num">${e.n}</td>`
+      + `<td>${esc(e.end || '')}</td>`
+      + `<td class="text"></td>`;
+    tr.lastElementChild.textContent = e.text;
+    frag.appendChild(tr);
+  }
+  body.appendChild(frag);
+  document.getElementById('json').disabled = false;
+  document.getElementById('txt').disabled = false;
+}
+
+function present(d) {
+  current = d;
+  document.getElementById('base').textContent = d.base_text || '';
+  const pw = document.getElementById('promptWrap');
+  pw.hidden = !d.prompt;
+  document.getElementById('prompt').textContent = d.prompt || '';
+  renderPlan(d);
+  renderRows(d);
+  statusEl.textContent = `${d.count} strings`;
+}
+
+(async () => {
+  if (!id) { statusEl.textContent = 'No id. Open this page from a string in the viewer.'; return; }
+  try {
+    const res = await fetch('/api/deviations?base_id=' + encodeURIComponent(id)
+                            + '&model=' + encodeURIComponent(model), {cache: 'no-store'});
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    present(d);
+  } catch (err) {
+    statusEl.textContent = err.message;
+  }
+})();
+
+/* The only button on this page that spends anything, and it says how much in its
+   own label before it is pressed. */
+fetchBtn.addEventListener('click', async () => {
+  if (!current || !current.missing_count) return;
+  fetchBtn.disabled = true;
+  const parent = {tokens: (current.base_tokens || []).map(t => ({token: t})),
+                  text: current.base_text};
+  try {
+    /* Every call is shown and approved on its own -- the prompt and the exact
+       parameters -- so there is no summary dialog in front of it. */
+    const out = await GreedyBranches.fill(parent, model, current, {
+      progress: t => {statusEl.textContent = t;},
+      // The policy decides whether the dialog appears at all; guard() shows it
+      // when it should and answers 'yes' when the policy says not to ask.
+      approve: AskPolicy.guard,
+    });
+    present(out);
+    const bits = [`${out.count} strings`, `${out.calls} API calls`];
+    if (out.skipped) bits.push(`${out.skipped} skipped`);
+    if (out.stopped) bits.push('stopped');
+    if (out.failures && out.failures.length) bits.push(`${out.failures.length} failed`);
+    statusEl.textContent = bits.join(' · ');
+  } catch (err) {
+    statusEl.textContent = err.message;
+    if (err.record) {
+      // A paid answer that could not be saved is offered rather than lost.
+      const a = document.createElement('a');
+      a.textContent = ' download the unsaved answer';
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(err.record)], {type: 'application/json'}));
+      a.download = 'completion-recovery.json';
+      statusEl.appendChild(a);
+    }
+  } finally {
+    fetchBtn.disabled = false;
+  }
+});
+
+document.getElementById('json').addEventListener('click', () =>
+  download('deviations.json', JSON.stringify(current, null, 2), 'application/json'));
+document.getElementById('txt').addEventListener('click', () =>
+  download('deviations.txt', current.entries.map(e => e.text).join('\n'), 'text/plain'));
+</script>
+</body>
+</html>

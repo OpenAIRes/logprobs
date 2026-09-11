@@ -61,6 +61,26 @@ from best_avg_logprob_path import TrieNode, build_trie
 from best_sum_logprob_list import rank_by_sum
 
 
+def ppl_from_mean(mean):
+    """exp(-mean logprob), or None when there is no such number.
+
+    A sampled token comes back with a -9999 sentinel when its logprob fell
+    outside the top-k the call asked for; help.html has documented that shape
+    for a while, but nothing computing a perplexity allowed for it. One such
+    token puts the mean near -1250, and exp() of that overflows -- so a single
+    record (cmpl-EL1BvEAnu4O0uhp0H9rSyzez5LEMy, 16 tokens, mean -1251) took the
+    whole completions ranking down with a 500 the moment it was saved.
+
+    None rather than a capped number: with a sentinel in the sum the mean is not
+    a mean, so the string has no perplexity, and a made-up ceiling in that column
+    would rank and read as if it did.
+    """
+    try:
+        return math.exp(-mean)
+    except OverflowError:
+        return None
+
+
 def walk_detail(root: TrieNode, tokens: List[str], max_alts: int = 8) -> List[Dict]:
     """Re-walk the trie along `tokens`, collecting per-token detail."""
     out: List[Dict] = []
@@ -138,7 +158,7 @@ def build_completion_entries(root, records, sweep_by_prompt, args) -> List[Dict]
             "n": n,
             "sum_logprob": total,
             "mean_logprob": total / n,
-            "perplexity": math.exp(-total / n),
+            "perplexity": ppl_from_mean(total / n),
             "text": "".join(tokens),
             "tokens": detail,
             "prompt_len": len(prompt_tokens),
@@ -243,7 +263,7 @@ def build_prefix_entries(root, sweep_by_prompt, args, ends_index=None,
             "n": r["n"],
             "sum_logprob": r["sum"],
             "mean_logprob": r["mean"],
-            "perplexity": math.exp(-r["mean"]),
+            "perplexity": ppl_from_mean(r["mean"]),
             "text": "".join(r["tokens"]),
             "tokens": detail,
             "end": ends_index.get(tuple(r["tokens"]), "open"),

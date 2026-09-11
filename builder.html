@@ -8,6 +8,10 @@
 <!-- In <head> and blocking: resolving the palette after the body renders
      shows the wrong one for a frame, and the bar navigates on every change. -->
 <script src="/theme.js"></script>
+<!-- The ask policy and its dialog: this page calls the API too, and one
+     rule for the whole program means this page obeys the same one. -->
+<script src="/ask-policy.js"></script>
+<script src="/approve-request.js"></script>
 <style>
   /* Palette, buttons and form controls live in app.css so every page reads as
      one program. Only this page's own layout stays here. */
@@ -577,7 +581,9 @@ function buildRequestBody(prompt, maxTokens, model) {
   return {
     model,
     prompt,
-    logprobs: 20,          // silently capped at 5 by davinci-002 / babbage-002
+    // One rule for the whole program: 20 for gpt, 5 for the base models, which
+    // cap it there anyway. See ask-policy.js.
+    logprobs: window.AskPolicy.logprobsFor(model),
     max_tokens: maxTokens,
     temperature: 0,
     seed: 0,
@@ -668,6 +674,14 @@ async function fetchPositionsFromApi(prompt, maxTokens, model) {
   if (!key) throw new ApiError('No API key (neither localStorage "openai_key" nor local_api_key.json).');
 
   const body = buildRequestBody(prompt, maxTokens, model);
+
+  /* The same gate as everywhere else, and before the retry loop: a retry sends
+     the identical body, so approving it once is approving it. */
+  const verdict = await window.AskPolicy.guard(body, {total: 1});
+  if (verdict !== 'yes' && verdict !== 'all') {
+    throw new ApiError('Volání zrušeno — nic se neposlalo.');
+  }
+
   let lastErr = null;
 
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {

@@ -9,3 +9,13 @@ sweep2_log.txt
 sweep3_ihave.jsonl
 sweep3_ihave.json
 sweep3_log.txt
+
+.history.lock
+.history-*.tmp
+
+# Run logs and local state, not source.
+server-local.stdout.log
+server-local.stderr.log
+# Written by the server when the ask-before-calling policy is changed; the
+# default it falls back to lives in server.py, so there is nothing to keep here.
+ask_policy.json

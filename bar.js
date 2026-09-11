@@ -41,6 +41,10 @@ const ICON = {
   colour: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 2-.9 2-2 0-1.2-1-1.7-1-2.7 0-.8.7-1.3 1.6-1.3H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8Z"/><circle cx="8" cy="10" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="16" cy="10" r="1.1" fill="currentColor" stroke="none"/></svg>',
   sun: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg>',
+  /* A branch: one line carrying straight on, one leaving it at a node -- the
+     shape version control draws a branch with, because it says the same thing
+     about a string. */
+  branch: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="5" r="2.1"/><circle cx="7" cy="19" r="2.1"/><circle cx="17.5" cy="12" r="2.1"/><path d="M7 7.1v9.8"/><path d="M9.1 5h2.4a4 4 0 0 1 4 4v.9"/></svg>',
   gear: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2h4l.5 2.2 1.4.6 1.9-1.2 2.6 2.6-1.2 1.9.6 1.4 2.2.5v4l-2.2.5-.6 1.4 1.2 1.9-2.6 2.6-1.9-1.2-1.4.6L14 22h-4l-.5-2.2-1.4-.6-1.9 1.2-2.6-2.6 1.2-1.9-.6-1.4L2 14v-4l2.2-.5.6-1.4-1.2-1.9 2.6-2.6 1.9 1.2 1.4-.6L10 2Z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 
@@ -76,7 +80,8 @@ const ICON = {
   };
 
   const VIEWS = [
-    ['greedy', 'greedy path', 'What temperature 0 produces: the argmax at every position. One result is that string; more than one adds its next-best siblings.'],
+    ['greedy1', 'greedy I', 'Departures from all discovered strings, chosen by prefix probability.'],
+    ['greedy', 'greedy II', 'One string per top-20 first token after the starting prompt, followed by its stored continuation.'],
     ['completions', 'completions', 'One entry per recorded call — the whole string it produced, prompt included.'],
     ['prefixes', 'prefixes', 'Every prefix in the token trie, in exact n-best order.'],
     ['sweep', 'alternatives grid', 'Per-position top-k for one base completion.'],
@@ -107,8 +112,9 @@ const ICON = {
      siblings, and that IS a pool worth ranking by sum or perplexity. Only the
      single-string case has nothing to rank. */
   function viewForSort(next) {
-    if (next === 'cost') return 'greedy';
-    if (state.view === 'greedy' && String(state.top) !== '1') return 'greedy';
+    if (state.view === 'greedy1') return 'greedy1';
+    if (next === 'cost') return state.view === 'greedy1' ? 'greedy1' : 'greedy';
+    if ((state.view === 'greedy' || state.view === 'greedy1') && String(state.top) !== '1') return state.view === 'greedy1' ? 'greedy1' : 'greedy';
     return 'completions';
   }
 
@@ -144,6 +150,7 @@ const ICON = {
     ['sFwdWrap', 'positions'],
     ['sExtendWrap', 'rows — extend'],
     ['sRecWrap', 'tokens — recovered'],
+    ['sTokenLimitWrap', 'tokens per string'],
     ['sEndsWrap', 'endings'],
     ['sJsonWrap', 'json — the raw record'],
     ['sSourcesWrap', 'databases'],
@@ -155,10 +162,12 @@ const ICON = {
      the pages' CSS keys off it, so turning one on and off costs no request and no
      re-render -- the same arrangement as the colour box. */
   const BLOCKS = [
+    ['show-source-status', 'source status — from history / cache / API', false],
     ['show-meta', 'details block — provenance, counts, filters in force', false],
     ['wide-rows', 'full text per row — no wrapping, the table scrolls sideways', true],
   ];
   const BLOCKS_KEY = 'bar_blocks';
+  const TOKEN_LIMIT_KEY = 'bar_token_limit';
 
   /* A greedy path is per model -- argmax at every step means argmax of ONE
      model's distribution -- so unlike a ranking it cannot be asked for "any".
@@ -170,7 +179,7 @@ const ICON = {
   const RANKED = v => v === 'completions' || v === 'prefixes';
   // The one case where no ranking is involved at all.
   const singleGreedy = () => state.view === 'greedy' && String(state.top) === '1';
-  const LISTY = v => RANKED(v) || v === 'greedy';
+  const LISTY = v => RANKED(v) || (v === 'greedy' || v === 'greedy1');
   const SCOPED = v => LISTY(v);
 
   // ---------------------------------------------------------------- state
@@ -201,6 +210,7 @@ const ICON = {
      -- a walk with `ends=stop` on it -- says something about the screen that is
      not true, and the next person to open it has to work out which half counts. */
   const USES = {
+    greedy1: ['top', 'sort', 'prompt', 'model', 'ends', 'nodes', 'extend', 'colour', 'sources'],
     greedy: ['top', 'sort', 'prompt', 'model', 'ends', 'nodes', 'extend', 'colour', 'sources'],
     completions: ['top', 'sort', 'prefix', 'model', 'ends', 'nodes', 'extend', 'colour', 'sources'],
     prefixes: ['top', 'prefix', 'model', 'ends', 'nodes', 'extend', 'chosen_only', 'colour', 'sources'],
@@ -229,14 +239,14 @@ const ICON = {
      one is a ranked list. The bar owns this decision so neither page has to. */
   async function destination() {
     const single = LISTY(state.view) && String(state.top) === '1';
-    if (!single) {
+    if (!single || state.view === 'greedy1') {
       const p = query();
       p.set('view', state.view);        // always explicit in a list link
       return '/dijkstra.html?' + p.toString();
     }
     let id = null;
     try {
-      if (state.view === 'greedy') {
+      if ((state.view === 'greedy' || state.view === 'greedy1')) {
         // Resolved by walking argmax records rather than by ranking anything, so
         // it has its own endpoint; its first hop is where the browser lands.
         const q = new URLSearchParams({ prompt: state.prompt, model: greedyModel() });
@@ -291,6 +301,13 @@ const ICON = {
       <button type="button" class="sicon" id="sColour" aria-pressed="false"
               title="Colour — shade each token by the probability the model gave it at that position">${ICON.colour}</button>
       <button type="button" class="sicon" id="sTheme"></button>
+      <!-- Only on screen when there is one record to work from: with a list up
+           there is no single string to perturb, and a greyed-out glyph with no
+           label is worse than an absence (the same reason the json button
+           disappears). Backticks are banned in here: this is inside a template
+           literal, and one of them ends it. -->
+      <button type="button" class="sicon" id="sVariants" hidden
+              title="Jednotokenové odchylky — každá pozice tohoto řetězce × každá alternativa, kterou tam model zaznamenal, jako nový prompt; pokračování se bere z databáze, a co v ní není, se dotáhne jen na vyžádání (to je to placené). 16 tokenů ≈ 300 řetězců.">${ICON.branch}</button>
       <button type="button" class="sicon" id="sMore" aria-expanded="false" aria-controls="sPanel"
               title="Settings">${ICON.gear}</button>
       <span class="sinfo" id="sInfo"></span>
@@ -303,10 +320,8 @@ const ICON = {
         <select id="sView">${VIEWS.map(([v, l]) => opt(v, l, state.view)).join('')}</select>
       </label>
       <label class="sfield" id="sResultsWrap"><span>results</span>
-        <select id="sResults">
-          ${['1', '20', '50', '200', '500', '1000', '2000']
-            .map(n => opt(n, n === '1' ? '1 — token by token' : n, String(state.top))).join('')}
-        </select>
+        <input type="number" id="sResults" min="1" max="5000" step="1" list="sResultPresets" value="${Number(state.top) || 20}">
+        <datalist id="sResultPresets"><option value="1"></option><option value="20"></option><option value="50"></option><option value="200"></option><option value="500"></option><option value="1000"></option><option value="2000"></option></datalist>
       </label>
       <label class="sfield" id="sSortWrap"><span>ranked by</span>
         <select id="sSort"></select>
@@ -355,6 +370,19 @@ const ICON = {
       <!-- No label: the word on the button is the label. -->
       <div class="sfield sbare" id="sJsonWrap">
         <button type="button" id="sJson">json</button>
+      </div>
+      <div class="sfield" id="sTokenLimitWrap"><label for="sTokenLimit">tokens per string</label>
+        <select id="sTokenLimit">
+          <option value="0">all available</option>
+          <option value="16">16</option><option value="20">20</option>
+          <option value="50">50</option><option value="100">100</option>
+          <option value="250">250</option><option value="500">500</option>
+          <option value="1000">1,000</option><option value="custom">vlastní…</option>
+        </select>
+        <input type="number" id="sTokenLimitCustom" min="1" step="1" hidden aria-label="Vlastní počet tokenů na řetězec" placeholder="počet">
+      </div>
+      <div class="sfield" id="sAskWrap"><span title="Kdy se program zeptá, než pošle volání na API. Volání, na které je odpověď v databázi, se neděje, takže se na ně ani neptá. Nastavení platí pro celý program a je uložené na serveru, ne v prohlížeči.">ptát se před API</span>
+        <span class="sends" id="sAsk"></span>
       </div>
       <details class="sadv" id="sAdv"><summary>advanced — what shows</summary>
         <p class="sadvhint">On the strip: ticked controls sit on the visible strip
@@ -435,6 +463,23 @@ const ICON = {
   }
   el('sJson').addEventListener('click', showJson);
 
+  /* Its own page rather than a block on this one: the set runs to hundreds of
+     full-length strings, which wants a table and a download, not a strip. A new
+     tab, so the string being read is still there to come back to.
+
+     /deviations.html, not /single-token-variants.html: the two answer different
+     questions and only the first one is what this icon means. Variants keeps the
+     original tail and never calls a model; deviations regenerates the tail, so
+     its strings are ones the model really produces. The variants page is still
+     there at its own URL. */
+  el('sVariants').addEventListener('click', () => {
+    const id = recordId();
+    if (!id) return;
+    const p = new URLSearchParams({ id });
+    if (state.model) p.set('model', state.model);
+    window.open('/deviations.html?' + p, '_blank', 'noopener');
+  });
+
   // ---------------------------------------------------------------- scope stepper
 
   const ENDS_ALL = ['stop', 'length', 'open'];
@@ -466,6 +511,45 @@ const ICON = {
       state.sources = on.length === SOURCE_GROUPS.length ? '' : on.join(',');
       repaint();
       go();
+    });
+  }
+
+  /* When the program asks before paying. Not a PINNABLE control: it is a policy
+     for the whole program rather than something about what is on screen, and it
+     is the same setting on every page and in every folder -- which is why it is
+     stored on the server and not in this browser. */
+  const ASK = window.AskPolicy;
+  if (ASK) {
+    el('sAsk').innerHTML = ASK.CONDITIONS.map(([k, label, why]) =>
+      `<label title="${why.replace(/"/g, '&quot;')}"><input type="checkbox" class="sAskBox" value="${k}"> ${label}</label>`).join('')
+      + '<label title="Neptat se nikdy. Volání pak odcházejí bez potvrzení."><input type="checkbox" class="sAskBox" value="never"> nikdy</label>';
+  }
+  const askBoxes = () => [...document.querySelectorAll('.sAskBox')];
+  function paintAsk() {
+    if (!ASK) return;
+    const p = ASK.get();
+    const none = !p.always && !p.big && !p.batch;
+    for (const b of askBoxes()) {
+      b.checked = b.value === 'never' ? none : !!p[b.value];
+      // `always` already covers the two conditions, so leaving them clickable
+      // would offer a choice that changes nothing.
+      b.disabled = p.always && (b.value === 'big' || b.value === 'batch');
+    }
+  }
+  for (const b of askBoxes()) {
+    b.addEventListener('change', async () => {
+      const v = b.value;
+      let next;
+      if (v === 'never') next = {always: false, big: false, batch: false};
+      else if (v === 'always') next = b.checked ? {always: true, big: false, batch: false}
+                                                : {always: false, big: false, batch: false};
+      else {
+        const p = ASK.get();
+        next = {always: false, big: p.big, batch: p.batch};
+        next[v] = b.checked;
+      }
+      await ASK.set(next);
+      paintAsk();
     });
   }
 
@@ -512,14 +596,14 @@ const ICON = {
     // Prefixes come out of a sum-ordered heap: the ranking IS the search order,
     // so nothing else can be in force there whatever was last chosen.
     if (state.view === 'prefixes') return 'sum';
-    const want = state.sort || (state.view === 'greedy' ? 'cost' : 'sum');
-    return (want === 'cost' && state.view !== 'greedy') ? 'sum' : want;
+    const want = state.sort || ((state.view === 'greedy' || state.view === 'greedy1') ? 'cost' : 'sum');
+    return (want === 'cost' && (state.view !== 'greedy' && state.view !== 'greedy1')) ? 'sum' : want;
   }
 
   function paintSorts() {
     const sel = el('sSort');
-    sel.innerHTML = SORTS.map(([v, l]) => opt(v, l, effectiveSort())).join('');
-    sel.title = 'The criterion decides what you are looking at: deviation cost is '
+    sel.innerHTML = SORTS.map(([v, l]) => opt(v, v === 'cost' && state.view === 'greedy1' ? 'departure prefix cost' : l, effectiveSort())).join('');
+    sel.title = state.view === 'greedy1' ? 'Discovery order maximizes the departure prefix logprob; other criteria sort the discovered set.' : 'The criterion decides what you are looking at: deviation cost is '
       + 'measured against the greedy path, so it selects that path; the others rank '
       + 'recorded strings.';
   }
@@ -537,7 +621,7 @@ const ICON = {
       // to where it means something. That is the whole point of viewForSort.
       sSortWrap: null,
       sScopeWrap: SCOPED(v) ? null : notList,
-      sPromptWrap: v === 'greedy' ? null : 'only the greedy path starts from a prompt you give',
+      sPromptWrap: (v === 'greedy' || v === 'greedy1') ? null : 'only the greedy path starts from a prompt you give',
       sPrefixWrap: RANKED(v) ? null : `${v} has no ranking to filter`,
       sModelWrap: null,
       sBaseWrap: LISTY(v) ? 'a base completion is what the grid and the walk work from' : null,
@@ -583,12 +667,12 @@ const ICON = {
     if (state.nodes) p.set('nodes', state.nodes);
     if (state.prefix && RANKED(v)) p.set('prefix', state.prefix);
     if (state.chosen_only && v === 'prefixes') p.set('chosen_only', '1');
-    if (state.prompt && v === 'greedy') p.set('prompt', state.prompt);
+    if (state.prompt && (v === 'greedy' || v === 'greedy1')) p.set('prompt', state.prompt);
     if (state.sources) p.set('sources', state.sources);
-    if (v === 'greedy') p.set('model', greedyModel());
+    if ((v === 'greedy' || v === 'greedy1')) p.set('model', greedyModel());
     else if (state.model) p.set('model', state.model);
     try {
-      const route = v === 'greedy' ? '/api/greedy_alternatives?' : '/api/query?';
+      const route = (v === 'greedy' || v === 'greedy1') ? (v === 'greedy1' ? '/api/greedy_i?' : '/api/greedy_alternatives?') : '/api/query?';
       const db = await (await fetch(route + p, { cache: 'no-store' })).json();
       if (mine !== infoSeq) return;
       const n = db.available;
@@ -675,6 +759,11 @@ const ICON = {
   }
 
   function repaint() {
+    paintAsk();
+    // repaint() is where every other "can this control do anything right now"
+    // decision is made, so putting it here is what keeps the button in step with
+    // the record on screen.
+    el('sVariants').hidden = !recordId();
     paintSorts();
     paintVisibility();
     paintSources();
@@ -695,7 +784,7 @@ const ICON = {
     repaint();
     go();
   });
-  el('sResults').addEventListener('change', () => { state.top = el('sResults').value; repaint(); go(); });
+  el('sResults').addEventListener('change', () => { if (!el('sResults').reportValidity() || !el('sResults').value) return; state.top = el('sResults').value; repaint(); go(); });
   el('sSort').addEventListener('change', () => {
     const next = el('sSort').value;
     state.sort = next;
@@ -723,7 +812,7 @@ const ICON = {
   }
   el('sModel').addEventListener('change', () => { state.model = el('sModel').value; go(); });
   el('sBase').addEventListener('change', () => { state.base_id = el('sBase').value; go(); });
-  el('sSteps').addEventListener('change', () => { state.steps = el('sSteps').value; go(); });
+  el('sSteps').addEventListener('change', () => { if (!el('sSteps').reportValidity() || !el('sSteps').value) return; state.steps = el('sSteps').value; go(); });
   el('sFwd').addEventListener('change', () => { state.forward_only = el('sFwd').checked ? '1' : ''; go(); });
   el('sExtend').addEventListener('change', () => { state.extend = el('sExtend').checked ? '1' : ''; go(); });
   el('sRec').addEventListener('change', () => { state.chosen_only = el('sRec').checked ? '' : '1'; repaint(); go(); });
@@ -830,6 +919,40 @@ const ICON = {
     });
   }
   paintBlocks();
+  // The server is the source of truth for the ask policy, so refresh once and
+  // repaint when it answers; until then the cached value applies.
+  if (ASK) ASK.load().then(paintAsk);
+
+  let tokenLimit = 0;
+  try { tokenLimit = Math.max(0, Number(localStorage.getItem(TOKEN_LIMIT_KEY)) || 0); } catch {}
+  const tokenPresets = [0, 16, 20, 50, 100, 250, 500, 1000];
+  tokenLimit = Number.isSafeInteger(tokenLimit) ? tokenLimit : 0;
+  const customTokenLimit = el('sTokenLimitCustom');
+  el('sTokenLimit').value = tokenPresets.includes(tokenLimit) ? String(tokenLimit) : 'custom';
+  customTokenLimit.hidden = el('sTokenLimit').value !== 'custom';
+  customTokenLimit.value = tokenLimit > 0 ? String(tokenLimit) : '';
+  function saveTokenLimit(value) {
+    tokenLimit = value;
+    try { localStorage.setItem(TOKEN_LIMIT_KEY, String(tokenLimit)); } catch {}
+    window.dispatchEvent(new CustomEvent('tokenlimitchange'));
+  }
+  el('sTokenLimit').addEventListener('change', () => {
+    const custom = el('sTokenLimit').value === 'custom';
+    customTokenLimit.hidden = !custom;
+    if (custom) {
+      customTokenLimit.value = tokenLimit > 0 ? String(tokenLimit) : '';
+      customTokenLimit.focus(); customTokenLimit.select();
+    } else saveTokenLimit(Number(el('sTokenLimit').value));
+  });
+  function applyCustomTokenLimit() {
+    if (!customTokenLimit.value || !customTokenLimit.reportValidity()) return;
+    const value = Number(customTokenLimit.value);
+    if (Number.isSafeInteger(value) && value > 0 && value !== tokenLimit) saveTokenLimit(value);
+  }
+  customTokenLimit.addEventListener('change', applyCustomTokenLimit);
+  customTokenLimit.addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); applyCustomTokenLimit(); }
+  });
 
   const MORE_KEY = 'bar_more';
   let open = false;
@@ -897,5 +1020,6 @@ const ICON = {
   window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
                          adopt, provideRecord, landedOnId,
                          activeFilters, clearFilters,
-                         block: key => blocks.has(key) };
+                         block: key => blocks.has(key),
+                         tokenLimit: () => tokenLimit };
 })();

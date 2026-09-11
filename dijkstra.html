@@ -105,6 +105,17 @@
 
   .rank { font: 600 .8125rem/1 ui-monospace, Menlo, monospace; color: var(--ink-faint);
     font-variant-numeric: tabular-nums; }
+  button.branch-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1rem; height: 1rem; min-width: 0; min-height: 0;
+    padding: 0; margin: .2rem 0 0; border: 0; border-radius: 0;
+    background: transparent; box-shadow: none;
+    color: var(--ink-dim); font: 1rem/1 sans-serif;
+  }
+  button.branch-icon:hover:not(:disabled), button.branch-icon:active:not(:disabled) {
+    background: transparent; border: 0; color: var(--accent);
+  }
+  button.branch-icon:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
   .row.open .rank { color: var(--accent); }
 
   .text {
@@ -209,7 +220,12 @@
 <div id="settingsbar"></div>
 <!-- Before this page's own script, not after: the page reads its settings from
      window.settingsBar, and a `const` in bar.js is not visible until it runs. -->
+<!-- ask-policy first: bar.js builds its settings row from it, and
+     greedy-branches asks it for the per-model call size. -->
+<script src="/ask-policy.js"></script>
+<script src="/approve-request.js"></script>
 <script src="/bar.js"></script>
+<script src="/greedy-branches.js"></script>
 
 <div class="wrap">
   <header>
@@ -270,8 +286,8 @@ const listOf = v => (v ? String(v).split(',') : []);
 /* Deviation cost is the greedy criterion and only exists there; a ranking has no
    base to measure against, so it can never be left on `cost`. */
 const effectiveSort = () => {
-  const want = S.sort || (S.view === 'greedy' ? 'cost' : 'sum');
-  return (want === 'cost' && S.view !== 'greedy') ? 'sum' : want;
+  const want = S.sort || ((S.view === 'greedy' || S.view === 'greedy1') ? 'cost' : 'sum');
+  return (want === 'cost' && (S.view !== 'greedy' && S.view !== 'greedy1')) ? 'sum' : want;
 };
 
 
@@ -321,7 +337,11 @@ function plain(t) {
 // there and coloured here.
 const tokColor = window.tokColor;
 
-function fmt(x, d = 4) { return Number(x).toFixed(d); }
+/* Number(null) is 0, so a missing perplexity used to print as 0.00 -- the most
+   confident possible reading of a value that does not exist. */
+function fmt(x, d = 4) {
+  return (x === null || x === undefined || !isFinite(x)) ? '—' : Number(x).toFixed(d);
+}
 
 /* The alternative's text goes into title="", so quotes and ampersands suffice;
    plain() has already made whitespace visible, so no raw newline gets here. */
@@ -406,7 +426,8 @@ function devCell(e) {
       rest = '<span class="onpath">greedy</span>';
     } else {
       const d = e.deviation;
-      rest = `<span class="pos">${d.position}</span> `
+      if (d.parent_rank) rest = `from discovery #${d.parent_rank} · `;
+      rest += `<span class="pos">${d.position}</span> `
         + `${plain(d.original)}→${plain(d.alternative)} `
         + `<span class="ncalls">+${fmt(e.cost, 3)}</span>`;
     }
@@ -483,6 +504,55 @@ function buildRow(e) {
     ${devCell(e)}
     <div class="detail hide"></div>`;
 
+  if (VIEW === 'greedy') {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'branch-icon'; button.textContent = '⑂';
+    button.title = 'Jednotokenové odchylky: každá pozice × každá zaznamenaná '
+      + 'alternativa je nový prompt (16 tokenů ≈ 300 řetězců). Pokračování se '
+      + 'berou z databáze; pokud některá chybí, zeptá se, než zavolá API.';
+    button.setAttribute('aria-label', 'Jednotokenové odchylky řetězce ' + e.rank);
+    row.querySelector('.rank').appendChild(button);
+    button.addEventListener('click', async ev => {
+      ev.stopPropagation();
+      if (window.branchRunning) return;
+      window.branchRunning = true; button.disabled = true;
+      const panel = document.createElement('div'); panel.className = 'branch-panel';
+      panel.style.cssText = 'grid-column:1/-1;padding:12px;border:1px solid currentColor';
+      const status = document.createElement('p'); panel.appendChild(status);
+      row.after(panel);
+      try {
+        /* The only place here that may spend money, and every call is shown
+           with its prompt and parameters before it goes out. On a swept base
+           nothing is missing, so nothing is asked. */
+        const result = await GreedyBranches.run(e, S.model || 'gpt-3.5-turbo-instruct',
+          text => {status.textContent = text;},
+          {approve: AskPolicy.guard,
+           // A row's own tokens include the prompt on the views that carry one,
+           // and a prompt has no logprobs, so no alternatives to deviate.
+           fixed: e.prompt_len || 0});
+        const parts = [`${result.count} odchylek`, `databáze ${result.from_store}`,
+                       `API ${result.calls}`];
+        if (result.stopped) parts.push('zastaveno');
+        if (result.skipped) parts.push(`${result.skipped} přeskočeno`);
+        if (result.missing_count) parts.push(`${result.missing_count} chybí`);
+        if (result.failures && result.failures.length) parts.push(`${result.failures.length} volání selhalo`);
+        if (result.eos_deviations) parts.push(`${result.eos_deviations}× konec textu (není co dogenerovat)`);
+        // Two different partial answers, and they mean different things.
+        if (result.capped) parts.push(`zastaveno na ${result.cell_cap} odchylkách — pozice 1–${result.planned_positions} z ${result.n}`);
+        else if (result.positions_in_trie < result.n) parts.push(`za pozicí ${result.positions_in_trie} není v databázi nic, od čeho odbočit`);
+        if (result.unscorable) parts.push(`${result.unscorable} neohodnotitelných`);
+        status.textContent = parts.join(' · ');
+        result.entries.forEach(entry => panel.appendChild(buildRow(entry)));
+        button.disabled = true;
+      } catch (error) {
+        status.textContent = error.message;
+        if (error.record) {
+          const link = document.createElement('a'); link.textContent = 'Stáhnout neuloženou odpověď';
+          link.href = URL.createObjectURL(new Blob([JSON.stringify(error.record)], {type:'application/json'})); link.download = 'completion-recovery.json'; panel.appendChild(link);
+        } else button.disabled = false;
+      } finally {window.branchRunning = false;}
+    });
+  }
   const detailEl = row.querySelector('.detail');
 
   // Click the row to expand it (full text + per-token inspection); click a token
@@ -546,11 +616,8 @@ function renderRows() {
     return;
   }
 
-  /* The cap is decided per list, not per row: if anything here is at the
-     max_tokens ceiling, every row is cut. LIST_CAP_AT is that ceiling. */
-  const LIST_CAP_AT = 4096, CAP_TO = 20;
-  window.ROW_TOKEN_CAP = (BAR.block && BAR.block('wide-rows')
-    && slice.some(e => e.n >= LIST_CAP_AT)) ? CAP_TO : 0;
+  /* The shared display preference applies to every string on both result pages. */
+  window.ROW_TOKEN_CAP = (BAR.tokenLimit && BAR.tokenLimit()) || 0;
 
   const frag = document.createDocumentFragment();
   slice.forEach(e => frag.appendChild(buildRow(e)));
@@ -581,7 +648,7 @@ function renderRows() {
 const el = id => document.getElementById(id);
 /* greedy is a ranked list too -- of the greedy path and its one-token siblings --
    so it shares the table, the results cap and the sort control. */
-const RANKED = v => v === 'prefixes' || v === 'completions' || v === 'greedy';
+const RANKED = v => v === 'prefixes' || v === 'completions' || (v === 'greedy' || v === 'greedy1');
 
 /* The meta block used to derive its label from db.view, which reads 'prefixes'
    for anything that is not completions -- and /api/greedy_alternatives answers
@@ -590,17 +657,16 @@ const RANKED = v => v === 'prefixes' || v === 'completions' || v === 'greedy';
 const VIEW_LABEL = {
   completions: 'completions (prompt + generated)',
   prefixes: 'prefixes — best-first',
-  greedy: 'greedy path + one-token siblings',
+  greedy: 'greedy II — top-20 first-token branches',
+  greedy1: 'greedy I — departures from all discovered strings',
 };
 const specialEl = document.getElementById('special');
 
 /* The heading carries a quarter of the explanation, so it follows the view --
    "Prefixes by cumulative logprob" above an alternatives grid would simply lie. */
 const BLURBS = {
-  greedy: ['Greedy path and its next best',
-    'Rank 1 is what temperature 0 produces. Every other row is that path with ONE token '
-    + 'changed, then greedy again — so "second best by the greedy criterion" is the cheapest '
-    + 'departure. Ordering by cost and by resulting Σ logprob give very different answers.'],
+  greedy1: ['Greedy I', 'Start with the greedy string. Choose a one-token departure from any discovered string, maximizing the sum of logprobs through the new token, then use its stored continuation. Only recorded continuations participate. Cost is the negative departure prefix sum. Rows follow discovery order; other sort columns reorder only the discovered set.'],
+  greedy: ['Greedy II', 'One string for each of the top 20 first tokens after the starting prompt, followed by its stored continuation. The original greedy string represents the chosen token. Only this first position branches. Deviation cost orders these tokens by probability; later tokens do not affect that order.'],
   completions: ['Completions by cumulative logprob',
     'One entry per recorded call: the whole string it produced, prompt included. The strings '
     + 'are not all the same length (the prompt grows with the deviation position), so a sum '
@@ -789,7 +855,7 @@ function render(db) {
 
   metaEl.innerHTML = `
     <div>ranked by: <b>${db.ranking || 'Σ logprob, descending'}</b></div>
-    ${VIEW === 'greedy' ? `<div>departures ranked: <b>${db.departures_ranked}</b></div>
+    ${(VIEW === 'greedy' || VIEW === 'greedy1') ? `<div>departures ranked: <b>${db.departures_ranked}</b></div>
       <div>departures needing a call: <b>${db.departures_without_record}</b></div>` : ''}
     <div>view: <b>${VIEW_LABEL[VIEW] || VIEW}</b></div>
     ${db.end_counts ? `<div>scope: <b>${db.ends ? db.ends.join(' + ') : 'every ending'}</b>
@@ -847,20 +913,20 @@ function queryUrl() {
       ...(S.base_id ? { base_id: S.base_id } : {}),
     }).toString();
   }
-  const p = new URLSearchParams({ top: String(S.top || (VIEW === 'greedy' ? 20 : 200)) });
+  const p = new URLSearchParams({ top: String(S.top ?? ((VIEW === 'greedy' || VIEW === 'greedy1') ? 20 : 200)) });
   /* The model was never sent. So picking davinci-002 changed the address and
      nothing else: the ranking still came back over every model, which reads as
      the setting being ignored -- and it was. */
-  if (VIEW === 'greedy') p.set('model', S.model || 'gpt-3.5-turbo-instruct');
+  if ((VIEW === 'greedy' || VIEW === 'greedy1')) p.set('model', S.model || 'gpt-3.5-turbo-instruct');
   else if (S.model) p.set('model', S.model);
   if (S.ends) p.set('ends', S.ends);
   if (S.nodes) p.set('nodes', S.nodes);
   if (S.extend) p.set('extend', '1');
   if (S.sources) p.set('sources', S.sources);
-  if (VIEW === 'greedy') {
+  if ((VIEW === 'greedy' || VIEW === 'greedy1')) {
     p.set('sort', effectiveSort());
     if (S.prompt) p.set('prompt', S.prompt);
-    return '/api/greedy_alternatives?' + p.toString();
+    return (VIEW === 'greedy1' ? '/api/greedy_i?' : '/api/greedy_alternatives?') + p.toString();
   }
   p.set('view', VIEW);
   if (S.prefix) p.set('prefix', S.prefix);
@@ -911,6 +977,7 @@ async function load() {
 /* The full-text setting changes what is rendered, not only how it looks: the
    token cap depends on it. So this redraws rather than relying on the class. */
 window.addEventListener('blockschange', () => { if (DB) renderRows(); });
+window.addEventListener('tokenlimitchange', () => { if (DB) renderRows(); });
 
 (async () => {
   applyViewControls();

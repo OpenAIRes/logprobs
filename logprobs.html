@@ -32,6 +32,7 @@
     #dataSource.free { color: var(--good); }
     #dataSource.busy { color: var(--mid); }
     #dataSource.paid { color: var(--danger); border-color: var(--danger); }
+    body:not(.show-source-status) #dataSource { display: none !important; }
     #toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
     #toolbar .fld select { font: inherit; font-size: .8125rem; color: var(--ink);
       background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
@@ -162,6 +163,10 @@
 <!-- The settings bar. This page used to have no way to change anything: you had
      to go back to the start page, pick, and come here again. -->
 <div id="settingsbar"></div>
+<!-- ask-policy first: bar.js builds its settings row from it, and every paid
+     call on this page goes through its guard. -->
+<script src="/ask-policy.js"></script>
+<script src="/approve-request.js"></script>
 <script src="/bar.js"></script>
 
   <div id="header">
@@ -435,23 +440,12 @@ function setSource(kind, extra){
   sourceEl.hidden = false;
 }
 
-/* How far a token click generates.
-
-   20 for gpt-3.5-turbo-instruct because every sweep was run at 20: asking for
-   exactly that makes the sweep cache an exact hit instead of a near miss (16 was
-   answered by cutting a 20-token record down, which worked, but threw away four
-   tokens already paid for).
-
-   5 for the base models, which have no sweep data at all -- every click on
-   davinci-002 or babbage-002 is a paid call, so it is kept short. They also
-   return only 5 alternatives per position however many are asked for (measured:
-   ntop=5 on all 17 base-model records, against 20 for gpt), so they are a
-   coarser instrument anyway. */
-const CLICK_TOKENS_GPT = 20;
-const CLICK_TOKENS_BASE = 5;
+/* How far a token click generates: 20 on gpt-3.5-turbo-instruct, 5 on the base
+   models. The rule and the reasoning live in ask-policy.js -- there were three
+   copies of these two numbers, and three copies of a number is three chances for
+   one of them to be wrong. */
 function clickMaxTokens(model){
-  model = model || getSelectedModel();
-  return /^(ada|babbage|curie|davinci)/.test(model) ? CLICK_TOKENS_BASE : CLICK_TOKENS_GPT;
+  return window.AskPolicy.maxTokensFor(model || getSelectedModel());
 }
 
 /* Whether a record can answer a request for `want` tokens. Either it was asked
@@ -934,6 +928,7 @@ async function storeLookup(promptText, model, maxTokens){
       id: data.record.id,
       choices: [ have > want ? truncateChoice(choice, want) : choice ],
       truncatedFrom: have > want ? have : null,
+      record: data.record,
     };
   } catch {
     return null;   // server nebezi -> presne dosavadni chovani
@@ -1338,6 +1333,34 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
   const plainPromptTokens = toPlainTokens(updatedTokens);
   const promptText = plainPromptTokens.join('');
 
+  /* A cache hit becomes the current completion just like an API response does.
+     Keep a local record for it before returning, otherwise applyCompletion()
+     points currentCompletionId at an ID that getCompletionById() cannot resolve
+     on the next token click. */
+  async function saveCachedContinuation(hit, sourceRecord) {
+    const choice = hit.choices[0];
+    const entry = sourceRecord || {
+      id: hit.id,
+      object: 'text_completion',
+      created: Math.floor(Date.now() / 1000),
+      model,
+      previous_response_id: prevId,
+      prompt: {
+        text: promptText,
+        index: 0,
+        logprobs: { tokens: plainPromptTokens, token_logprobs: [], top_logprobs: [] },
+      },
+      choices: [choice],
+      max_tokens: Number(maxTokens),
+      temperature: 0,
+      seed: 0,
+      meta: { target_max_tokens: Number(maxTokens) },
+      request: { model, prompt: promptText, max_tokens: Number(maxTokens), temperature: 0, seed: 0 },
+    };
+    await idbPut(entry);
+    await updateSavedCount();
+  }
+
   // Not idbQueryByPrompt(): its by_prompt_text index is keyed by
   // extractPromptTextSafe(), which trims when prompt.text is set but NOT when
   // falling back to joined tokens — so a whitespace-only prompt like "\n" gets
@@ -1388,6 +1411,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
   if (swept) {
     console.log('[SWEEP HIT]', swept.id, swept.truncatedFrom ? `(zkraceno z ${swept.truncatedFrom})` : '');
     setSource('sweep', swept.truncatedFrom ? `(cut from ${swept.truncatedFrom})` : '');
+    await saveCachedContinuation(swept);
     return { response: { id: swept.id, choices: swept.choices }, prompt: promptText,
              fromHistory: true, fromSweep: true, truncatedFrom: swept.truncatedFrom };
   }
@@ -1398,6 +1422,7 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
   if (stored) {
     console.log('[STORE HIT]', stored.id, stored.truncatedFrom ? `(zkraceno z ${stored.truncatedFrom})` : '');
     setSource('store', stored.truncatedFrom ? `(cut from ${stored.truncatedFrom})` : '');
+    await saveCachedContinuation(stored, stored.record);
     return { response: { id: stored.id, choices: stored.choices }, prompt: promptText,
              fromHistory: true, fromStore: true, truncatedFrom: stored.truncatedFrom };
   }
@@ -1485,34 +1510,33 @@ async function continueFromPromptOnly(maxTokens) {
 }
 
 /* ============ API HELPER ============ */
-async function fetchCompletion(prompt, maxTokens, key, model){
-  model = model || getSelectedModel();
-  try{
-    const body = { model, prompt, logprobs:20, max_tokens:maxTokens, temperature:0, seed:0 };
-    const res = await fetch('https://api.openai.com/v1/completions',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization':`Bearer ${key||await ensureApiKey()}`
-      },
-      body:JSON.stringify(body)
-    });
-    const data = await res.json();
-    if(data.error){
-      statusEl.textContent=`Error: ${data.error.message}`;
-      statusEl.classList.add('error');
-      return null;
-    }
-    data._request_sent = body;
-    return data;
-  }catch{return null;}
-}
+/* fetchCompletion() used to sit here: the same call as fetchCompletionAutoFit
+   below, minus the context-length retry, and with no caller left. A second way
+   to spend money that nothing used is worse than useless -- it was one paste
+   away from becoming the ungated path again. */
 
 /* ============ AUTO-FIT WRAPPER ============ */
-async function fetchCompletionAutoFit(prompt, maxTokens, key, model){
+/* Every paid call on this page goes through here -- a token click, Generate
+   4096, and a new tree -- so this is where the ask policy is applied. One gate
+   for three call sites, rather than three gates that drift apart.
+
+   `total` says how many calls the whole operation makes; everything on this page
+   makes exactly one, which is what lets the "víc než jedno volání" policy tell a
+   click apart from a sweep of 300. */
+async function fetchCompletionAutoFit(prompt, maxTokens, key, model, total = 1){
   model = model || getSelectedModel();
   async function callOnce(effectiveMax){
-    const body = { model, prompt, logprobs:20, max_tokens: effectiveMax, temperature:0, seed:0 };
+    const body = { model, prompt, logprobs: window.AskPolicy.logprobsFor(model),
+                   max_tokens: effectiveMax, temperature:0, seed:0 };
+    /* Shown before it goes out, and it is this object that goes out. The retry
+       below asks again with the smaller max_tokens, because that is a different
+       request -- approving 4096 is not approving whatever the context happens to
+       allow. */
+    const verdict = await window.AskPolicy.guard(body, {total});
+    if (verdict !== 'yes' && verdict !== 'all') {
+      showStatus('Volání zrušeno — nic se neposlalo.');
+      return { error: { message: 'cancelled before the request was sent' }, _cancelled: true };
+    }
     const res = await fetch('https://api.openai.com/v1/completions',{
       method:'POST',
       headers:{
@@ -1540,6 +1564,10 @@ async function fetchCompletionAutoFit(prompt, maxTokens, key, model){
   try{
     let effectiveMax = maxTokens;
     let data = await callOnce(effectiveMax);
+    /* null, not the marker: every caller here tests `if (!data)` and then reads
+       data.choices[0], so handing back a truthy object would turn a cancelled
+       click into a TypeError. The browser found this one. */
+    if (data && data._cancelled) return null;
     if(data && data.error && typeof data.error.message === 'string'){
       const msg = data.error.message;
       // const re = new RegExp('maximum context length is\s+(\d+) tokens[\s\S]*?\((\d+) in your prompt;\s*(\d+) for the completion\)','i');
@@ -1598,6 +1626,9 @@ function applyCompletion(response, idx, replacementToken){
 
 /* ============ UI RENDERING ============ */
 function renderTokens(tokens){
+  const limit = window.settingsBar?.tokenLimit?.() || 0;
+  const sourceTokens = tokens;
+  tokens = limit ? tokens.slice(0, limit) : tokens;
   tokensEl.innerHTML=''; let i=0; const BATCH=1200;
   function chunk(){
     const frag=document.createDocumentFragment();
@@ -1638,7 +1669,7 @@ function renderTokens(tokens){
       }
       span.title=escapeToken(t.token)
         + (t.isPrompt || t.logprob == null ? '' : `  logP=${Number(t.logprob).toFixed(4)}`);
-      span.addEventListener('click',e=>handleTokenClick(e,tokens));
+      span.addEventListener('click',e=>handleTokenClick(e,sourceTokens));
       frag.appendChild(span);
     }
     tokensEl.appendChild(frag);
@@ -1650,6 +1681,8 @@ function renderTokens(tokens){
   }
   chunk();
 }
+
+window.addEventListener('tokenlimitchange',()=>renderTokens(allTokens));
 
 function clearSelection(){tokensEl.querySelectorAll('.selected').forEach(el=>el.classList.remove('selected'));}
 function handleTokenClick(e,tokens){
@@ -1938,10 +1971,9 @@ async function startNewTree(promptText = '', maxTokens = clickMaxTokens()){
     return;
   }
 
-  const label = promptText === '' ? 'an empty prompt' : `prompt "${promptText.slice(0, 60)}"`;
-  const ok = confirm(`Start a new tree (${label}) with model "${model}"?\nThis will call the OpenAI API.`);
-  if (!ok) return;
-
+  /* No confirm of its own any more: fetchCompletionAutoFit shows the actual
+     request, which says more than "this will call the OpenAI API" ever did --
+     the prompt, the model, max_tokens and logprobs, as they will be sent. */
   setSource('calling');
   const key = await ensureApiKey();
   if (!key) { setSource(null); return; }

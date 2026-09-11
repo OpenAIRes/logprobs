@@ -17,15 +17,20 @@ regenerated file would hold. verify_store.py asserts exactly that.
 from __future__ import annotations
 
 import math
+import json
 import os
+import tempfile
+import threading
 import time
 from collections import Counter
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Dict, List, Optional
 
 from best_avg_logprob_path import build_trie, model_matches, record_model
 from export_dijkstra_top import (
     apply_prefix,
+    ppl_from_mean,
     build_completion_entries,
     build_prefix_entries,
     index_sweeps,
@@ -128,10 +133,16 @@ DETAIL_CAP = 400
 # under its own name because that is the standard way to report the per-token
 # measure, and 'mean' stays as an accepted alias so older links keep working;
 # what is deliberately not done is shipping both as if they were two criteria.
+def _ppl_key(entry):
+    """Ascending perplexity, with "no perplexity" last -- see ppl_from_mean."""
+    value = entry.get('perplexity')
+    return float('inf') if value is None else value
+
+
 SORTS = {
     'sum': (lambda e: -e['sum_logprob'], 'sum_logprob desc'),
-    'ppl': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
-    'mean': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
+    'ppl': (lambda e: _ppl_key(e), 'perplexity asc (= mean_logprob desc)'),
+    'mean': (lambda e: _ppl_key(e), 'perplexity asc (= mean_logprob desc)'),
     'length': (lambda e: (-e['n'], -e['sum_logprob']), 'length desc, then sum_logprob desc'),
 }
 
@@ -140,9 +151,35 @@ DEFAULTS = dict(top=200, min_n=1, prefix=None, model=None, chosen_only=False,
                 sources=None)
 
 
+@contextmanager
+def history_lock(root):
+    """Coordinate atomic history writes even between two server processes."""
+    with open(os.path.join(root, '.history.lock'), 'a+b') as fh:
+        fh.seek(0, os.SEEK_END)
+        if fh.tell() == 0:
+            fh.write(b'\0')
+            fh.flush()
+        fh.seek(0)
+        if os.name == 'nt':
+            import msvcrt
+            msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fh.seek(0)
+            if os.name == 'nt':
+                msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 class RecordStore:
     def __init__(self, sources: Optional[List[str]] = None, root: str = ROOT):
         self.root = root
+        self.lock = threading.RLock()
         self.sources = list(sources or SOURCES)
         self.records: List[Dict] = []
         self.by_id: Dict[str, Dict] = {}
@@ -163,6 +200,7 @@ class RecordStore:
 
     def load(self) -> 'RecordStore':
         started = time.time()
+        self.missing = []
         paths = []
         for name in self.sources:
             path = os.path.join(self.root, name)
@@ -198,6 +236,70 @@ class RecordStore:
         self._subset_sweeps.clear()
         self.load_seconds = time.time() - started
         return self
+
+    def save(self, record: Dict) -> Dict:
+        """Commit to the existing history before exposing the record to readers.
+
+        The server shares this lock with queries and cache warming. The on-disk
+        history is reread under the lock, never rebuilt from a filtered view.
+        """
+        with self.lock, history_lock(self.root):
+            if not isinstance(record.get('id'), str) or not record['id']:
+                raise ValueError('response has no record id')
+            name = 'completion_history.json'
+            if name not in self.sources:
+                raise ValueError('completion_history.json must be a store source')
+            path = os.path.join(self.root, name)
+            history = []
+            if os.path.exists(path):
+                with open(path, encoding='utf-8') as fh:
+                    history = json.load(fh)
+                if isinstance(history, dict):
+                    history = [history]
+                if not isinstance(history, list) or not all(isinstance(r, dict) for r in history):
+                    raise ValueError('invalid history; refusing to overwrite it')
+            existing = next((r for r in history if r.get('id') == record['id']), None)
+            if existing is not None:
+                return existing
+            clean = {k: v for k, v in record.items() if not k.startswith('_')}
+            history.append(clean)
+            temp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                                 dir=self.root, delete=False,
+                                                 prefix='.history-', suffix='.tmp') as fh:
+                    temp_path = fh.name
+                    json.dump(history, fh, ensure_ascii=False, allow_nan=False)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                os.replace(temp_path, path)
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            self.load()
+            return self.by_id[record['id']]
+
+    def lookup_request(self, request: Dict) -> Optional[Dict]:
+        """Exact Studio request match; analysis callers retain lookup semantics."""
+        defaults = {'temperature': 0, 'top_p': 1, 'frequency_penalty': 0,
+                    'presence_penalty': 0}
+        for rec in reversed(self.by_prompt.get(request['prompt'], [])):
+            req = rec.get('request') or {}
+            if not self._model_matches(rec, request['model']):
+                continue
+            if any(req.get(k, default) != request[k] for k, default in defaults.items()):
+                continue
+            # Exact lengths avoid returning an untrimmed longer cached response.
+            if req.get('max_tokens') != request['max_tokens']:
+                continue
+            if req.get('logprobs') != request['logprobs']:
+                continue
+            # Studio does not request stop sequences, suffixes or multiple choices.
+            if req.get('stop') or req.get('suffix') or req.get('n', 1) != 1 or req.get('best_of', 1) != 1:
+                continue
+            return rec
+
+        return None
 
     @staticmethod
     def _index_ends(records: List[Dict]) -> Dict[tuple, str]:
@@ -370,7 +472,7 @@ class RecordStore:
                 'n': n,
                 'sum_logprob': total,
                 'mean_logprob': total / n if n else 0.0,
-                'perplexity': math.exp(-total / n) if n else None,
+                'perplexity': ppl_from_mean(total / n) if n else None,
                 'text': text,
                 # The totals above describe the WHOLE extension; only the per-token
                 # detail is capped, because one row can add 4095 tokens and shipping
@@ -745,7 +847,7 @@ class RecordStore:
             'n': n,
             'sum_logprob': total,
             'mean_logprob': (total / n) if n else None,
-            'perplexity': math.exp(-total / n) if n else None,
+            'perplexity': ppl_from_mean(total / n) if n else None,
             'text': ''.join(tokens),
             'hops': hops,
             'first_id': hops[0]['id'] if hops else None,
@@ -764,27 +866,10 @@ class RecordStore:
                             top: int = 20, sort: str = 'cost',
                             max_alts: int = 8, ends=None, extend: bool = False,
                             nodes=None, sources=None) -> Dict:
-        """The greedy path and its next-best siblings: one-token departures from it.
+        """Greedy II: branch only at the first generated token after the prompt.
 
-        "Second best by the greedy criterion" is the cheapest single-token
-        deviation from the greedy path, followed by greedy decoding again. That is
-        well defined and free to compute -- the cost of every departure is already
-        in top_logprobs -- so this ranks all of them and marks which ones have a
-        continuation on record.
-
-        The ordering matters and is not one thing. Ranking by deviation cost is
-        the greedy criterion literally read: which departure gives up the fewest
-        nats at the point of departure. Ranking by the resulting string's Σ
-        logprob asks which departure ends up most probable overall. These differ
-        sharply, because the regenerated tail carries its own sum:
-
-            by cost   #2 is  '9' -> '8'          cost 0.0352   Σ  -16.3878
-            by sum    #2 is '\n' -> '\ufeffusing' cost 1.7802   Σ   -6.5815
-
-        The second is more probable than the greedy path itself at the same length
-        (greedy@21 = -15.4085) by about 8.8 nats, i.e. some 6800x. Which is the
-        textbook point that greedy decoding is locally optimal and not MAP, here
-        with a margin nobody could call marginal.
+        One string per recorded top-20 next token, including the original greedy
+        string. Later token positions never contribute additional candidates.
         """
         # Not part of the cache key: the cached value is the unranked, unfiltered
         # candidate set, and sort/top/ends are all applied to a copy of it.
@@ -827,7 +912,7 @@ class RecordStore:
             total = detail_from[-1]['cumulative'] if detail_from else 0.0
             return {
                 'n': n, 'sum_logprob': total, 'mean_logprob': total / n if n else 0.0,
-                'perplexity': math.exp(-total / n) if n else None,
+                'perplexity': ppl_from_mean(total / n) if n else None,
                 'text': ''.join(tokens), 'tokens': detail_from,
             }
 
@@ -845,10 +930,10 @@ class RecordStore:
         }]
 
         missing = 0
-        for i, tok in enumerate(toks):
+        for i, tok in enumerate(toks[:1]):
             if i >= len(tops) or not tops[i] or not isinstance(tls[i], (int, float)):
                 continue
-            for alt, alt_lp in tops[i].items():
+            for alt, alt_lp in sorted(tops[i].items(), key=lambda item: -item[1])[:20]:
                 if alt == tok or not isinstance(alt_lp, (int, float)):
                     continue
                 cost = tls[i] - alt_lp
@@ -880,21 +965,301 @@ class RecordStore:
                     'greedy_sum_at_n': cum[len(path) - 1] if len(path) <= len(cum) else None,
                 })
 
-        # Building the candidates costs ~3 s: one lookup per (position, alternative)
-        # over a 4096-token path is ~82k probes, and only the swept positions have
-        # a continuation. Sorting and capping are cheap, so only the build is cached.
+        # Cache the first-token branches; display sorting and filters are applied later.
         self._alts_cache[cache_key] = (greedy, entries, missing)
         return self._rank_alts(prompt, model, sort, top, greedy, entries, missing, ends,
                                extend, root_for_extend=root, max_alts=max_alts,
                                nodes=nodes, sources=sources)
+
+    # A 16-token string has ~300 deviations; the 4096-token record has ~78,000,
+    # and the greedy path IS that record. Planning them all means 78,000 store
+    # lookups and a response no browser should be handed, for a set nobody would
+    # buy anyway. So the plan stops at a number of cells and says that it did.
+    DEVIATION_CELLS = 2000
+
+    # Deviating to end-of-text is not a prompt. The string simply stops there, so
+    # there is no continuation to look up and none to buy -- sending
+    # "...<|endoftext|>" to the API would just ask about the literal 13
+    # characters. It is not rare either: EOS is in top_logprobs at 22.7% of
+    # positions, so left in the plan it would be about one call in nineteen,
+    # every one of them meaningless. Counted separately instead.
+    EOS_TOKEN = '<|endoftext|>'
+
+    def deviations(self, tokens, model: str = 'gpt-3.5-turbo-instruct',
+                   alts: int = 20, max_alts: int = 8, sources=None,
+                   ends=None, nodes=None, sort: str = 'cost',
+                   max_cells: Optional[int] = None,
+                   prompt_tokens=None) -> Dict:
+        """Every one-token deviation of ONE given string, with real continuations.
+
+        For each position i of the string and each alternative the model recorded
+        at i, the deviated prefix tokens[:i] + [alt] is a prompt, and the answer
+        is whatever the model generated from that prompt: the record the store
+        already holds, or -- for the ones it does not hold -- a prompt handed back
+        in `missing` for the caller to buy. The tail is therefore never the
+        original tail; it is what the model really continues with.
+
+        `prompt_tokens` is the part that CANNOT be deviated and is not optional
+        bookkeeping. A given prompt has no logprobs -- the API returns them only
+        for tokens it generated -- so there are no alternatives at those positions
+        and no question to ask about them; they stay in front of every deviated
+        prompt exactly as they are.
+
+        They also decide where in the trie the walk starts, which is what makes
+        this correct rather than merely tidy. build_trie hangs a record's
+        generated tokens under its prompt tokens, and gives a prompt node no
+        logprob, so walking from the root along the generated tokens of a prompted
+        record either stops at once or -- worse -- follows some other record's
+        branch that happens to begin with the same token and scores the string
+        against the wrong context. 8487 of 8493 records have a non-empty prompt,
+        so before this argument existed this function answered 0 deviations for
+        all but six of them.
+
+        Deliberately not what greedy_alternatives does, and not what
+        single_token_variants does:
+
+          greedy_alternatives  branches at ONE position, the first token after the
+                               prompt, and asks what comes next instead.
+          variants_for         deviates at every position but KEEPS the original
+                               tail, so it needs no model and answers a textual
+                               question about strings the model never produced.
+          this                 deviates at every position AND regenerates, so a
+                               16-token string yields ~16 x 19 real strings. It is
+                               the sweep, done for one base on demand.
+        """
+        ends = self._normalize_ends(ends)
+        nodes = self._normalize_nodes(nodes)
+        sources = self._normalize_sources(sources)
+        root = self.trie(model, sources)
+        tokens = [t for t in tokens if isinstance(t, str)]
+        prompt_tokens = [t for t in (prompt_tokens or []) if isinstance(t, str)]
+        prompt_text = ''.join(prompt_tokens)
+        start = self._node_at(prompt_tokens, root) if prompt_tokens else root
+        if start is None:
+            return {'view': 'deviations', 'model': model,
+                    'error': 'this prompt is not in the chosen databases, '
+                             'so there is nothing recorded to deviate from',
+                    'prompt': prompt_text, 'prompt_tokens': prompt_tokens,
+                    'n': len(tokens), 'planned_positions': 0,
+                    'positions_in_trie': 0, 'deviations': 0, 'from_store': 0,
+                    'missing': [], 'missing_count': 0, 'entries': [], 'count': 0}
+
+        # alts (20) is the deviation plan; max_alts (8) is only how many
+        # alternatives each row carries for display. Two different numbers, and
+        # conflating them is how a plan silently loses more than half its cells.
+        plan = walk_detail(start, tokens, alts)
+
+        entries: List[Dict] = []
+        missing: List[Dict] = []
+        seen = set()
+        unscorable = duplicates = cells = eos = 0
+        cap = self.DEVIATION_CELLS if max_cells is None else max(1, max_cells)
+        planned = 0
+        for i, step in enumerate(plan):
+            if cells >= cap:
+                break
+            planned = i + 1
+            # The fixed prompt first, always: the deviation is inside the part
+            # that was generated, and the call has to be made in the same context
+            # the original was.
+            prefix = prompt_text + ''.join(tokens[:i])
+            for a in step['alternatives']:
+                alt = a['token']
+                if alt == tokens[i] or not isinstance(a['logprob'], (int, float)):
+                    continue
+                if alt == self.EOS_TOKEN:
+                    eos += 1
+                    continue
+                cells += 1
+                deviation = {'position': i, 'original': tokens[i],
+                             'alternative': alt,
+                             'original_logprob': step['logprob'],
+                             'alternative_logprob': a['logprob']}
+                cost = step['logprob'] - a['logprob']
+                rec = self.lookup(prefix + alt, model=model, max_tokens=None,
+                                  sources=sources)
+                if rec is None:
+                    # No 'prompt' field on purpose: it is tokens[:i] + alt, so
+                    # for position i it is i tokens long and the whole list of
+                    # them is quadratic in the length of the string -- hundreds
+                    # of megabytes for the 4096-token record. The caller has the
+                    # tokens and joins them itself.
+                    missing.append({**deviation, 'cost': cost})
+                    continue
+                choice = (rec.get('choices') or [{}])[0]
+                path = tokens[:i] + [alt] + list(
+                    (choice.get('logprobs') or {}).get('tokens') or [])
+                key = tuple(path)
+                if key in seen:
+                    duplicates += 1
+                    continue
+                detail = walk_detail(start, path, max_alts)
+                if not detail or len(detail) != len(path):
+                    # Scored half-way is worse than absent -- the same rule the
+                    # rankings use. Counted, so the total still adds up.
+                    unscorable += 1
+                    continue
+                seen.add(key)
+                total = detail[-1]['cumulative']
+                end = choice.get('finish_reason') or 'length'
+                entries.append({
+                    'n': len(path), 'text': ''.join(path), 'tokens': detail,
+                    'sum_logprob': total, 'mean_logprob': total / len(path),
+                    'perplexity': ppl_from_mean(total / len(path)),
+                    'cost': cost, 'deviation': deviation, 'is_greedy': False,
+                    'id': rec.get('id'), 'end': end, 'finish_reason': end,
+                    'node_kind': self.node_kind(path, start),
+                })
+
+        visible = [e for e in entries
+                   if (not ends or e.get('end') in ends)
+                   and (not nodes or e.get('node_kind') in nodes)]
+        visible.sort(key=(self.ALT_SORTS.get(sort) or self.ALT_SORTS['cost'])[0])
+        visible = [{**e, 'rank': i} for i, e in enumerate(visible, 1)]
+        return {
+            'view': 'deviations', 'model': model, 'sort': sort,
+            'ranking': (self.ALT_SORTS.get(sort) or self.ALT_SORTS['cost'])[1],
+            'base_tokens': tokens, 'base_text': ''.join(tokens),
+            # Reported so a caller can say which part is immovable, and so the
+            # strings in `entries` (the generated part only) are not mistaken for
+            # whole prompts.
+            'prompt': prompt_text, 'prompt_tokens': prompt_tokens,
+            'fixed': len(prompt_tokens),
+            # planned < n means the string leaves the trie part-way: nothing is
+            # recorded past that point, so there is nothing to deviate from.
+            'n': len(tokens), 'planned_positions': planned,
+            # planned < len(plan) means the cell cap stopped it; len(plan) < n
+            # means the string leaves the trie, and there is nothing recorded
+            # past that point to deviate from. Two different partial answers.
+            'positions_in_trie': len(plan), 'cell_cap': cap,
+            'capped': planned < len(plan),
+            'deviations': len(entries) + len(missing) + duplicates + unscorable,
+            'from_store': len(entries), 'duplicates': duplicates,
+            'unscorable': unscorable, 'eos_deviations': eos,
+            'missing': missing, 'missing_count': len(missing),
+            'entries': visible, 'count': len(visible),
+            'available': len(entries),
+            'ends': sorted(ends) if ends else None,
+            'nodes': sorted(nodes) if nodes else None,
+            'end_counts': dict(Counter(e['end'] for e in visible)),
+            'node_counts': dict(Counter(e['node_kind'] for e in visible)),
+        }
+
+    def deviations_for_id(self, base_id: str, **kw) -> Dict:
+        """The same, for a record named by id -- its own generated tokens."""
+        rec = self.by_id.get(base_id)
+        if rec is None:
+            return {'view': 'deviations', 'error': 'no record with that id',
+                    'entries': [], 'count': 0, 'missing': [], 'missing_count': 0}
+        lp = (rec.get('choices') or [{}])[0].get('logprobs') or {}
+        # The record's own split: its prompt is fixed, its generated tokens are
+        # what can be deviated.
+        out = self.deviations(
+            list(lp.get('tokens') or []),
+            prompt_tokens=list(((rec.get('prompt') or {}).get('logprobs') or {}).get('tokens') or []),
+            **kw)
+        out['base_id'] = base_id
+        return out
+
+    def greedy_i(self, prompt='', model='gpt-3.5-turbo-instruct', top=20,
+                 sort='cost', max_alts=8, ends=None, extend=False, nodes=None, sources=None):
+        """Best departure prefix among all accepted paths, using stored continuations."""
+        import heapq
+        import itertools
+        sources = self._normalize_sources(sources)
+        ends = self._normalize_ends(ends)
+        nodes = self._normalize_nodes(nodes)
+        root = self.trie(model, sources)
+        baseline = self.greedy_alternatives(prompt=prompt, model=model, top=1,
+                                             max_alts=max_alts, sources=sources)
+        seed = next((e for e in self._alts_cache.get((prompt, model, max_alts, sources),
+                    (None, [], None))[1] if e.get('is_greedy')), None)
+        if seed is None:
+            return {**baseline, 'view': 'greedy_i', 'entries': [], 'count': 0}
+        accepted = [{**seed, 'discovery_rank': 1, 'cost': 0.0}]
+        seen_paths = {tuple(t['token'] for t in seed['tokens'])}
+        seen_departures = set()
+        queue = []
+        serial = itertools.count()
+        missing = 0
+
+        def expand(parent):
+            nonlocal missing
+            path = [t['token'] for t in parent['tokens']]
+            node = root
+            prefix_sum = 0.0
+            prefix_text = ''
+            for i, tok in enumerate(path):
+                for alt, lp in (node.top_logprobs or {}).items():
+                    if alt == tok or not isinstance(lp, (int, float)) or not math.isfinite(lp):
+                        continue
+                    departure_key = (id(node), alt)
+                    if departure_key in seen_departures:
+                        continue
+                    seen_departures.add(departure_key)
+                    rec = self.lookup(prefix_text + alt, model=model, max_tokens=None, sources=sources)
+                    if rec is None:
+                        missing += 1
+                        continue
+                    choice = (rec.get('choices') or [{}])[0]
+                    full = tuple(path[:i] + [alt]) + tuple((choice.get('logprobs') or {}).get('tokens') or [])
+                    if full in seen_paths:
+                        continue
+                    score = prefix_sum + lp
+                    heapq.heappush(queue, (-score, next(serial), full, rec,
+                        {'position': i, 'original': tok, 'alternative': alt,
+                         'original_logprob': parent['tokens'][i]['logprob'],
+                         'alternative_logprob': lp, 'parent_rank': parent['discovery_rank']}))
+                prefix_text += tok
+                prefix_sum += parent['tokens'][i]['logprob']
+                node = node.children[tok]
+
+        def visible(e):
+            return (not ends or e.get('end') in ends) and (not nodes or e.get('node_kind') in nodes)
+
+        count = int(visible(accepted[0]))
+        expand(accepted[0])
+        while queue and (not top or count < top):
+            cost, _, path, rec, deviation = heapq.heappop(queue)
+            if path in seen_paths:
+                continue
+            detail = walk_detail(root, list(path), max_alts)
+            if len(detail) != len(path) or not detail:
+                continue
+            seen_paths.add(path)
+            total = detail[-1]['cumulative']
+            end = (rec.get('choices') or [{}])[0].get('finish_reason') or 'length'
+            entry = {'n': len(path), 'text': ''.join(path), 'tokens': detail,
+                     'sum_logprob': total, 'mean_logprob': total / len(path),
+                     'perplexity': ppl_from_mean(total / len(path)), 'cost': cost,
+                     'departure_logprob': -cost, 'deviation': deviation,
+                     'is_greedy': False, 'id': rec.get('id'), 'end': end,
+                     'finish_reason': end, 'node_kind': self.node_kind(list(path), root),
+                     'discovery_rank': len(accepted) + 1}
+            accepted.append(entry)
+            count += int(visible(entry))
+            expand(entry)
+        entries = [e for e in accepted if visible(e)]
+        if sort != 'cost':
+            entries.sort(key=(self.ALT_SORTS.get(sort) or self.ALT_SORTS['sum'])[0])
+        entries = [{**e, 'rank': i} for i, e in enumerate(entries, 1)]
+        distinct = self.add_extensions(entries, root, max_alts) if extend else None
+        return {**baseline, 'view': 'greedy_i', 'sort': sort,
+                'ranking': 'discovery order; maximize departure prefix sum_logprob',
+                'entries': entries, 'count': len(entries), 'available': None,
+                'departures_ranked': len(accepted) - 1, 'departures_without_record': missing,
+                'extend': bool(extend), 'distinct_extended': distinct,
+                'ends': sorted(ends) if ends else None, 'nodes': sorted(nodes) if nodes else None,
+                'end_counts': dict(Counter(e['end'] for e in entries)),
+                'node_counts': dict(Counter(e['node_kind'] for e in entries))}
 
     # cost first, and it is the default: the greedy criterion is what makes a
     # sibling "second best", and the other keys answer a different question.
     ALT_SORTS = {
         'cost': (lambda e: (e['cost'], -e['sum_logprob']), 'deviation cost asc (the greedy criterion)'),
         'sum': (lambda e: -e['sum_logprob'], 'sum_logprob desc'),
-        'ppl': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
-        'mean': (lambda e: e['perplexity'], 'perplexity asc (= mean_logprob desc)'),
+        'ppl': (lambda e: _ppl_key(e), 'perplexity asc (= mean_logprob desc)'),
+        'mean': (lambda e: _ppl_key(e), 'perplexity asc (= mean_logprob desc)'),
         'length': (lambda e: (-e['n'], -e['sum_logprob']), 'length desc'),
     }
 
