@@ -215,6 +215,34 @@ class Handler(SimpleHTTPRequestHandler):
         real money.
         """
         route = posixpath.normpath(urllib.parse.urlparse(self.path).path)
+        # Persist a record another program has already paid for. No API call and
+        # no key: this only writes. The resampling program calls OpenAI itself
+        # from node, and without this its results lived in its own log where none
+        # of the viewers could see them -- so the same string had to be read in a
+        # second, weaker copy of the viewer. Saving through here puts it in the
+        # one store, which is what makes the lists, the greedy views and the
+        # deviations work on it.
+        #
+        # store.save is idempotent by id and reloads the indexes, so a record
+        # offered twice comes back rather than being duplicated, and a viewer
+        # open in another tab sees it on its next request.
+        if route == '/api/save':
+            try:
+                length = _int(self.headers.get('Content-Length'), 0) or 0
+                body = json.loads(self.rfile.read(length) or b'{}')
+                record = body.get('record') if isinstance(body, dict) and 'record' in body else body
+                if not isinstance(record, dict) or not isinstance(record.get('id'), str) \
+                        or not record.get('choices'):
+                    return self.send_json({'error': 'a record with an id and choices is required'}, 400)
+                saved = self.store.save(record)
+                return self.send_json({'saved': True, 'id': saved.get('id'),
+                                       'records': len(self.store.records)})
+            except (ValueError, json.JSONDecodeError) as exc:
+                return self.send_json({'error': str(exc)}, 400)
+            except OSError as exc:
+                return self.send_json({'error': f'could not write the history: {exc}',
+                                       'saved': False}, 507)
+
         if route == '/api/ask_policy':
             try:
                 length = _int(self.headers.get('Content-Length'), 0) or 0
