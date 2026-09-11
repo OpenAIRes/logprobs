@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BASE_RESAMPLING_PROMPT } from "./resample-prompt.mjs";
+import { choicesInOrder, viewerUrl } from "./viewer-link.mjs";
 
 const ROOT = fileURLToPath(new URL(".", import.meta.url));
 export const DEFAULT_LOG_PATH = join(ROOT, "data", "prompt-log.json");
@@ -17,6 +18,7 @@ export function seedPromptLog() {
     model: null,
     parentInstruction: null,
     parentPrompt: null,
+    template: BASE_RESAMPLING_PROMPT,
     run: {
       id: "seed-run",
       requestedCount: 1,
@@ -130,6 +132,7 @@ export function promptRowsFromEvents(events) {
   return events.flatMap((event) => (event.generatedPrompts ?? []).map((generatedPrompt, index) => ({
     id: `${event.id}:${index}:${generatedPrompt.prompt.slice(0, 24)}`,
     eventId: event.id,
+    logprobsUrl: viewerUrl(event, choicesInOrder(event).filter(choice => String(choice.text ?? '').trim())[index]),
     createdAt: event.createdAt,
     mode: event.mode,
     backend: event.backend ?? null,
@@ -146,6 +149,7 @@ export function promptRowsFromEvents(events) {
     probability: generatedPrompt.probability ?? null,
     parentPrompt: generatedPrompt.parentPrompt,
     parentInstruction: generatedPrompt.parentInstruction,
+    template: event.template ?? null,
   })));
 }
 
@@ -160,6 +164,9 @@ export async function appendPromptLogEvent(event, logPath = DEFAULT_LOG_PATH) {
     model: event.model,
     parentInstruction: event.parentInstruction || null,
     parentPrompt: event.parentPrompt || null,
+    // Null on entries written before templates could be swapped; those all used
+    // the paper's, but saying so here would be a guess dressed as a record.
+    template: event.template ?? null,
     run: event.run || {
       id: randomUUID(),
       requestedCount: 1,

@@ -100,16 +100,24 @@
             <div class="panel-heading">
               <div>
                 <h2>Prompt sent to the API</h2>
-                <p>Meta mode uses the resampling instruction itself as INSTRUCTION.</p>
+                <p>Meta mode resamples the template itself, so the template is what goes in as INSTRUCTION.</p>
               </div>
             </div>
-            <pre id="prompt-preview">Generate a variation of the following instruction while keeping the semantic meaning.
 
-Input: Generate a variation of the following instruction while keeping the semantic meaning.
+            <details class="request-details" id="template-details">
+              <summary>Resampling template</summary>
+              <label class="field-stack" for="template">
+                <span>Template — <code>[INSTRUCTION]</code> is the slot the instruction goes into</span>
+                <textarea id="template" name="template" class="template-input" rows="6" spellcheck="false"></textarea>
+              </label>
+              <p class="backend-note" id="template-note">Loading the resampling template...</p>
+              <div class="actions">
+                <button type="button" class="button secondary" id="reset-template">Reset to the paper's</button>
+              </div>
+            </details>
 
-Input: [INSTRUCTION]
-Output:
-Output:</pre>
+            <!-- Filled by app.js from /api/backends; no copy of the prompt lives here. -->
+            <pre id="prompt-preview"></pre>
             <details class="request-details" id="request-details">
               <summary>Request body</summary>
               <pre id="request-preview">Press Preview to build the request body.</pre>
@@ -166,6 +174,12 @@ Output:</pre>
         </section>
       </section>
     </main>
-    <script src="/app.js" type="module"></script>
+    <!-- The package's one ask-before-calling policy and its dialog, served from
+     this program's own origin: /ask-policy.js and /approve-request.js are
+     proxied from the viewer package, and /api/ask_policy from the store. So
+     the switch in the viewer's settings governs this page too. -->
+<script src="/ask-policy.js"></script>
+<script src="/approve-request.js"></script>
+<script src="/app.js" type="module"></script>
   </body>
 </html>

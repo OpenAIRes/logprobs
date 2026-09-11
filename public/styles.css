@@ -268,8 +268,28 @@ input:focus {
 
 .prompt-panel {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   gap: 16px;
+}
+
+/* Shorter than the instruction box: the template is edited rarely and read often. */
+.template-input {
+  min-height: 132px;
+  font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+  font-size: 0.86rem;
+}
+
+#template-details .field-stack {
+  margin-top: 9px;
+}
+
+#template-details .actions {
+  margin-top: 11px;
+}
+
+.backend-note.error {
+  color: var(--danger);
+  font-weight: 700;
 }
 
 .request-details pre {
@@ -428,3 +448,5 @@ details summary {
     min-height: 220px;
   }
 }
+
+.logprobs-link { display: inline-block; margin-top: 8px; color: #2563eb; font-size: 13px; font-weight: 600; }

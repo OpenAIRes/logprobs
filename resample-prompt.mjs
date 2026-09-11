@@ -33,30 +33,81 @@ export {
 
 export const RESAMPLING_INSTRUCTION =
   "Generate a variation of the following instruction while keeping the semantic meaning.";
+
+/**
+ * The slot a resampling template puts the instruction into. It used to appear
+ * only as a literal inside BASE_RESAMPLING_PROMPT, while buildResamplingPrompt
+ * pasted `Input: ${instruction}` together by hand — so nothing ever checked that
+ * a template had a slot at all. That starts to matter once the template is not
+ * hard-coded: meta mode comes back with the paraphrased instruction sentence and
+ * drops the `Input:`/`Output:` scaffolding, and such a template would build a
+ * prompt that never states what to resample.
+ */
+export const INSTRUCTION_PLACEHOLDER = "[INSTRUCTION]";
+
 export const BASE_RESAMPLING_PROMPT = [
   RESAMPLING_INSTRUCTION,
   "",
-  "Input: [INSTRUCTION]",
+  `Input: ${INSTRUCTION_PLACEHOLDER}`,
   "Output:",
 ].join("\n");
 
-export function buildResamplingPrompt(instruction) {
+/** A fatal defect: the template cannot be used at all. Null means usable. */
+export function templateError(template) {
+  const text = String(template ?? "");
+  if (!text.trim()) {
+    return "The resampling template is empty.";
+  }
+  if (!text.includes(INSTRUCTION_PLACEHOLDER)) {
+    return `The resampling template has no ${INSTRUCTION_PLACEHOLDER} slot, so the instruction would never reach the prompt.`;
+  }
+  return null;
+}
+
+/**
+ * Defects worth saying out loud but not worth refusing over: a template may
+ * legitimately end in some cue other than the paper's.
+ */
+export function templateWarnings(template) {
+  const text = String(template ?? "");
+  const warnings = [];
+  if (text.trim() && !text.trimEnd().endsWith("Output:")) {
+    warnings.push('The template does not end with "Output:", the cue the model completes after.');
+  }
+  if (text && text !== text.trimEnd()) {
+    warnings.push("The template ends with whitespace; the reference implementation strips prompts before sending.");
+  }
+  return warnings;
+}
+
+export function buildResamplingPrompt(instruction, template = BASE_RESAMPLING_PROMPT) {
   const cleaned = String(instruction ?? "").trim();
   if (!cleaned) {
     throw new Error("Instruction is empty.");
   }
 
-  return [
-    RESAMPLING_INSTRUCTION,
-    "",
-    `Input: ${cleaned}`,
-    "Output:",
-  ].join("\n");
+  const problem = templateError(template);
+  if (problem) {
+    throw new Error(problem);
+  }
+
+  // The replacer function keeps `$&` and friends in the instruction literal, and
+  // stops a meta-mode instruction that itself contains the placeholder from being
+  // rescanned: it is inserted once, verbatim.
+  return String(template).replaceAll(INSTRUCTION_PLACEHOLDER, () => cleaned);
 }
 
-export function getInstructionForMode({ instruction, mode = "custom" } = {}) {
+/**
+ * Meta mode resamples the template it is about to use, so a caller that swapped
+ * in a generated template keeps iterating on that one, not on the paper's.
+ */
+export function getInstructionForMode({
+  instruction,
+  mode = "custom",
+  template = BASE_RESAMPLING_PROMPT,
+} = {}) {
   if (mode === "meta") {
-    return BASE_RESAMPLING_PROMPT;
+    return template;
   }
   return instruction;
 }
@@ -70,6 +121,7 @@ function printHelp() {
   node resample-prompt.mjs --instruction "write the antonym of the word."
   node resample-prompt.mjs --instruction "..." --backend responses
   node resample-prompt.mjs --input-file instruction.txt --count 5 --dry-run
+  node resample-prompt.mjs -i "..." --template-file my-template.txt --dry-run
 
 Backends (--backend, default: ${DEFAULT_BACKEND}):
 ${backendList}
@@ -79,6 +131,8 @@ ${backendList}
 Options:
   --instruction, -i        Source instruction to resample
   --input-file, -f         Read source instruction from a UTF-8 text file
+  --template               Resampling template; must contain [INSTRUCTION]
+  --template-file          Read the template from a UTF-8 text file
   --count, -n              Number of variations to request (default: 1)
   --backend                completions | responses
   --model                  Override the backend's default model
@@ -145,6 +199,12 @@ function parseArgs(argv) {
       case "-f":
         options.inputFile = next();
         break;
+      case "--template":
+        options.template = next();
+        break;
+      case "--template-file":
+        options.templateFile = next();
+        break;
       case "--count":
       case "-n":
         options.count = Number.parseInt(next(), 10);
@@ -198,6 +258,27 @@ function parseArgs(argv) {
   getBackend(options.backend);
 
   return options;
+}
+
+async function getTemplate(options) {
+  if (options.template && options.templateFile) {
+    throw new Error("Use either --template or --template-file, not both.");
+  }
+  const template = options.templateFile
+    ? await readFile(options.templateFile, "utf8")
+    : options.template;
+  if (template === undefined) {
+    return BASE_RESAMPLING_PROMPT;
+  }
+
+  // A template read from a file usually carries a trailing newline; the prompt
+  // must end at `Output:`, so drop it before the checks run.
+  const trimmed = template.trimEnd();
+  const problem = templateError(trimmed);
+  if (problem) {
+    throw new Error(problem);
+  }
+  return trimmed;
 }
 
 async function getInstruction(options) {
@@ -276,12 +357,16 @@ async function main() {
   const backend = getBackend(options.backend);
   const params = resolveBackendParams(backend.id, options.overrides);
   const ignored = unsupportedParams(backend.id, params);
+  const template = await getTemplate(options);
   const instruction = await getInstruction(options);
-  const prompt = buildResamplingPrompt(instruction);
+  const prompt = buildResamplingPrompt(instruction, template);
   const plan = planRequests(backend.id, options.count);
 
   if (ignored.length) {
     console.error(`Warning: ${backend.id} does not support ${ignored.join(", ")}; not sent.`);
+  }
+  for (const warning of templateWarnings(template)) {
+    console.error(`Warning: ${warning}`);
   }
 
   if (options.dryRun) {
@@ -290,6 +375,7 @@ async function main() {
       model: options.model || backend.model,
       apiUrl: options.apiUrl || backend.apiUrl,
       requests: plan.length,
+      template,
       prompt,
       requestBody: buildOpenAIRequestBody({
         backend: backend.id,
@@ -328,6 +414,7 @@ async function main() {
       backend: backend.id,
       model: options.model || backend.model,
       requests: plan.length,
+      template,
       prompt,
       variations,
     }, null, 2));

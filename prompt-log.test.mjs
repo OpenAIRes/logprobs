@@ -171,7 +171,7 @@ test("derives prompt table rows from complete log events", async () => {
   assert.deepEqual(promptRowsFromEvents(events), [
     {
       id: "event-1:0:Generated prompt",
-      eventId: "event-1",
+      eventId: "event-1", logprobsUrl: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       mode: "custom",
       backend: null,
@@ -192,8 +192,25 @@ test("derives prompt table rows from complete log events", async () => {
       probability: null,
       parentPrompt: "Parent prompt",
       parentInstruction: "Parent instruction",
+      // Null, not the paper's template: this event predates the field, and the
+      // row must not invent provenance it was never given.
+      template: null,
     },
   ]);
+});
+
+test("a row reports the template its prompt was built from", () => {
+  const [row] = promptRowsFromEvents([
+    {
+      id: "event-1",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      mode: "meta",
+      template: "Reword this.\n\nInput: [INSTRUCTION]\nOutput:",
+      generatedPrompts: [{ prompt: "Generated prompt" }],
+    },
+  ]);
+
+  assert.equal(row.template, "Reword this.\n\nInput: [INSTRUCTION]\nOutput:");
 });
 
 test("rows carry the response and how many variations shared it", () => {

@@ -228,3 +228,72 @@ Vychozi hodnoty parametru jsou vzdy hodnoty vybraneho backendu, viz tabulka vyse
 ```powershell
 node --test .\resample-prompt.test.mjs .\prompt-log.test.mjs
 ```
+
+## Otevreni logprobs z resamplingu
+
+U vysledku a radku historie s ulozenymi tokenovymi logprobs je odkaz
+`Zobrazit logprobs`. Otevre konkretni variantu v nove zalozce bez volani API.
+Funguje i pro vice variants v jednom requestu a pro existujici historii.
+
+Server pouziva primo novejsi viewer z `../gpt/extracted` (verze z 5. 9. 2026),
+ktery je shodny s `Documents/ChatGPT/chat 2/logprobs.html`. Kopie v
+`AI/logprobs` je starsi (28. 8. 2026). Nevytvari se dalsi kopie vieweru.
+Jine umisteni lze nastavit promennou `LOGPROBS_VIEWER_DIR` pred spustenim.
+
+Na portu 8787 se viewer napojuje na historii resamplingu; nejde o cely
+record-store server z projektu gpt. Server zpristupnuje HTML vieweru a jeho
+sdilene skripty (app.css, theme.js, bar.js, ask-policy.js, approve-request.js,
+greedy-branches.js, deviations.html). Historii pro viewer sklada za behu
+z prompt logu.
+
+To uz ale neni jedina cesta: kazdy vysledek s logprobs se **nabidne i sdilenemu
+store** (POST /api/save na 8899), takze completion_history.json se dnes doplnuje
+-- drive to tenhle soubor vyslovne nedelal. Bez toho zustaval resamplingovy
+retezec mimo dosah zebricku, greedy pohledu i jednotokenovych odchylek, protoze
+vsechno tri umi store, ne tenhle server. Odkazy u vysledku proto vedou na 8899,
+ne do zdejsi polovicni kopie vieweru. Kdyz store nebezi, volani se jen zaloguje
+sem a odkaz zustane lokalni.
+
+Testy propojeni: `node --test viewer-link.test.mjs`.
+
+## Shared viewer and single-token variants
+
+The sole maintained Logprobs Viewer HTML lives in `C:/Users/Jan/Desktop/gpt/extracted/logprobs.html`.
+The old `AI/logprobs/logprobs.html` and `Documents/ChatGPT/chat 2/logprobs.html`
+are forwarding pages, preserving query parameters and fragment. They contain no viewer implementation.
+Historical JSON datasets stay in their existing locations.
+
+Every resampling completion with logprobs offers **View logprobs** and
+**One-token deviations**, both pointing at the store server.
+
+The deviations are the question this program is usually asking: every position
+of the string x every alternative recorded there becomes a new prompt, and the
+row is what the model actually generates from it, so the tail after the change
+is real. The store answers from its own records where it can and asks before it
+buys the rest.
+
+The neighbouring page, `single-token-variants.html`, calls the shared
+`extracted/single_token_variants.py`, which reuses `plan_for` from
+`sweep_alternatives.py`. It enumerates the recorded alternatives at each
+completion position, changes exactly one token, **preserves the suffix**,
+excludes unchanged text, and groups identical output strings. No API calls are
+made and it costs nothing -- but the strings are ones the model never produced,
+and the replacement logprobs describe the original prefix, not a score for the
+modified string. A logprobs=0 result can have no alternatives. The two pages
+link to each other; the link from here goes to the deviations, because that is
+the one that was meant.
+
+## Asking before a paid call
+
+`/api/resample` refuses a request without `confirmed: true`. The call happens in
+node, so the dialog cannot: the page shows the exact request body first -- the
+same one `/api/preview` returns -- and sends the acknowledgement with it. The
+policy behind that ("every call", "from 4096 tokens", "more than one call",
+"never") is the viewer package's one setting, kept by the store server and
+proxied here at `/api/ask_policy`, so one switch governs every part of the
+program. With the store unreachable the client falls back to asking every time,
+and a page whose dialog did not load refuses to call at all.
+
+Python defaults to the bundled Codex runtime. Override with `LOGPROBS_PYTHON`;
+override the shared source folder with `LOGPROBS_VIEWER_DIR`.
+The separate API-backed continuation sweep remains in `sweep_alternatives.py`.

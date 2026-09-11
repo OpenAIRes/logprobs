@@ -6,6 +6,9 @@ import {
   buildResamplingPrompt,
   extractVariations,
   getInstructionForMode,
+  INSTRUCTION_PLACEHOLDER,
+  templateError,
+  templateWarnings,
   maxLogprobs,
   minMaxTokens,
   planRequests,
@@ -56,6 +59,75 @@ test("the prompt sent to the API has no trailing whitespace after Output:", () =
   const prompt = buildResamplingPrompt("write the antonym of the word.");
   assert.equal(prompt, prompt.trimEnd());
   assert.ok(prompt.endsWith("Output:"));
+});
+
+test("the default template substitutes where the old hand-built prompt pasted", () => {
+  // Guards the switch from `Input: ${instruction}` to a real substitution: the
+  // prompt must stay byte-identical, because 13 months of logged calls used it.
+  assert.equal(
+    buildResamplingPrompt("write the antonym of the word.", BASE_RESAMPLING_PROMPT),
+    buildResamplingPrompt("write the antonym of the word."),
+  );
+});
+
+test("a custom template replaces the paper's, verbatim", () => {
+  assert.equal(
+    buildResamplingPrompt("write the antonym of the word.", [
+      "Reword the instruction.",
+      "",
+      `Instruction: ${INSTRUCTION_PLACEHOLDER}`,
+      "Output:",
+    ].join("\n")),
+    [
+      "Reword the instruction.",
+      "",
+      "Instruction: write the antonym of the word.",
+      "Output:",
+    ].join("\n"),
+  );
+});
+
+test("refuses a template with no slot for the instruction", () => {
+  // This is what meta mode actually returned from gpt-3.5-turbo-instruct: the
+  // paraphrased instruction sentence, with the Input:/Output: scaffolding gone.
+  // Used as a template it builds a prompt that never states what to resample,
+  // and the call would look perfectly successful.
+  const generated = "Create a different version of the given instruction while maintaining its semantic meaning.";
+
+  assert.match(templateError(generated), /\[INSTRUCTION\]/);
+  assert.throws(() => buildResamplingPrompt("write the antonym of the word.", generated), /\[INSTRUCTION\]/);
+  assert.throws(() => buildResamplingPrompt("x", "   "), /empty/);
+  assert.equal(templateError(BASE_RESAMPLING_PROMPT), null);
+});
+
+test("warns about a missing Output: cue without refusing the template", () => {
+  const noCue = `Reword the instruction: ${INSTRUCTION_PLACEHOLDER}`;
+  assert.equal(templateError(noCue), null);
+  assert.deepEqual(templateWarnings(noCue), [
+    'The template does not end with "Output:", the cue the model completes after.',
+  ]);
+  assert.deepEqual(templateWarnings(BASE_RESAMPLING_PROMPT), []);
+  assert.match(templateWarnings(`${BASE_RESAMPLING_PROMPT}\n`).join(" "), /whitespace/);
+});
+
+test("meta mode resamples whichever template is in use", () => {
+  const template = `Reword it.\n\nInput: ${INSTRUCTION_PLACEHOLDER}\nOutput:`;
+  assert.equal(getInstructionForMode({ instruction: "ignored", mode: "meta", template }), template);
+  // Without a template it still means the paper's, so old callers are unaffected.
+  assert.equal(getInstructionForMode({ instruction: "ignored", mode: "meta" }), BASE_RESAMPLING_PROMPT);
+  assert.equal(getInstructionForMode({ instruction: "kept", mode: "custom", template }), "kept");
+});
+
+test("the inserted instruction is never rescanned or treated as a pattern", () => {
+  // Meta mode feeds in an instruction that itself contains [INSTRUCTION]; the
+  // inner one must survive as literal text rather than being substituted again.
+  const built = buildResamplingPrompt(BASE_RESAMPLING_PROMPT);
+  assert.equal(built.split(INSTRUCTION_PLACEHOLDER).length - 1, 1);
+  assert.ok(built.includes(`Input: ${INSTRUCTION_PLACEHOLDER}`));
+
+  // `$&` and friends are replacement patterns for String.replaceAll; a bare
+  // string replacement would expand them and corrupt the instruction.
+  assert.ok(buildResamplingPrompt("keep $& and $` verbatim").includes("Input: keep $& and $` verbatim"));
 });
 
 test("completions sampling defaults come from instruction_induction.yaml", () => {

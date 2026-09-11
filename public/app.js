@@ -1,5 +1,8 @@
 const form = document.querySelector("#prompt-form");
 const instructionInput = document.querySelector("#instruction");
+const templateInput = document.querySelector("#template");
+const templateNote = document.querySelector("#template-note");
+const resetTemplateButton = document.querySelector("#reset-template");
 const previewButton = document.querySelector("#preview-button");
 const promptPreview = document.querySelector("#prompt-preview");
 const requestPreview = document.querySelector("#request-preview");
@@ -20,14 +23,45 @@ let backends = {};
 
 /** Every row from the last /api/log fetch; the table renders a filtered view. */
 let logRows = [];
+let customInstruction = instructionInput.value;
+let displayedMode = 'custom';
 
-const META_INSTRUCTION = "Generate a variation of the following instruction while keeping the semantic meaning.";
-const BASE_RESAMPLING_PROMPT = [
-  META_INSTRUCTION,
-  "",
-  "Input: [INSTRUCTION]",
-  "Output:",
-].join("\n");
+function syncInstructionField() {
+  const mode = selectedMode();
+  if (mode === 'meta') {
+    if (displayedMode !== 'meta') customInstruction = instructionInput.value;
+    instructionInput.value = currentTemplate();
+  } else if (displayedMode === 'meta') {
+    instructionInput.value = customInstruction;
+  }
+  instructionInput.disabled = false;
+  instructionInput.readOnly = mode === 'meta';
+  instructionInput.setAttribute('aria-readonly', String(mode === 'meta'));
+  displayedMode = mode;
+}
+
+/**
+ * Also from /api/backends. The instruction and the template used to be copied
+ * into this file and into index.html, so editing resample-prompt.mjs left the UI
+ * previewing a prompt the server no longer sent. Nothing here hard-codes them.
+ */
+let promptConfig = {
+  resamplingInstruction: "",
+  baseResamplingPrompt: "",
+  instructionPlaceholder: "[INSTRUCTION]",
+  // Where the shared store lives; the server says, so it is configurable there.
+  storeOrigin: "",
+};
+
+/** A blank box means "the default", so clearing it cannot break the prompt. */
+function currentTemplate() {
+  return templateInput.value.trimEnd() || promptConfig.baseResamplingPrompt;
+}
+
+function setTemplateNote(text, isError = false) {
+  templateNote.textContent = text;
+  templateNote.classList.toggle("error", isError);
+}
 
 function selectedMode() {
   return new FormData(form).get("mode");
@@ -81,6 +115,16 @@ async function loadBackends() {
   try {
     const json = await getJson("/api/backends");
     backends = Object.fromEntries(json.backends.map((backend) => [backend.id, backend]));
+    promptConfig = {
+      resamplingInstruction: json.resamplingInstruction ?? "",
+      baseResamplingPrompt: json.baseResamplingPrompt ?? "",
+      instructionPlaceholder: json.instructionPlaceholder ?? "[INSTRUCTION]",
+      storeOrigin: json.storeOrigin ?? "",
+    };
+    if (!templateInput.value.trim()) {
+      templateInput.value = promptConfig.baseResamplingPrompt;
+    }
+    localPreview();
     const preferred = form.querySelector(`[name="backend"][value="${json.defaultBackend}"]`);
     if (preferred) {
       preferred.checked = true;
@@ -107,6 +151,7 @@ function payload() {
     mode: data.get("mode"),
     backend: data.get("backend"),
     instruction: data.get("instruction"),
+    template: currentTemplate(),
     model: String(data.get("model") || "").trim(),
     count: data.get("count"),
   };
@@ -129,20 +174,80 @@ function payload() {
   return body;
 }
 
+/**
+ * Mirrors buildResamplingPrompt() without restating the prompt: whatever is in
+ * the template box is the only source. Press Preview for the server's own answer.
+ */
 function localPreview() {
-  const instruction = selectedMode() === "meta" ? BASE_RESAMPLING_PROMPT : instructionInput.value.trim();
+  syncInstructionField();
+  const template = currentTemplate();
+  const placeholder = promptConfig.instructionPlaceholder;
+
+  if (!template) {
+    promptPreview.textContent = "";
+    setTemplateNote("Loading the resampling template...");
+    return;
+  }
+
+  if (!template.includes(placeholder)) {
+    promptPreview.textContent = "";
+    setTemplateNote(`No ${placeholder} slot, so the instruction would never reach the prompt. Resampling in Meta mode returns just the instruction sentence and drops the Input:/Output: scaffolding, which lands exactly here.`, true);
+    return;
+  }
+
+  const notes = [];
+  if (template !== promptConfig.baseResamplingPrompt) {
+    notes.push("Custom template, not the paper's.");
+  }
+  if (!template.endsWith("Output:")) {
+    notes.push('Does not end with "Output:", the cue the model completes after.');
+  }
+  setTemplateNote(notes.join(" ") || "The resampling template from the paper.");
+
+  // Meta mode resamples the template itself, so it follows the box.
+  const instruction = selectedMode() === "meta" ? template : instructionInput.value.trim();
   if (!instruction) {
     promptPreview.textContent = "";
     return;
   }
 
-  promptPreview.textContent = [
-    META_INSTRUCTION,
-    "",
-    `Input: ${instruction}`,
-    "Output:",
-  ].join("\n");
+  promptPreview.textContent = template.replaceAll(placeholder, () => instruction);
 }
+
+/* The policy and the dialog are the package's, not this program's: one rule and
+   one dialog everywhere, so a resampling run is shown the same way a token click
+   is. Missing scripts mean no dialog, and no dialog means no call -- the same
+   fail-closed rule the rest of the package follows. */
+async function approveRequest(plan) {
+  const policy = window.AskPolicy;
+  if (!policy) {
+    throw new Error("ask-policy.js se nenačetlo, takže se není čím zeptat — placené volání se neprovede.");
+  }
+  const request = plan.requestBody ?? {};
+  return policy.guard(request, { total: Number(plan.requests) || 1 });
+}
+
+/* The deviations of a string: every position x every recorded alternative as a
+   new prompt, with the continuation the model really produces. It has to point
+   at the store server, because that is where the records and the engine are --
+   this server can serve the page but has nothing to answer it with.
+
+   It used to point at single-token-variants.html, which keeps the original tail
+   and never calls a model. That is a different question and a useful one, but it
+   is not the one this link is for; the two pages now link to each other, so
+   picking the other one is one click from either. */
+function storeUrl(url, page) {
+  const origin = promptConfig.storeOrigin || "";
+  const path = String(url).replace("/logprobs.html", page);
+  return /^https?:/i.test(path) ? path : origin + path;
+}
+const deviationsUrl = url => storeUrl(url, "/deviations.html");
+/* Both links lead to the store, not to the copy of the viewer this server can
+   put up: that copy has the page but not the store behind it, so its settings
+   bar, its lists and its branch button have nothing to answer them. Every
+   result is pushed to the store as it is made, and the older ones were
+   imported, so there is a record there to open. */
+const viewerUrlInStore = url => storeUrl(url, "/logprobs.html");
 
 async function postJson(url, body) {
   const response = await fetch(url, {
@@ -178,6 +283,15 @@ async function readJsonResponse(response) {
   }
 }
 
+function renderTemplateStatus(json) {
+  const notes = [];
+  if (json.isDefaultTemplate === false) {
+    notes.push("Custom template, not the paper's.");
+  }
+  notes.push(...(json.templateWarnings ?? []));
+  setTemplateNote(notes.join(" ") || "The resampling template from the paper.");
+}
+
 function renderRequestPreview(json) {
   const lines = [];
   if (json.ignoredParams?.length) {
@@ -194,6 +308,7 @@ async function refreshPreview() {
   try {
     const json = await postJson("/api/preview", payload());
     promptPreview.textContent = json.prompt;
+    renderTemplateStatus(json);
     renderRequestPreview(json);
     setStatus(json.mode === "meta" ? "Meta" : "Ready");
   } catch (error) {
@@ -202,6 +317,12 @@ async function refreshPreview() {
   } finally {
     setBusy(false);
   }
+}
+
+function logprobsLink(entry) {
+  return entry?.logprobsUrl
+    ? `<a class="logprobs-link" href="${escapeHtml(viewerUrlInStore(entry.logprobsUrl))}" target="_blank" rel="noopener">View logprobs ↗</a> <a class="logprobs-link" href="${escapeHtml(deviationsUrl(entry.logprobsUrl))}" target="_blank" rel="noopener">One-token deviations ↗</a>`
+    : "";
 }
 
 function renderResults(variations) {
@@ -220,6 +341,7 @@ function renderResults(variations) {
       <article class="result-item">
         <strong>Variation ${index + 1}${truncated ? ' <span class="truncated">truncated at max_tokens</span>' : ""}${logprob}</strong>
         <div>${escapeHtml(text)}</div>
+        ${logprobsLink(variation)}
       </article>
     `;
   }).join("");
@@ -284,6 +406,13 @@ function renderLog() {
     ? `${runs} run${runs === 1 ? "" : "s"} in ${mode} mode · ${hidden} hidden from the other mode`
     : `${runs} run${runs === 1 ? "" : "s"} in ${mode} mode`;
 
+  const withLogprobs = entries.filter(row => row.logprobsUrl).length;
+  const otherLogprobs = logRows.filter(row => row.mode !== mode && row.logprobsUrl).length;
+  logFilterNote.textContent += withLogprobs
+    ? ' · ' + withLogprobs + ' variants with logprobs (links below).'
+    : ' · No saved logprobs in this mode.';
+  if (otherLogprobs) logFilterNote.textContent += ' Switch to ' + (mode === 'meta' ? 'Custom' : 'Meta') + ' for ' + otherLogprobs + ' variants with logprobs.';
+
   if (!entries.length) {
     logTable.innerHTML = '<tr><td colspan="7"><span class="muted">Nothing logged yet.</span></td></tr>';
     return;
@@ -296,6 +425,7 @@ function renderLog() {
           <summary>${escapeHtml(shortText(entry.prompt))}</summary>
           <pre class="table-pre">${escapeHtml(entry.prompt)}</pre>
         </details>
+        ${logprobsLink(entry)}
       </td>
       <td>${entry.parentPrompt ? `
         <details>
@@ -343,7 +473,7 @@ function escapeHtml(value) {
 
 form.addEventListener("input", (event) => {
   if (event.target.name === "mode") {
-    instructionInput.disabled = selectedMode() === "meta";
+    syncInstructionField();
     renderLog();
   }
   if (event.target.name === "backend") {
@@ -351,6 +481,10 @@ form.addEventListener("input", (event) => {
   }
   localPreview();
 });
+
+// The template box sits in the preview panel, outside the form, so it needs its
+// own listener rather than riding the form's input event.
+templateInput.addEventListener("input", localPreview);
 
 previewButton.addEventListener("click", refreshPreview);
 
@@ -361,8 +495,21 @@ form.addEventListener("submit", async (event) => {
   results.innerHTML = '<article class="result-empty">Waiting for the API...</article>';
 
   try {
-    const json = await postJson("/api/resample", payload());
+    /* Nothing is bought before somebody has seen it. The preview is what the
+       server would send -- the same builder produces the body for the real call
+       -- so it is the honest thing to show, and the policy decides whether to
+       show it at all. `confirmed` then travels with the request; without it the
+       server refuses. */
+    const plan = await postJson("/api/preview", payload());
+    const verdict = await approveRequest(plan);
+    if (verdict !== "yes" && verdict !== "all" && verdict !== true) {
+      setStatus("Nevolalo se");
+      results.innerHTML = '<article class="result-empty">Volání zrušeno — nic se neposlalo.</article>';
+      return;
+    }
+    const json = await postJson("/api/resample", { ...payload(), confirmed: true });
     promptPreview.textContent = json.prompt;
+    renderTemplateStatus(json);
     renderResults(json.variations);
     await loadLog();
     setStatus(`Done — ${json.backend}`);
@@ -381,7 +528,11 @@ copyPrompt.addEventListener("click", async () => {
 
 refreshLogButton.addEventListener("click", loadLog);
 
-instructionInput.disabled = selectedMode() === "meta";
+resetTemplateButton.addEventListener("click", () => {
+  templateInput.value = promptConfig.baseResamplingPrompt;
+  localPreview();
+});
+
 localPreview();
 loadBackends();
 loadLog();
