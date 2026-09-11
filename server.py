@@ -230,12 +230,25 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 length = _int(self.headers.get('Content-Length'), 0) or 0
                 body = json.loads(self.rfile.read(length) or b'{}')
-                record = body.get('record') if isinstance(body, dict) and 'record' in body else body
-                if not isinstance(record, dict) or not isinstance(record.get('id'), str) \
-                        or not record.get('choices'):
-                    return self.send_json({'error': 'a record with an id and choices is required'}, 400)
-                saved = self.store.save(record)
-                return self.send_json({'saved': True, 'id': saved.get('id'),
+                # One record or a list of them. The list is the one that matters:
+                # each write reloads the indexes, so saving a run of variations
+                # one at a time costs ten seconds apiece for no reason.
+                if isinstance(body, dict) and 'records' in body:
+                    records = body['records']
+                elif isinstance(body, dict) and 'record' in body:
+                    records = [body['record']]
+                elif isinstance(body, list):
+                    records = body
+                else:
+                    records = [body]
+                if not isinstance(records, list) or not records or not all(
+                        isinstance(r, dict) and isinstance(r.get('id'), str) and r.get('choices')
+                        for r in records):
+                    return self.send_json(
+                        {'error': 'a record (or a list of records) with an id and choices is required'}, 400)
+                saved = self.store.save_many(records)
+                return self.send_json({'saved': True, 'ids': [r.get('id') for r in saved],
+                                       'id': saved[0].get('id'),
                                        'records': len(self.store.records)})
             except (ValueError, json.JSONDecodeError) as exc:
                 return self.send_json({'error': str(exc)}, 400)

@@ -238,14 +238,26 @@ class RecordStore:
         return self
 
     def save(self, record: Dict) -> Dict:
-        """Commit to the existing history before exposing the record to readers.
+        """Commit one record. See save_many, which does the work."""
+        return self.save_many([record])[0]
+
+    def save_many(self, records: List[Dict]) -> List[Dict]:
+        """Commit to the existing history before exposing the records to readers.
 
         The server shares this lock with queries and cache warming. The on-disk
         history is reread under the lock, never rebuilt from a filtered view.
+
+        Taking a list rather than one record is not a convenience: writing the
+        8.7 MB history and reloading the indexes costs about ten seconds, and
+        doing that per record made importing eleven of them take two minutes,
+        with a resample run of five variations hanging for the best part of a
+        minute after the API had already answered. One read, n appends, one
+        write, one reload.
         """
         with self.lock, history_lock(self.root):
-            if not isinstance(record.get('id'), str) or not record['id']:
-                raise ValueError('response has no record id')
+            for record in records:
+                if not isinstance(record.get('id'), str) or not record['id']:
+                    raise ValueError('response has no record id')
             name = 'completion_history.json'
             if name not in self.sources:
                 raise ValueError('completion_history.json must be a store source')
@@ -258,26 +270,39 @@ class RecordStore:
                     history = [history]
                 if not isinstance(history, list) or not all(isinstance(r, dict) for r in history):
                     raise ValueError('invalid history; refusing to overwrite it')
-            existing = next((r for r in history if r.get('id') == record['id']), None)
-            if existing is not None:
-                return existing
-            clean = {k: v for k, v in record.items() if not k.startswith('_')}
-            history.append(clean)
-            temp_path = None
-            try:
-                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
-                                                 dir=self.root, delete=False,
-                                                 prefix='.history-', suffix='.tmp') as fh:
-                    temp_path = fh.name
-                    json.dump(history, fh, ensure_ascii=False, allow_nan=False)
-                    fh.flush()
-                    os.fsync(fh.fileno())
-                os.replace(temp_path, path)
-            finally:
-                if temp_path and os.path.exists(temp_path):
-                    os.unlink(temp_path)
-            self.load()
-            return self.by_id[record['id']]
+
+            known = {r.get('id') for r in history}
+            added = False
+            for record in records:
+                # A record already on disk wins: an id is a paid call's identity,
+                # and the copy that got there first is the one every view has
+                # been showing.
+                if record['id'] in known:
+                    continue
+                history.append({k: v for k, v in record.items() if not k.startswith('_')})
+                known.add(record['id'])
+                added = True
+
+            if added:
+                temp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                                     dir=self.root, delete=False,
+                                                     prefix='.history-', suffix='.tmp') as fh:
+                        temp_path = fh.name
+                        json.dump(history, fh, ensure_ascii=False, allow_nan=False)
+                        fh.flush()
+                        os.fsync(fh.fileno())
+                    os.replace(temp_path, path)
+                finally:
+                    if temp_path and os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                self.load()
+            elif any(r['id'] not in self.by_id for r in records):
+                # On disk but not in memory: another writer got there between our
+                # last load and this call.
+                self.load()
+            return [self.by_id[r['id']] for r in records]
 
     def lookup_request(self, request: Dict) -> Optional[Dict]:
         """Exact Studio request match; analysis callers retain lookup semantics."""

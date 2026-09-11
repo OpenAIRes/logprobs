@@ -1,8 +1,12 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Single-token variants</title>
-<style>body{font:16px system-ui,sans-serif;background:#f6f7f9;color:#18202a;max-width:1100px;margin:40px auto;padding:0 24px}a{color:#245dd8}h1{font-size:28px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:20px;border:1px solid #dce0e6;border-radius:8px}table{width:100%;border-collapse:collapse;background:white}td,th{padding:12px;text-align:left;border-bottom:1px solid #e2e5ea;vertical-align:top}td:last-child{white-space:pre-wrap;overflow-wrap:anywhere}code{white-space:pre-wrap}button{padding:9px 15px;margin:0 8px 16px 0;cursor:pointer}.note{color:#526173;line-height:1.6}#status{font-weight:600}mark{background:#fff0ae}nav{display:flex;gap:20px}</style></head>
+<style>body{font:16px system-ui,sans-serif;background:#f6f7f9;color:#18202a;max-width:1100px;margin:40px auto;padding:0 24px}a{color:#245dd8}h1{font-size:28px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:20px;border:1px solid #dce0e6;border-radius:8px}table{width:100%;border-collapse:collapse;background:white}td,th{padding:12px;text-align:left;border-bottom:1px solid #e2e5ea;vertical-align:top}td:last-child{white-space:pre-wrap;overflow-wrap:anywhere}code{white-space:pre-wrap}button{padding:9px 15px;margin:0 8px 16px 0;cursor:pointer}.note{color:#526173;line-height:1.6}#status{font-weight:600}#sibling{border-left:2px solid #dce0e6;padding-left:10px}mark{background:#fff0ae}nav{display:flex;gap:20px}</style></head>
 <body><nav><a href="/">Resampling</a><a id="viewer">View logprobs</a></nav><h1>Single-token variants</h1>
 <p class="note">Replace exactly one completion token with each of its recorded alternatives. The rest of the string stays unchanged. No model calls are made. Identical strings are listed once; unchanged strings are excluded.</p>
+<p class="note" id="sibling">The other question, for the same string:
+  <a id="deviationsLink" href="#">one-token deviations</a> — the same swap, but the
+  deviated prefix becomes a <b>new prompt</b> and the model regenerates the rest, so
+  those strings are ones it really produces. That one can cost money; this one cannot.</p>
 <h2>Original completion</h2><pre id="original">Loading…</pre><p id="status" role="status">Generating variants…</p>
 <p class="note">Replacement logP belongs to the original prefix. It is not a probability for the modified full string.</p>
 <button id="json" disabled>Download JSON</button><button id="txt" disabled>Download text</button>
@@ -11,6 +15,9 @@
 const id=new URLSearchParams(location.search).get('id');
 const viewer=document.getElementById('viewer');viewer.href='/logprobs.html?id='+encodeURIComponent(id||'');
 const status=document.getElementById('status');
+/* The two pages are neighbours and were easy to confuse -- this one keeps the
+   original tail, the other regenerates it -- so each links to the other. */
+document.getElementById('deviationsLink').href='/deviations.html?id='+encodeURIComponent(id||'');
 function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 (async()=>{try{
  if(!id)throw new Error('Missing completion ID. Open this page from a completion.');

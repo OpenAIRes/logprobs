@@ -32,6 +32,9 @@
   td.text { white-space: pre-wrap; overflow-wrap: anywhere; }
   code { background: var(--chip); border-radius: 3px; padding: 0 .2em; }
   .row2 { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin: .8rem 0; }
+  /* The two pages answer neighbouring questions and were easy to mistake for
+     each other -- so each one says what the other is, in a sentence. */
+  .sibling { border-left: 2px solid var(--line); padding-left: .6rem; margin: .7rem 0; }
 </style>
 </head>
 <body>
@@ -42,6 +45,11 @@
   actually generates from that prompt</b>. So the tail after the change is real, not the original
   tail. Continuations come from the database; the ones it does not have are only fetched when you
   ask, and that costs money.</p>
+
+<p class="note sibling">The other question, for the same string:
+  <a id="variantsLink" href="#">single-token variants</a> — one token swapped with
+  <b>the original tail kept</b>. No model is called and it costs nothing, but those
+  strings are ones the model never produced.</p>
 
 <div id="promptWrap" hidden>
   <p class="note"><b>Fixed prompt</b> — no logprobs were returned for it, so it has no
@@ -143,6 +151,9 @@ function present(d) {
   renderRows(d);
   statusEl.textContent = `${d.count} strings`;
 }
+
+document.getElementById('variantsLink').href =
+  '/single-token-variants.html?id=' + encodeURIComponent(id || '');
 
 (async () => {
   if (!id) { statusEl.textContent = 'No id. Open this page from a string in the viewer.'; return; }
