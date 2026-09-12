@@ -233,6 +233,13 @@ class Handler(SimpleHTTPRequestHandler):
         real money.
         """
         route = posixpath.normpath(urllib.parse.urlparse(self.path).path)
+        # Anything that reads the indexes settles them first. /api/complete is
+        # the exception: it is the one route called hundreds of times in a row,
+        # it is what asked for the deferral, and the only index it reads --
+        # by_prompt, for the "already bought?" check -- is kept current by the
+        # deferred save itself.
+        if route != '/api/complete':
+            self.store.settle()
         # Persist a record another program has already paid for. No API call and
         # no key: this only writes. The resampling program calls OpenAI itself
         # from node, and without this its results lived in its own log where none
@@ -344,7 +351,10 @@ class Handler(SimpleHTTPRequestHandler):
                         return self.send_json({'error': str(exc), 'saved': False,
                                                'record': raw, 'api_completed': True}, 502)
                     try:
-                        record = self.store.save(record)
+                        # `defer` is the caller saying "I am in the middle of a
+                        # batch": the record is written and fsynced regardless,
+                        # and only the reindex waits for whoever reads next.
+                        record = self.store.save(record, defer=body.get('defer') is True)
                     except Exception:
                         return self.send_json({'error': 'API odpovědělo, ale uložení selhalo. Stáhněte záznam; neopakujte placené volání.',
                                                'saved': False, 'record': record,
@@ -427,6 +437,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if not route.startswith('/api/'):
             return super().do_GET()
+        # A reader pays for whatever the writers deferred. Static files do not
+        # touch the store, so serving the pages stays instant either way.
+        self.store.settle()
 
         # keep_blank_values matters: the root call has prompt="", and dropping
         # blanks turned the single most important lookup into "prompt is required".

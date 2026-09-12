@@ -211,6 +211,10 @@ class RecordStore:
         self._subset_sweeps: Dict[Optional[frozenset], Dict[tuple, Dict]] = {}
         self.load_seconds = 0.0
         self.missing: List[str] = []
+        # Records are on disk and findable by id and by prompt, but the tries,
+        # the ends index and the ranked caches do not know about them yet. See
+        # save_many(defer=True) and settle().
+        self._dirty = False
 
     # -- loading --------------------------------------------------------------
 
@@ -224,17 +228,24 @@ class RecordStore:
                 paths.append(path)
             else:
                 self.missing.append(name)
-        self.records = load_records(paths)
-        # Tagged at load, so a subset is a filter rather than a second read of the
-        # files. load_records keeps the first copy of a duplicated id, and the
-        # order of SOURCES decides which file that was -- the tag follows it.
-        by_id_group = {}
+        # Tagged as it is read, so a subset is a filter rather than a second read
+        # of the files. This used to read every source twice -- once for the
+        # records, then once more file by file only to learn which file each id
+        # came from -- which was half the cost of a load. Same answer either way:
+        # the first file carrying an id is the one that names its group, and
+        # paths are in SOURCES order.
+        self.records = []
+        seen_ids = set()
         for path in paths:
             group = GROUP_OF.get(os.path.basename(path))
             for rec in load_records([path]):
-                by_id_group.setdefault(rec.get('id'), group)
-        for rec in self.records:
-            rec['_group'] = by_id_group.get(rec.get('id'))
+                rid = rec.get('id')
+                if rid and rid in seen_ids:
+                    continue
+                if rid:
+                    seen_ids.add(rid)
+                rec['_group'] = group
+                self.records.append(rec)
         self.by_id = {r['id']: r for r in self.records if r.get('id')}
         self.by_prompt = {}
         for rec in self.records:
@@ -250,14 +261,46 @@ class RecordStore:
         self._subsets.clear()
         self._subset_ends.clear()
         self._subset_sweeps.clear()
+        self._dirty = False
         self.load_seconds = time.time() - started
         return self
 
-    def save(self, record: Dict) -> Dict:
-        """Commit one record. See save_many, which does the work."""
-        return self.save_many([record])[0]
+    def settle(self) -> 'RecordStore':
+        """Rebuild the indexes if saves have been deferred. Cheap when clean.
 
-    def save_many(self, records: List[Dict]) -> List[Dict]:
+        Every route that reads the store calls this first, so a deferred save is
+        invisible from the outside: the reader pays for the rebuild it needs,
+        once, instead of each writer paying for it in turn.
+        """
+        with self.lock:
+            if self._dirty:
+                self.load()
+        return self
+
+    def save(self, record: Dict, defer: bool = False) -> Dict:
+        """Commit one record. See save_many, which does the work."""
+        return self.save_many([record], defer=defer)[0]
+
+    def _splice(self, entries: List[Dict]) -> None:
+        """Make just-written records findable without rebuilding the indexes.
+
+        By id and by prompt, which is exactly what the next call in a batch asks
+        -- have I already bought this one -- so deferring cannot turn into paying
+        twice. The tries, the ends index and the ranked caches are left stale and
+        the store is marked dirty; settle() rebuilds them once, when something
+        reads them.
+        """
+        group = GROUP_OF.get('completion_history.json')
+        for entry in entries:
+            entry['_group'] = group
+            self.records.append(entry)
+            self.by_id[entry['id']] = entry
+            prompt = (entry.get('request') or {}).get('prompt')
+            if isinstance(prompt, str):
+                self.by_prompt.setdefault(prompt, []).append(entry)
+        self._dirty = True
+
+    def save_many(self, records: List[Dict], defer: bool = False) -> List[Dict]:
         """Commit to the existing history before exposing the records to readers.
 
         The server shares this lock with queries and cache warming. The on-disk
@@ -269,6 +312,12 @@ class RecordStore:
         with a resample run of five variations hanging for the best part of a
         minute after the API had already answered. One read, n appends, one
         write, one reload.
+
+        `defer` is for a run that is going to make many calls: the history is
+        written and fsynced exactly as always -- a paid call is never at risk --
+        but the ten-to-thirteen seconds of reindexing is not paid per record.
+        Three hundred deviations meant three hundred rebuilds of the same
+        indexes, and that, not the API, was what made such a run take an hour.
         """
         with self.lock, history_lock(self.root):
             for record in records:
@@ -288,16 +337,17 @@ class RecordStore:
                     raise ValueError('invalid history; refusing to overwrite it')
 
             known = {r.get('id') for r in history}
-            added = False
+            added = []
             for record in records:
                 # A record already on disk wins: an id is a paid call's identity,
                 # and the copy that got there first is the one every view has
                 # been showing.
                 if record['id'] in known:
                     continue
-                history.append({k: v for k, v in record.items() if not k.startswith('_')})
+                entry = {k: v for k, v in record.items() if not k.startswith('_')}
+                history.append(entry)
                 known.add(record['id'])
-                added = True
+                added.append(entry)
 
             if added:
                 temp_path = None
@@ -313,10 +363,15 @@ class RecordStore:
                 finally:
                     if temp_path and os.path.exists(temp_path):
                         os.unlink(temp_path)
-                self.load()
+                if defer:
+                    self._splice(added)
+                else:
+                    self.load()
             elif any(r['id'] not in self.by_id for r in records):
                 # On disk but not in memory: another writer got there between our
-                # last load and this call.
+                # last load and this call. Nothing to splice -- that record's
+                # dict is in a file we have not read -- so this one reloads even
+                # when the caller asked to defer.
                 self.load()
             return [self.by_id[r['id']] for r in records]
 

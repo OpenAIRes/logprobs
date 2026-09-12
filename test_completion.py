@@ -51,6 +51,36 @@ class PersistenceTests(StoreTestCase):
         self.assertEqual(restarted.missing, [])
         self.assertEqual(restarted.by_id[raw['id']]['choices'][0]['text'], '!')
 
+    def test_deferred_save_is_durable_and_findable_before_the_reindex(self):
+        """A batch pays for the indexes once, at the end, not once per record."""
+        self.store.query(view='completions', top=10)   # warm the cached view
+        req, raw = fixture(prompt='')
+        saved = self.store.save(build_record(raw, req), defer=True)
+
+        # On disk first, whatever happens next: a paid call is never left only
+        # in memory, which is the whole reason deferring the reindex is safe.
+        history = json.loads(
+            (Path(self.temp.name) / 'completion_history.json').read_text('utf-8'))
+        self.assertEqual([r['id'] for r in history], [raw['id']])
+
+        # Findable by id and by prompt, so the next call in the batch sees it as
+        # already bought rather than paying for the same string twice.
+        self.assertIs(self.store.by_id[raw['id']], saved)
+        self.assertIsNotNone(self.store.lookup_request(req))
+
+        # The ranked views are deliberately stale until something reads them.
+        self.assertTrue(self.store._dirty)
+        self.assertEqual(self.store.query(view='completions', top=10)['count'], 0)
+        self.store.settle()
+        self.assertFalse(self.store._dirty)
+        self.assertEqual(self.store.query(view='completions', top=10)['count'], 1)
+        self.assertEqual(self.store.greedy(prompt='')['first_id'], raw['id'])
+
+    def test_settle_does_nothing_when_no_save_was_deferred(self):
+        with patch.object(RecordStore, 'load') as reload:
+            self.store.settle()
+        reload.assert_not_called()
+
     def test_prompt_split_and_unicode(self):
         req, raw = fixture(prompt=' Ahoj 🐈\n')
         record = build_record(raw, req)
@@ -164,6 +194,49 @@ class HttpTests(StoreTestCase):
         self.assertTrue(self.call('/api/lookup', {**req, 'exact': True})[1]['hit'])
         self.assertTrue(self.call('/api/lookup', {**req, 'exact': True})[1]['exact'])
         self.assertTrue(self.call('/api/complete', {**req, 'confirmed': True})[1]['from_cache'])
+        self.assertEqual(self.upstream.call_count, 1)
+
+    def test_defer_reindexes_once_for_the_whole_batch(self):
+        """Two paid calls, one rebuild, and both rows there when it is read.
+
+        Reindexing after every record is what made a run of three hundred
+        deviations take an hour: the rebuild cost several times the API call.
+        """
+        reindexes = []
+        real_load = RecordStore.load
+
+        def counted(store):
+            reindexes.append(store)
+            return real_load(store)
+
+        with patch.object(RecordStore, 'load', counted), \
+             patch.dict('os.environ', {'OPENAI_API_KEY': 'offline-test-placeholder'}):
+            for n, prompt in enumerate(('a', 'b'), start=1):
+                req, raw = fixture(rid=f'test-{n}', prompt=prompt)
+                self.upstream.side_effect = (
+                    lambda request, _raw=raw, **kwargs: io.BytesIO(json.dumps(_raw).encode()))
+                status, result = self.call(
+                    '/api/complete', {**req, 'confirmed': True, 'defer': True})
+                self.assertEqual(status, 200)
+                self.assertTrue(result['saved'])
+                self.assertEqual(result['id'], raw['id'])
+            self.assertEqual(reindexes, [], 'the batch rebuilt the indexes')
+            listed = self.call('/api/records')[1]
+            self.assertEqual(len(reindexes), 1, 'the read did not settle the store')
+
+        self.assertEqual({r['id'] for r in listed['records']}, {'test-1', 'test-2'})
+        self.assertEqual(self.upstream.call_count, 2)
+
+    def test_defer_still_answers_a_repeat_from_history(self):
+        """Deferring must not turn into paying twice for the same prompt."""
+        req, raw = fixture()
+        with patch.dict('os.environ', {'OPENAI_API_KEY': 'offline-test-placeholder'}):
+            self.upstream.side_effect = (
+                lambda request, **kwargs: io.BytesIO(json.dumps(raw).encode()))
+            first = self.call('/api/complete', {**req, 'confirmed': True, 'defer': True})[1]
+            again = self.call('/api/complete', {**req, 'confirmed': True, 'defer': True})[1]
+        self.assertTrue(first['saved'])
+        self.assertTrue(again['from_cache'])
         self.assertEqual(self.upstream.call_count, 1)
 
     def test_positive_temperature_skips_history(self):

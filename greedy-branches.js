@@ -165,6 +165,13 @@
         max_tokens: length,
         logprobs: logprobsFor(model),
         confirmed: true,
+        /* This is one of many, so the record is written and fsynced but the
+           store's indexes are not rebuilt for it. Rebuilding them took longer
+           than the call itself -- about five seconds against one -- so a run of
+           three hundred spent most of an hour reindexing the same history over
+           and over. The re-plan at the end of the run reads the store, which is
+           what settles it, once. Never sent to the API; the server drops it. */
+        defer: true,
       };
 
       if (o.approve && !approvedAll) {
