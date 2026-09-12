@@ -199,14 +199,6 @@
     font-size: .78125rem; line-height: 1.5; }
   .needs b { font-family: ui-monospace, Menlo, monospace; }
 
-  .extend { margin-top: 1rem; }
-  .extend p { margin: 0 0 .7rem; font-size: .875rem; color: var(--ink-dim); line-height: 1.55; }
-  .extend p b { color: var(--ink); font-weight: 600; }
-  .extend .go { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-  .extend .cmd { font: 12px/1.5 ui-monospace, Menlo, monospace; color: var(--ink);
-    background: var(--chip); border-radius: 6px; padding: .35rem .5rem; word-break: break-all; }
-  .extend .price { font-size: .78125rem; color: var(--mid); }
-
   @media (max-width: 720px) {
     .thead, .row { grid-template-columns: 2.5rem minmax(0,1fr) 5.5rem; }
     .thead .c-mean, .row .c-mean, .thead .c-ppl, .row .c-ppl,
@@ -256,15 +248,6 @@
   <!-- The grid and the walk have a different shape from a ranking, so they carry
        their own container instead of being forced into the six-column grid. -->
   <div id="special" hidden></div>
-
-  <!-- Every view can be pushed further, and "further" means something different
-       in each. Nothing here spends on its own: a browser-side extension opens the
-       builder, and a CLI one shows the exact command with its call count. -->
-  <section class="panel extend" id="extend" hidden>
-    <h2>Extend this view</h2>
-    <p id="extendWhat"></p>
-    <div class="go" id="extendGo"></div>
-  </section>
 
   <div id="err" style="display:none"></div>
 </div>
@@ -647,9 +630,6 @@ function renderRows() {
 
 
 const el = id => document.getElementById(id);
-/* greedy is a ranked list too -- of the greedy path and its one-token siblings --
-   so it shares the table, the results cap and the sort control. */
-const RANKED = v => v === 'prefixes' || v === 'completions' || (v === 'greedy' || v === 'greedy1');
 
 /* The meta block used to derive its label from db.view, which reads 'prefixes'
    for anything that is not completions -- and /api/greedy_alternatives answers
@@ -765,80 +745,6 @@ function renderWalk(db) {
     + (db.needs_call ? ' · the next one needs a call' : '');
 }
 
-/* Roughly $0.000058 per call, measured over the ~8100 calls already logged. */
-const PER_CALL_USD = 0.000058;
-const price = n => '~$' + (n * PER_CALL_USD).toFixed(4) + ' for ' + n + ' calls';
-
-function renderExtend(db) {
-  const box = el('extend'), what = el('extendWhat'), go = el('extendGo');
-  box.hidden = false;
-  go.innerHTML = '';
-
-  const button = (label, href, primary) => {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (primary) b.className = 'primary';
-    b.addEventListener('click', () => { location.href = href; });
-    go.appendChild(b);
-  };
-  const command = (cmd, calls) => {
-    const c = document.createElement('span'); c.className = 'cmd'; c.textContent = cmd;
-    const p = document.createElement('span'); p.className = 'price'; p.textContent = price(calls);
-    go.append(c, p);
-  };
-
-  if (RANKED(VIEW)) {
-    what.innerHTML = 'Extending a ranking means expanding <b>the best prefix not yet tried</b>, '
-      + 'which is exactly what the builder does — so the database grows in the same order this '
-      + 'list is read in. It also runs a simulation mode with no API calls at all, and it can '
-      + 'prove a top-K without exploring the rest of the frontier.';
-    button('Open builder', '/builder.html', true);
-    return;
-  }
-
-  if (VIEW === 'sweep') {
-    const done = db.cells || 0;
-    const full = (db.base_tokens || []).length * 20;
-    const complete = full > 0 && done >= full;
-    // A full grid must not be offered for sweeping again: it would be 400 paid
-    // calls for records already in the store.
-    what.innerHTML = complete
-      ? `This grid is <b>complete</b>: all ${done} cells are recorded, so there is nothing left `
-        + `to pay for here. To go further, sweep a <b>different base</b> — pick any string from `
-        + `the completions list and use its id. A sweep is 20 × 20 calls and runs on the command `
-        + `line, because it wants a resumable ledger.`
-      : `Extending a grid means <b>sweeping a base</b>: following every alternative at every `
-        + `position. This one holds <b>${done}</b> of ${full || '20 × 20'} cells. A sweep is a `
-        + `command-line run, because it is hundreds of calls and wants a resumable ledger — the `
-        + `browser is the wrong place for that.`;
-    command('py sweep_alternatives.py --base-id ' + (complete ? '<other-id>' : (db.base_id || '<id>'))
-            + ' --out sweep_next.jsonl --json-out sweep_next.json',
-            complete ? (full || 400) : (full - done) || 400);
-    return;
-  }
-
-  if (VIEW === 'walk') {
-    const nc = db.needs_call;
-    const want = Number(S.steps) || 20;
-    const missing = Math.max(0, want - (db.steps || []).length);
-    what.innerHTML = nc
-      ? `The walk stopped because one prompt is missing. Extending it means <b>paying for that `
-        + `regeneration</b> — one call per step, so ${missing} more step${missing === 1 ? '' : 's'} `
-        + `is ${missing} call${missing === 1 ? '' : 's'}. The cheapest deviation is free to work `
-        + `out; only following it costs anything.`
-      : `Every requested step came out of the store, so there is nothing to pay for. Ask for more `
-        + `steps to push further.`;
-    if (nc) {
-      button('Open that prompt in the token browser',
-             '/logprobs.html?prompt=' + encodeURIComponent(nc.prompt));
-      command('py sweep_alternatives.py --prompt-file next_prompt.txt', missing || 1);
-    }
-    return;
-  }
-
-  box.hidden = true;
-}
-
 function render(db) {
   DB = db;
   window.__db = db;   // handy for poking at the data from the console
@@ -848,8 +754,6 @@ function render(db) {
      wrong source is worse than none. */
   document.getElementById('srcName').textContent =
     LEGACY_FILE || db.__route || '/api/query';
-  renderExtend(db);
-
   if (VIEW === 'sweep') return renderSweep(db);
   if (VIEW === 'walk')  return renderWalk(db);
   specialEl.hidden = true;
