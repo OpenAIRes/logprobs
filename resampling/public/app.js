@@ -224,7 +224,12 @@ async function approveRequest(plan) {
     throw new Error("ask-policy.js se nenačetlo, takže se není čím zeptat — placené volání se neprovede.");
   }
   const request = plan.requestBody ?? {};
-  return policy.guard(request, { total: Number(plan.requests) || 1 });
+  window.CallReport.report("asking", `${plan.model} · ${plan.requests}× · ${plan.backend}`);
+  const verdict = await policy.guard(request, { total: Number(plan.requests) || 1 });
+  if (verdict !== "yes" && verdict !== "all" && verdict !== true) {
+    window.CallReport.report("declined");
+  }
+  return verdict;
 }
 
 /* The deviations of a string: every position x every recorded alternative as a
@@ -507,13 +512,18 @@ form.addEventListener("submit", async (event) => {
       results.innerHTML = '<article class="result-empty">Volání zrušeno — nic se neposlalo.</article>';
       return;
     }
+    window.CallReport.report("calling", `${plan.model} · ${plan.requests}×`);
     const json = await postJson("/api/resample", { ...payload(), confirmed: true });
+    window.CallReport.report("saved", `${json.variations.length} variant`);
     promptPreview.textContent = json.prompt;
     renderTemplateStatus(json);
     renderResults(json.variations);
     await loadLog();
     setStatus(`Done — ${json.backend}`);
   } catch (error) {
+    window.CallReport.report(
+      /nedosa|unreachable|getaddrinfo|Failed to fetch/i.test(error.message || "")
+        ? "unreachable" : "failed", error.message);
     setStatus("Error", true);
     results.innerHTML = `<article class="result-empty">${escapeHtml(error.message)}</article>`;
   } finally {

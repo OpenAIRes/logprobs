@@ -166,6 +166,7 @@
 <!-- ask-policy first: bar.js builds its settings row from it, and every paid
      call on this page goes through its guard. -->
 <script src="/ask-policy.js"></script>
+<script src="/call-report.js"></script>
 <script src="/approve-request.js"></script>
 <script src="/bar.js"></script>
 
@@ -425,8 +426,9 @@ const SOURCES = {
             'Answered by the imported sweep databases. No API call, nothing spent.'],
   store:   ['from the store', 'free',
             'Answered by the store (server.py), which holds every call ever made. No API call, nothing spent.'],
-  calling: ['calling the API…', 'busy',
-            'Nothing had this continuation, so it is being generated. This one costs money.'],
+  /* `calling` used to live here too. It is not provenance -- it is activity --
+     and activity is now reported once for the whole package by call-report.js,
+     which every program that generates loads. */
   api:     ['new API call', 'paid',
             'Nothing had this continuation, so it was generated and paid for. It is saved now, so asking for it again is free.'],
 };
@@ -1430,8 +1432,6 @@ async function createCompletion(prevId, replaceIdx, newToken, maxTokens, modelOv
   console.log('[MISS] Calling API for prompt:', promptText);
   /* Set before the call, not after: the point of showing this is to know that
      money is going out, and the answer takes a second or two to arrive. */
-  setSource('calling');
-
   const key = await ensureApiKey();
   if (!key) { setSource(null); return null; }
 
@@ -1532,11 +1532,14 @@ async function fetchCompletionAutoFit(prompt, maxTokens, key, model, total = 1){
        below asks again with the smaller max_tokens, because that is a different
        request -- approving 4096 is not approving whatever the context happens to
        allow. */
+    window.CallReport.report('asking', `${model} · ${effectiveMax} tokenů`);
     const verdict = await window.AskPolicy.guard(body, {total});
     if (verdict !== 'yes' && verdict !== 'all') {
+      window.CallReport.report('declined');
       showStatus('Volání zrušeno — nic se neposlalo.');
       return { error: { message: 'cancelled before the request was sent' }, _cancelled: true };
     }
+    window.CallReport.report('calling', `${model} · ${effectiveMax} tokenů`);
     const res = await fetch('https://api.openai.com/v1/completions',{
       method:'POST',
       headers:{
@@ -1568,6 +1571,13 @@ async function fetchCompletionAutoFit(prompt, maxTokens, key, model, total = 1){
        data.choices[0], so handing back a truthy object would turn a cancelled
        click into a TypeError. The browser found this one. */
     if (data && data._cancelled) return null;
+    if (data && data.error) {
+      window.CallReport.report(
+        /getaddrinfo|Failed to fetch|network/i.test(data.error.message || '') ? 'unreachable' : 'failed',
+        data.error.message);
+    } else if (data) {
+      window.CallReport.report('saved', `${model} · ${effectiveMax} tokenů`);
+    }
     if(data && data.error && typeof data.error.message === 'string'){
       const msg = data.error.message;
       // const re = new RegExp('maximum context length is\s+(\d+) tokens[\s\S]*?\((\d+) in your prompt;\s*(\d+) for the completion\)','i');
@@ -1974,7 +1984,6 @@ async function startNewTree(promptText = '', maxTokens = clickMaxTokens()){
   /* No confirm of its own any more: fetchCompletionAutoFit shows the actual
      request, which says more than "this will call the OpenAI API" ever did --
      the prompt, the model, max_tokens and logprobs, as they will be sent. */
-  setSource('calling');
   const key = await ensureApiKey();
   if (!key) { setSource(null); return; }
 

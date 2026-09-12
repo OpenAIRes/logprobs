@@ -56,6 +56,7 @@ export default function RootLayout({
         />
         <script src="http://127.0.0.1:8899/ask-policy.js" />
         <script src="http://127.0.0.1:8899/approve-request.js" />
+        <script src="http://127.0.0.1:8899/call-report.js" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

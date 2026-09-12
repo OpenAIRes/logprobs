@@ -410,6 +410,21 @@
       files cannot be loaded, the studio refuses to call rather than falling back to asking
       nothing.</p>
 
+    <h3>what is happening right now</h3>
+    <p>A strip at the bottom of the screen says where a call is: <i>Hledám v databázi…</i>,
+      <i>Čekám na potvrzení…</i>, <i>Volám API…</i>, then <i>Hotovo, uloženo</i>,
+      <i>Z databáze — nic se nevolalo</i>, <i>Zrušeno — nic se neposlalo</i>,
+      <i>Zastaveno</i>, <i>Nepovedlo se</i>, or <i>API nedostupné — nic se
+      neúčtovalo</i>. A stage that is still running stays on screen; a finished one
+      clears itself after a few seconds.</p>
+    <p>It is <b>one implementation for the whole package</b> — <code>call-report.js</code>,
+      loaded by the token browser, the lists, the deviations, the builder, Prompt Studio and
+      the resampling program. Five of them had their own answer to this before, in different
+      words, and three said nothing at all while a call was in flight: that is how a failed
+      deviation came out as silence and a DNS outage came out as a JSON parse error. The
+      provenance chip on the bar is a different question and stays — it says where the
+      string on screen came from, not what is happening now.</p>
+
     <h3>where things live</h3>
     <p>One folder, one repository:</p>
     <dl>

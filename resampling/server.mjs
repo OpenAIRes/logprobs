@@ -45,7 +45,7 @@ const STORE_ORIGIN = process.env.LOGPROBS_STORE_ORIGIN || 'http://127.0.0.1:8899
 // logprobs.html loads ask-policy.js and approve-request.js -- one policy and
 // one dialog for asking before a paid call, shared with the viewer package.
 // Without them here the page 404s on both and every paid path throws.
-const VIEWER_FILES = new Set(['/logprobs.html', '/app.css', '/theme.js', '/bar.js', '/single-token-variants.html', '/logprobs.json', '/ask-policy.js', '/approve-request.js', '/greedy-branches.js', '/deviations.html', '/help.html']);
+const VIEWER_FILES = new Set(['/logprobs.html', '/app.css', '/theme.js', '/bar.js', '/single-token-variants.html', '/logprobs.json', '/ask-policy.js', '/approve-request.js', '/call-report.js', '/greedy-branches.js', '/deviations.html', '/help.html']);
 const PORT = Number.parseInt(process.env.PORT || "8787", 10);
 
 const MIME_TYPES = {

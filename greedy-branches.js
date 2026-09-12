@@ -40,6 +40,13 @@
      so the callers and the test that pass a bare function keep working. */
   const options = o => (typeof o === 'function' ? {post: o} : (o || {}));
 
+  /* One vocabulary for "what is happening", shared with every other program
+     that can generate. Absent in node, where the test loads this file alone. */
+  const report = (stage, detail) => {
+    const r = root.CallReport || (typeof window !== 'undefined' && window.CallReport);
+    if (r) r.report(stage, detail);
+  };
+
   /* The per-model call size lives in ask-policy.js -- it had three copies of
      the same two numbers, which is two too many. Resolved at call time so this
      file stays loadable both in the browser (script tag before this one) and in
@@ -164,8 +171,12 @@
       }
 
       progress(`Volám API: ${++calls}/${missing.length} · pozice ${cell.position + 1}, ${JSON.stringify(cell.alternative)}`);
+      report('calling', `${calls}/${missing.length} · pozice ${cell.position + 1} `
+                      + `${JSON.stringify(cell.original)} → ${JSON.stringify(cell.alternative)}`);
       try {
         const answer = await post('/api/complete', request);
+        report(answer && answer.from_cache ? 'cached' : 'saved',
+               `${calls}/${missing.length}`);
         /* Hand the answer over as it arrives. The rows are only rebuilt when the
            whole run is done -- they come from a fresh plan, so that every row is
            scored by the same code -- which meant paying for a call and being
@@ -174,13 +185,20 @@
           try { o.onResult(answer, cell, calls, missing.length); } catch { /* display only */ }
         }
       } catch (error) {
+        report(/nedosa|unreachable|getaddrinfo|Failed to fetch/i.test(error.message || '')
+                 ? 'unreachable' : 'failed',
+               `${calls}/${missing.length} · ${error.message || ''}`);
         // One refused or unsaveable call must not throw away the other 300.
         failures.push({cell, error});
         if (error.record) throw error;
       }
     }
     progress('Přepočítávám…');
+    report('looking', 'přepočítávám plán');
     const again = await plan(parent, model, opts);
+    report(stopped ? 'stopped' : 'saved',
+           `${calls} volání · ${skipped ? skipped + ' přeskočeno · ' : ''}`
+           + `${again.from_store} v tabulce`);
     return {...again, calls, failures, skipped, stopped};
   }
 
@@ -199,9 +217,13 @@
     const o = {...options(opts)};
     o.progress = progress || o.progress;
     (o.progress || (() => {}))('Hledám odchylky v databázi…');
+    report('looking', 'jednotokenové odchylky');
     const first = await plan(parent, model, o);
     if (first.error) throw new Error(first.error);
-    if (!first.missing_count) return {...first, calls: 0, failures: []};
+    if (!first.missing_count) {
+      report('cached', `${first.from_store} odchylek z databáze, nic k dokoupení`);
+      return {...first, calls: 0, failures: []};
+    }
     /* Fail closed. A caller that passes neither approve nor confirm gets the
        plan and nothing else -- spending 1655 calls because an option was
        forgotten is exactly the accident this whole path is built to avoid. */

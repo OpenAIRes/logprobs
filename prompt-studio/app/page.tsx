@@ -18,6 +18,7 @@ declare global {
       describe: () => string;
       logprobsFor: (model: string) => number;
     };
+    CallReport?: { report: (stage: string, detail?: string) => void };
     ASK_POLICY_BASE?: string;
   }
 }
@@ -124,16 +125,19 @@ export default function Home() {
          describe something other than what goes out. */
       if(!window.AskPolicy){setRunStatus('Nelze volat');setOutput('Politika volání se nenačetla z http://127.0.0.1:8899 (ask-policy.js). Spusťte server.py a načtěte stránku znovu — bez ní se placené volání neprovede.');return}
       const request={...body,confirmed:true};
+      window.CallReport?.report('asking',`${model} · ${maxTokens} tokenů`);
       const verdict=await window.AskPolicy.guard(request,{total:1});
-      if(verdict!=='yes'&&verdict!=='all'&&verdict!==true){setRunStatus('API nebylo voláno');setOutput('Volání zrušeno — nic se neposlalo.');return}
+      if(verdict!=='yes'&&verdict!=='all'&&verdict!==true){window.CallReport?.report('declined');setRunStatus('API nebylo voláno');setOutput('Volání zrušeno — nic se neposlalo.');return}
+      window.CallReport?.report('calling',`${model} · ${maxTokens} tokenů`);
       setRunStatus('Volám API…');
       const res=await localFetch('/api/complete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
       const data=await res.json() as ApiResult;
       if(data.api_completed && data.record){setSelected(data.record);setUnsaved(data.record);setOutput(data.record.choices?.[0]?.text??'Prázdná odpověď.');setRunStatus(data.error||'Odpověď není uložená');return}
       if(!res.ok)throw new Error([data.error||'API chyba',data.detail].filter(Boolean).join('\n'));
       if(data.saved!==true){setSelected(data);setUnsaved(data);setOutput(data.choices?.[0]?.text??'Prázdná odpověď.');setRunStatus('Server nepotvrdil uložení. Stáhněte odpověď a aktualizujte server.');return}
+      window.CallReport?.report(data.from_cache?'cached':'saved',model);
       setSelected(data);setRunStatus(data.from_cache?'Načteno z historie':'Odpověď uložena do historie');setOutput(data.choices?.[0]?.text??'Prázdná odpověď.');await refreshLogs();
-    }catch(e){setRunStatus('Chyba');setOutput(e instanceof Error?e.message:'Lokální server není dostupný.')}finally{setBusy(false)}
+    }catch(e){const m=e instanceof Error?e.message:'Lokální server není dostupný.';window.CallReport?.report(/nedosa|unreachable|getaddrinfo|Failed to fetch/i.test(m)?'unreachable':'failed',m);setRunStatus('Chyba');setOutput(m)}finally{setBusy(false)}
   }
 
   function downloadUnsaved(){

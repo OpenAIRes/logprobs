@@ -11,6 +11,7 @@
 <!-- The ask policy and its dialog: this page calls the API too, and one
      rule for the whole program means this page obeys the same one. -->
 <script src="/ask-policy.js"></script>
+<script src="/call-report.js"></script>
 <script src="/approve-request.js"></script>
 <style>
   /* Palette, buttons and form controls live in app.css so every page reads as
@@ -677,10 +678,13 @@ async function fetchPositionsFromApi(prompt, maxTokens, model) {
 
   /* The same gate as everywhere else, and before the retry loop: a retry sends
      the identical body, so approving it once is approving it. */
+  window.CallReport.report('asking', `${model} · ${maxTokens} tokenů`);
   const verdict = await window.AskPolicy.guard(body, {total: 1});
   if (verdict !== 'yes' && verdict !== 'all') {
+    window.CallReport.report('declined');
     throw new ApiError('Volání zrušeno — nic se neposlalo.');
   }
+  window.CallReport.report('calling', `${model} · ${maxTokens} tokenů`);
 
   let lastErr = null;
 
@@ -699,6 +703,7 @@ async function fetchPositionsFromApi(prompt, maxTokens, model) {
       });
       const latency = Date.now() - t0;
       const json = await readApiResponse(res);
+      window.CallReport.report('saved', `${model} · ${latency} ms`);
       return {
         positions: parseCompletionsResponse(json),
         usage: json.usage || null,
