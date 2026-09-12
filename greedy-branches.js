@@ -18,9 +18,16 @@
 
   const poster = async (url, body) => {
     const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-    const data = await response.json();
+    /* A failure that is not JSON must still be readable. An unhandled exception
+       on the server sends an HTML error page, and parsing that threw a
+       SyntaxError that reached the page instead of the reason -- which is how a
+       DNS failure came out as "Unexpected token <" rather than "the API could
+       not be reached". */
+    let data = {};
+    try { data = await response.json(); } catch { data = {}; }
     if (!response.ok) {
-      const error = new Error(data.error || `HTTP ${response.status}`);
+      const error = new Error(data.error
+        || `HTTP ${response.status} ${response.statusText || ''}`.trim());
       // A paid call that could not be saved must not vanish: the caller offers
       // it as a download instead of buying the same answer twice.
       error.record = data.api_completed ? data.record : null;

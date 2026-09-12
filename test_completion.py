@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+import urllib.error
 from unittest.mock import patch
 
 from completion import build_record, normalize_request
@@ -191,6 +192,30 @@ class HttpTests(StoreTestCase):
         self.assertEqual(result['record']['raw_response'], raw)
         self.assertTrue(result['api_completed'])
         self.assertEqual(self.store.stats()['records'], 0)
+
+    def test_unreachable_api_is_a_readable_refusal(self):
+        """DNS down, no route, connection refused: the request never left.
+
+        Only HTTPError was handled, so this escaped the handler as a 500 with an
+        HTML body, and the page could not even parse the reason -- a network
+        outage came out as "Unexpected token <". The one thing anyone wants to
+        know when a paid call fails is whether it was paid for.
+        """
+        req, _ = fixture()
+        import socket
+        for failure in (urllib.error.URLError(socket.gaierror(11001, 'getaddrinfo failed')),
+                        urllib.error.URLError('timed out'),
+                        OSError('connection refused')):
+            with self.subTest(failure=type(failure).__name__):
+                self.upstream.side_effect = failure
+                with patch.dict('os.environ', {'OPENAI_API_KEY': 'offline-test-placeholder'}):
+                    status, result = self.call('/api/complete', {**req, 'confirmed': True})
+                self.assertEqual(status, 503)
+                self.assertTrue(result['unreachable'])
+                self.assertFalse(result['saved'])
+                self.assertFalse(result['api_completed'])
+                self.assertIn('nic nebylo', result['error'])
+                self.assertEqual(self.store.stats()['records'], 0)
 
     def test_bad_request_never_calls_api(self):
         req, _ = fixture()

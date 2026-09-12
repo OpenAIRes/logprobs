@@ -353,6 +353,18 @@ class Handler(SimpleHTTPRequestHandler):
                 except urllib.error.HTTPError as exc:
                     detail = exc.read().decode('utf-8', errors='replace')[:500]
                     return self.send_json({'error': f'OpenAI HTTP {exc.code}', 'detail': detail}, exc.code)
+                except (urllib.error.URLError, OSError) as exc:
+                    # The request never left the machine: DNS, no route, a
+                    # refused connection. Only HTTPError was handled, so this
+                    # escaped as a 500 with an HTML body, and the page could not
+                    # even read why. Saying "nothing was spent" is the first
+                    # thing anyone wants to know when a paid call fails.
+                    reason = getattr(exc, 'reason', exc)
+                    return self.send_json(
+                        {'error': f'API nebylo dosaženo: {reason}. '
+                                  f'Požadavek neodešel, takže nic nebylo účtováno.',
+                         'saved': False, 'api_completed': False,
+                         'unreachable': True}, 503)
             rec = self.store.lookup_request(normalize_request(body)) if body.get('exact') else self.store.lookup(
                 prompt=body['prompt'],
                 model=body.get('model') or None,

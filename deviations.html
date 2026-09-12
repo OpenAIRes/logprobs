@@ -182,19 +182,32 @@ document.getElementById('variantsLink').href =
 fetchBtn.addEventListener('click', async () => {
   if (!current || !current.missing_count) return;
   fetchBtn.disabled = true;
-  const parent = {tokens: (current.base_tokens || []).map(t => ({token: t})),
-                  text: current.base_text};
+  /* The given prompt belongs in here, with `fixed` saying how much of it is the
+     prompt. Without it a re-plan walks the trie from the root instead of from
+     the prompt node, nothing scores, and the rows that were there vanish -- the
+     same mistake as sending a deviation without its tokenisation. */
+  const promptTokens = current.prompt_tokens || [];
+  const parent = {
+    tokens: [...promptTokens, ...(current.base_tokens || [])].map(t => ({token: t})),
+    text: (current.prompt || '') + (current.base_text || ''),
+  };
+  const planOpts = {fixed: promptTokens.length, base_id: id};
   try {
     /* Every call is shown and approved on its own -- the prompt and the exact
        parameters -- so there is no summary dialog in front of it. */
     const out = await GreedyBranches.fill(parent, model, current, {
+      ...planOpts,
       progress: t => {statusEl.textContent = t;},
       // The policy decides whether the dialog appears at all; guard() shows it
       // when it should and answers 'yes' when the policy says not to ask.
       approve: AskPolicy.guard,
-      // Only to read how that record was generated.
-      base_id: id,
-      onResult: (record, cell, n, total) => {
+      /* Re-plan and redraw as each answer lands, so the new string is a row in
+         the table straight away rather than at the end of the run. The plan
+         costs about a third of a second; the call that preceded it costs the
+         store a full reload, so this is not what anyone is waiting for. The
+         rows still come from the server, so a row bought a minute ago and one
+         bought just now are scored by the same code. */
+      onResult: async (record, cell, n, total) => {
         const choice = (record && record.choices || [{}])[0] || {};
         const box = document.getElementById('last');
         box.hidden = false;
@@ -205,6 +218,11 @@ fetchBtn.addEventListener('click', async () => {
           + (choice.finish_reason ? ` · ${choice.finish_reason}` : '') + '\n';
         box.appendChild(head);
         box.appendChild(document.createTextNode(choice.text || '(no text)'));
+        try {
+          const fresh = await GreedyBranches.plan(parent, model, planOpts);
+          if (!fresh.error) present(fresh);
+          statusEl.textContent = `${n}/${total} · ${fresh.from_store} v tabulce`;
+        } catch { /* the run goes on; the rows catch up at the end */ }
       },
     });
     present(out);
