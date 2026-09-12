@@ -353,6 +353,17 @@
       <dt>nikdy</dt>
       <dd>No question at all. Calls go out on a click.</dd>
     </dl>
+    <p>A deviation is generated <b>the way the string it departs from was generated</b>:
+      <code>temperature</code>, <code>top_p</code> and both penalties come from that
+      record's own request, so it is the same experiment with one token changed rather
+      than a differently sampled string put beside it. Records with no request block —
+      353 of the older ones — fall back to the neutral 0 / 1 / 0 / 0, and every value is
+      spelled out in the request rather than left for the server to fill in, so the dialog
+      shows all of it. <b>Two are never inherited.</b> <code>logprobs</code> stays at the
+      model's ceiling, because a base made with <code>logprobs: 0</code> carries no
+      alternatives and a continuation without them can be neither scored nor deviated in
+      turn. And <code>max_tokens</code> yields to the setting below when one is typed —
+      setting first, then the base record, then the model.</p>
     <p>Beside it, <b>délka volání</b> sets <code>max_tokens</code> for every call these
       viewers make — the token click, the deviations, the branches. Empty means per model:
       20 for gpt-3.5-turbo-instruct, 5 for the base models. Worth knowing before raising it:

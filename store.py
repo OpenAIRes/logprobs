@@ -176,6 +176,22 @@ def history_lock(root):
                 fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
+def _sampling_of(request) -> Dict:
+    """The sampling parameters of a recorded call, and nothing else.
+
+    Used to generate a deviation the way its base was generated. `logprobs` is
+    excluded on purpose -- see the note at the call site -- and so is the model,
+    which the caller already knows and must not have silently changed under it.
+    """
+    out = {}
+    for key in ('temperature', 'top_p', 'frequency_penalty', 'presence_penalty',
+                'max_tokens'):
+        value = (request or {}).get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            out[key] = value
+    return out
+
+
 class RecordStore:
     def __init__(self, sources: Optional[List[str]] = None, root: str = ROOT):
         self.root = root
@@ -1014,7 +1030,7 @@ class RecordStore:
                    alts: int = 20, max_alts: int = 8, sources=None,
                    ends=None, nodes=None, sort: str = 'cost',
                    max_cells: Optional[int] = None,
-                   prompt_tokens=None) -> Dict:
+                   prompt_tokens=None, base_request=None) -> Dict:
         """Every one-token deviation of ONE given string, with real continuations.
 
         For each position i of the string and each alternative the model recorded
@@ -1156,6 +1172,15 @@ class RecordStore:
             # whole prompts.
             'prompt': prompt_text, 'prompt_tokens': prompt_tokens,
             'fixed': len(prompt_tokens),
+            # How the string being deviated was made. The caller generates the
+            # missing continuations the same way, so a deviation is the original
+            # experiment with one token changed rather than a differently
+            # sampled string standing next to it. Only the sampling parameters:
+            # `logprobs` is deliberately not among them, because a record made
+            # with logprobs 0 carries no alternatives, and inheriting that would
+            # produce continuations that cannot be scored, coloured or deviated
+            # in turn.
+            'base_request': _sampling_of(base_request),
             # planned < n means the string leaves the trie part-way: nothing is
             # recorded past that point, so there is nothing to deviate from.
             'n': len(tokens), 'planned_positions': planned,
@@ -1182,6 +1207,7 @@ class RecordStore:
         if rec is None:
             return {'view': 'deviations', 'error': 'no record with that id',
                     'entries': [], 'count': 0, 'missing': [], 'missing_count': 0}
+        kw.setdefault('base_request', rec.get('request'))
         lp = (rec.get('choices') or [{}])[0].get('logprobs') or {}
         # The record's own split: its prompt is fixed, its generated tokens are
         # what can be deviated.

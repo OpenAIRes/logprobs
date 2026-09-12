@@ -294,6 +294,10 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({'error': 'tokens (a list of strings) is required'}, 400)
                 return self.send_json(self.store.deviations(
                     body['tokens'],
+                    # Only to read how that record was generated; the tokens
+                    # above are what actually gets deviated.
+                    base_request=(self.store.by_id.get(body.get('base_id') or '')
+                                  or {}).get('request'),
                     # The immovable part: a given prompt has no logprobs, so no
                     # alternatives, and it also says where in the trie to start.
                     prompt_tokens=body.get('prompt_tokens') or None,

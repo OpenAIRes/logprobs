@@ -122,6 +122,49 @@ const planWith = (entries, missing) => ({
     assert.deepEqual(sentTo, ['PQb', 'PQay']);
   }
 
+  // ---- the base record's own sampling is what a deviation is generated with -
+  {
+    const sent = [];
+    let plans = 0;
+    const post = async (url, body) => {
+      if (url === '/api/complete') { sent.push(body); return {}; }
+      plans++;
+      return {
+        ...planWith([], plans === 1 ? [{position: 0, alternative: 'b', cost: 1}] : []),
+        // What the string being deviated was made with. logprobs is NOT here,
+        // and must not be inherited even when the record carries it.
+        base_request: {temperature: 0, top_p: 0.9, frequency_penalty: 0.5,
+                       presence_penalty: -0.25, max_tokens: 50},
+      };
+    };
+    await GreedyBranches.run(parent, 'gpt-3.5-turbo-instruct', () => {},
+      {post, approve: async () => 'all'});
+    assert.equal(sent[0].top_p, 0.9);
+    assert.equal(sent[0].frequency_penalty, 0.5);
+    assert.equal(sent[0].presence_penalty, -0.25);
+    assert.equal(sent[0].temperature, 0);
+    assert.equal(sent[0].max_tokens, 50, 'the base record wins over the per-model default');
+    assert.equal(sent[0].logprobs, 20, 'never inherited: a base made with 0 would be useless');
+  }
+
+  // ---- with nothing to inherit, the neutral values are still spelled out -----
+  {
+    const sent = [];
+    let plans = 0;
+    const post = async (url, body) => {
+      if (url === '/api/complete') { sent.push(body); return {}; }
+      plans++;
+      return planWith([], plans === 1 ? [{position: 0, alternative: 'b', cost: 1}] : []);
+    };
+    await GreedyBranches.run(parent, 'davinci-002', () => {}, {post, approve: async () => 'all'});
+    assert.deepEqual(
+      {temperature: sent[0].temperature, top_p: sent[0].top_p,
+       frequency_penalty: sent[0].frequency_penalty, presence_penalty: sent[0].presence_penalty},
+      {temperature: 0, top_p: 1, frequency_penalty: 0, presence_penalty: 0},
+      'sent explicitly, so the dialog shows them instead of the server filling them in');
+    assert.equal(sent[0].max_tokens, 5, 'per model when there is nothing to inherit');
+  }
+
   // ---- per-call approval: the object shown is the object sent ---------------
   {
     const shown = [], sent = [];

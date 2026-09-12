@@ -183,6 +183,8 @@ fetchBtn.addEventListener('click', async () => {
       // The policy decides whether the dialog appears at all; guard() shows it
       // when it should and answers 'yes' when the policy says not to ask.
       approve: AskPolicy.guard,
+      // Only to read how that record was generated.
+      base_id: id,
     });
     present(out);
     const bits = [`${out.count} strings`, `${out.calls} API calls`];

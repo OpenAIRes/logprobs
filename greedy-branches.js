@@ -45,6 +45,7 @@
     }
     throw new Error('ask-policy.js must be loaded before greedy-branches.js');
   };
+  const policy = limits;
   const maxTokensFor = model => limits().maxTokensFor(model);
   const logprobsFor = model => limits().logprobsFor(model);
 
@@ -68,6 +69,9 @@
     const parts = split(parent, o);
     return post('/api/deviations', {
       tokens: parts.tokens, prompt_tokens: parts.prompt,
+      // Not what gets deviated -- only how the string was generated, so the
+      // continuations can be generated the same way.
+      base_id: o.base_id || null,
       model, sort: o.sort || 'cost',
       ends: o.ends || null, nodes: o.nodes || null, sources: o.sources || null,
     });
@@ -89,6 +93,17 @@
        is taken from the plan's own answer when it is there, so the two cannot
        disagree about where the prompt ends. */
     const parts = split(parent, o);
+    /* How the base was made, from the plan's own answer. Neutral values stand in
+       for anything it does not carry -- 353 of the older records have no request
+       block at all -- and they are spelled out in the request rather than left
+       to the server, so the dialog shows every parameter that will be sent
+       instead of some of them being filled in behind it. */
+    const sampling = first.base_request || {};
+    /* Setting first, then the base record, then the model: each level is more
+       specific than the one before, and the setting is the only one somebody
+       typed on purpose. */
+    const length = policy().get().max_tokens
+      || Number(sampling.max_tokens) || maxTokensFor(model);
     const fixedText = first.prompt !== undefined ? first.prompt : parts.prompt.join('');
     const promptFor = cell => (cell.prompt !== undefined ? cell.prompt
       : fixedText + parts.tokens.slice(0, cell.position).join('') + cell.alternative);
@@ -100,10 +115,21 @@
 
       /* Built first, shown, then posted -- the same object. Rebuilding it after
          the approval would mean the dialog and the call could differ, which
-         would make the approval worthless. */
+         would make the approval worthless.
+
+         The sampling parameters are the ones the string being deviated was made
+         with, so a deviation is that experiment with one token changed rather
+         than a differently sampled string put beside it. What is NOT inherited:
+         `logprobs`, because a base made with logprobs 0 has no alternatives and
+         a continuation without them can be neither scored nor deviated in turn;
+         and `max_tokens` when the length setting says otherwise, because that
+         setting is an explicit instruction and this is a default. */
       const request = {
-        prompt: promptFor(cell), model, temperature: 0,
-        max_tokens: maxTokensFor(model), logprobs: logprobsFor(model),
+        prompt: promptFor(cell), model,
+        temperature: 0, top_p: 1, frequency_penalty: 0, presence_penalty: 0,
+        ...sampling,
+        max_tokens: length,
+        logprobs: logprobsFor(model),
         confirmed: true,
       };
 
