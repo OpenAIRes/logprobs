@@ -284,6 +284,42 @@ const planWith = (entries, missing) => ({
     assert.equal(r.entries.length, 1);
   }
 
+  // ---- a run gives up once the failures are clearly not going to stop -------
+  {
+    let attempts = 0;
+    const many = Array.from({length: 40}, (_, i) => ({position: 0, alternative: 'a' + i, cost: i}));
+    const post = async url => {
+      if (url === '/api/complete') { attempts++; throw new Error('getaddrinfo failed'); }
+      return planWith([], many);
+    };
+    const r = await GreedyBranches.run(parent, 'gpt-3.5-turbo-instruct', () => {},
+      {post, approve: async () => 'all'});
+    assert.equal(attempts, 5, 'five in a row is enough to conclude the network is gone');
+    assert.equal(r.stopped, true);
+    assert.match(r.stoppedReason, /5 volání za sebou selhalo/);
+    assert.match(r.firstFailure, /getaddrinfo/);
+  }
+
+  // ---- one failure among successes does not stop anything -------------------
+  {
+    let n = 0, done = 0;
+    const post = async url => {
+      if (url !== '/api/complete') {
+        return planWith([], Array.from({length: 8}, (_, i) => ({position: 0, alternative: 'a' + i, cost: i})));
+      }
+      n++;
+      if (n === 3) throw new Error('rate limited');
+      done++;
+      return {};
+    };
+    const r = await GreedyBranches.run(parent, 'gpt-3.5-turbo-instruct', () => {},
+      {post, approve: async () => 'all'});
+    assert.equal(n, 8, 'all eight attempted');
+    assert.equal(done, 7);
+    assert.equal(r.failures.length, 1);
+    assert.equal(r.stopped, false, 'a single failure is not a reason to give up');
+  }
+
   // ---- an unsaved paid answer still propagates, so it can be downloaded -----
   {
     const post = async url => {

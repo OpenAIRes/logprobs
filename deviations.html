@@ -230,7 +230,11 @@ fetchBtn.addEventListener('click', async () => {
     const bits = [`${out.count} strings`, `${out.calls} API calls`];
     if (out.skipped) bits.push(`${out.skipped} skipped`);
     if (out.stopped) bits.push('stopped');
-    if (out.failures && out.failures.length) bits.push(`${out.failures.length} failed`);
+    // The reason, not just the count: a run that ends "245 failed" and nothing
+    // else leaves you guessing at exactly the moment you most want to know.
+    if (out.failures && out.failures.length) {
+      bits.push(`${out.failures.length} failed — ${out.firstFailure || 'no reason given'}`);
+    }
     statusEl.textContent = bits.join(' · ');
   } catch (err) {
     statusEl.textContent = err.message;

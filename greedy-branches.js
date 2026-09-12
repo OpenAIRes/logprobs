@@ -129,6 +129,13 @@
       : [...fixedTokens, ...parts.tokens.slice(0, cell.position), cell.alternative]);
     let calls = 0, skipped = 0, stopped = false, approvedAll = false;
     const failures = [];
+    /* A run does not grind through hundreds of doomed calls. When the network
+       goes while a batch is running, every remaining call fails the same way in
+       milliseconds -- 245 of them, in the run that prompted this -- and the only
+       thing that produces is a long wait and a wall of identical errors. */
+    const GIVE_UP_AFTER = 5;
+    let consecutive = 0;
+    let stoppedReason = null;
     for (let i = 0; i < missing.length; i++) {
       const cell = missing[i];
       if (o.stopped && o.stopped()) { stopped = true; break; }
@@ -175,6 +182,7 @@
                       + `${JSON.stringify(cell.original)} → ${JSON.stringify(cell.alternative)}`);
       try {
         const answer = await post('/api/complete', request);
+        consecutive = 0;
         report(answer && answer.from_cache ? 'cached' : 'saved',
                `${calls}/${missing.length}`);
         /* Hand the answer over as it arrives. The rows are only rebuilt when the
@@ -191,15 +199,25 @@
         // One refused or unsaveable call must not throw away the other 300.
         failures.push({cell, error});
         if (error.record) throw error;
+        if (++consecutive >= GIVE_UP_AFTER) {
+          stopped = true;
+          stoppedReason = `${consecutive} volání za sebou selhalo: ${error.message || ''}`;
+          report('failed', stoppedReason);
+          break;
+        }
       }
     }
     progress('Přepočítávám…');
     report('looking', 'přepočítávám plán');
     const again = await plan(parent, model, opts);
-    report(stopped ? 'stopped' : 'saved',
-           `${calls} volání · ${skipped ? skipped + ' přeskočeno · ' : ''}`
-           + `${again.from_store} v tabulce`);
-    return {...again, calls, failures, skipped, stopped};
+    /* A run where most calls failed is not "done": saying so was how a run of
+       19 successes and 245 failures came out looking like a tidy finish. */
+    const summary = `${calls} volání · ${failures.length ? failures.length + ' selhalo · ' : ''}`
+      + `${skipped ? skipped + ' přeskočeno · ' : ''}${again.from_store} v tabulce`;
+    report(failures.length ? 'failed' : stopped ? 'stopped' : 'saved',
+           stoppedReason || summary);
+    return {...again, calls, failures, skipped, stopped, stoppedReason,
+            firstFailure: failures.length ? (failures[0].error.message || '') : null};
   }
 
   /* plan -> (optionally) buy -> plan again.

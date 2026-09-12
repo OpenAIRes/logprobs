@@ -354,6 +354,12 @@ class Handler(SimpleHTTPRequestHandler):
                     detail = exc.read().decode('utf-8', errors='replace')[:500]
                     return self.send_json({'error': f'OpenAI HTTP {exc.code}', 'detail': detail}, exc.code)
                 except (urllib.error.URLError, OSError) as exc:
+                    # Logged, not only answered. Making this readable in the
+                    # browser and invisible here meant 245 failed calls in one
+                    # run left no trace at all, and the reason could not be
+                    # recovered afterwards.
+                    print(f'  upstream unreachable: {type(exc).__name__}: '
+                          f'{getattr(exc, "reason", exc)}', flush=True)
                     # The request never left the machine: DNS, no route, a
                     # refused connection. Only HTTPError was handled, so this
                     # escaped as a 500 with an HTML body, and the page could not
