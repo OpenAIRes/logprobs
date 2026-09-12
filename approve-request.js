@@ -42,6 +42,22 @@
     document.head.appendChild(el);
   }
 
+  /* Exactly the fields normalize_request() in completion.py lets through, in
+     its order. Everything else a caller puts in the body -- prompt_tokens,
+     confirmed, base_id -- is dropped by the server and never reaches OpenAI.
+     Showing the raw body under the heading "JSON, jak pujde na drat" said
+     otherwise, which is a bad thing for the one dialog whose whole purpose is
+     that what you see is what goes out. */
+  const UPSTREAM = ['model', 'prompt', 'max_tokens', 'temperature', 'top_p',
+                    'frequency_penalty', 'presence_penalty', 'logprobs'];
+
+  function split(request) {
+    const wire = {}, local = {};
+    UPSTREAM.forEach(k => { if (k in request) wire[k] = request[k]; });
+    Object.keys(request).forEach(k => { if (!(k in wire)) local[k] = request[k]; });
+    return {wire, local};
+  }
+
   const esc = t => String(t)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -62,10 +78,12 @@
       back.setAttribute('role', 'dialog');
       back.setAttribute('aria-modal', 'true');
 
-      const params = Object.keys(request)
+      const {wire, local} = split(request);
+      const params = Object.keys(wire)
         .filter(k => k !== 'prompt')
-        .map(k => `<dt>${esc(k)}</dt><dd>${esc(JSON.stringify(request[k]))}</dd>`)
+        .map(k => `<dt>${esc(k)}</dt><dd>${esc(JSON.stringify(wire[k]))}</dd>`)
         .join('');
+      const localKeys = Object.keys(local);
 
       back.innerHTML = `
         <div class="arq-box">
@@ -80,6 +98,9 @@
           <pre class="arq-pre" id="arqPrompt"></pre>
           <p class="arq-label">JSON, jak půjde na drát</p>
           <pre class="arq-pre" id="arqJson"></pre>
+          ${localKeys.length ? `<p class="arq-label">zůstává tady, na API nejde:
+            <code>${esc(localKeys.join(', '))}</code></p>
+          <pre class="arq-pre" id="arqLocal"></pre>` : ''}
           <div class="arq-row">
             <button type="button" class="primary" id="arqYes">Poslat</button>
             <button type="button" id="arqSkip">Přeskočit</button>
@@ -92,7 +113,10 @@
       // textContent, not innerHTML: a prompt is arbitrary text and must never be
       // parsed as markup on its way to being approved.
       back.querySelector('#arqPrompt').textContent = visible(request.prompt);
-      back.querySelector('#arqJson').textContent = JSON.stringify(request, null, 2);
+      back.querySelector('#arqJson').textContent = JSON.stringify(wire, null, 2);
+      if (localKeys.length) {
+        back.querySelector('#arqLocal').textContent = JSON.stringify(local, null, 2);
+      }
 
       const done = verdict => {
         document.removeEventListener('keydown', onKey, true);
