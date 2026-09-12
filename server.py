@@ -336,7 +336,10 @@ class Handler(SimpleHTTPRequestHandler):
                     with urllib.request.urlopen(req, timeout=120) as response:
                         raw = json.loads(response.read().decode('utf-8'))
                     try:
-                        record = build_record(raw, request_body)
+                        # The caller may know how the prompt is tokenised -- a
+                        # deviation built it out of recorded tokens. Refused
+                        # unless the parts join back to the prompt that was sent.
+                        record = build_record(raw, request_body, body.get('prompt_tokens'))
                     except ValueError as exc:
                         return self.send_json({'error': str(exc), 'saved': False,
                                                'record': raw, 'api_completed': True}, 502)

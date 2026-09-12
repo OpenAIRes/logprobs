@@ -199,5 +199,42 @@ class HttpTests(StoreTestCase):
         self.upstream.assert_not_called()
 
 
+
+class PromptTokenizationTest(unittest.TestCase):
+    """A caller that knows how the prompt is tokenised may say so.
+
+    It is the difference between a bought deviation that every view can reach
+    and one that sits under a node of its own, found by text lookup and dropped
+    by every walk.
+    """
+
+    RAW = {'id': 'cmpl-x', 'created': 1, 'model': 'gpt-3.5-turbo-instruct',
+           'choices': [{'text': ' b', 'index': 0, 'finish_reason': 'stop',
+                        'logprobs': {'tokens': [' b'], 'token_logprobs': [-0.5],
+                                     'top_logprobs': [{' b': -0.5}]}}],
+           'usage': {}}
+
+    def request(self, prompt):
+        return normalize_request({'prompt': prompt, 'model': 'gpt-3.5-turbo-instruct'})
+
+    def test_known_tokenization_is_kept(self):
+        req = self.request('AB')
+        rec = build_record(self.RAW, req, ['A', 'B'])
+        self.assertEqual(rec['prompt']['logprobs']['tokens'], ['A', 'B'])
+        self.assertEqual(rec['meta']['prompt_tokenization'], 'known')
+
+    def test_opaque_span_without_it(self):
+        req = self.request('AB')
+        rec = build_record(self.RAW, req)
+        self.assertEqual(rec['prompt']['logprobs']['tokens'], ['AB'])
+        self.assertEqual(rec['meta']['prompt_tokenization'], 'opaque')
+
+    def test_parts_that_do_not_join_are_refused(self):
+        req = self.request('AB')
+        for bad in (['A', 'C'], ['A'], ['A', 'B', ''], 'AB', [1, 2], ['AB', '']):
+            with self.assertRaises(ValueError):
+                build_record(self.RAW, req, bad)
+
+
 if __name__ == '__main__':
     unittest.main()

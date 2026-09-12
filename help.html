@@ -364,6 +364,17 @@
       alternatives and a continuation without them can be neither scored nor deviated in
       turn. And <code>max_tokens</code> yields to the setting below when one is typed —
       setting first, then the base record, then the model.</p>
+    <p>A bought continuation is recorded with the prompt <b>in the pieces it is made
+      of</b> — the base's own prompt span, then its generated tokens up to the position,
+      then the alternative — because that tokenisation is known rather than guessed. Stored
+      as one opaque span instead, as an ordinary studio call is, the record sits under a
+      node of its own where no walk can reach it: the lookup finds it by text, nothing can
+      score it, and a deviation that had been paid for keeps showing as missing. The parts
+      must join to exactly the prompt that was sent or the server refuses the record.</p>
+    <p>Each answer is shown as it arrives. The rows come from a fresh plan at the end of a
+      run, so that every row is scored by the same code — which otherwise means paying for
+      a call and being asked about the next one without ever seeing what the last one
+      said.</p>
     <p>Beside it, <b>délka volání</b> sets <code>max_tokens</code> for every call these
       viewers make — the token click, the deviations, the branches. Empty means per model:
       20 for gpt-3.5-turbo-instruct, 5 for the base models. Worth knowing before raising it:

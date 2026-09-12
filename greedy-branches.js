@@ -107,6 +107,12 @@
     const fixedText = first.prompt !== undefined ? first.prompt : parts.prompt.join('');
     const promptFor = cell => (cell.prompt !== undefined ? cell.prompt
       : fixedText + parts.tokens.slice(0, cell.position).join('') + cell.alternative);
+    /* The same string, in the pieces it is made of. fixedText is one opaque span
+       when the base had a given prompt -- that part genuinely has no known
+       tokenisation -- and the rest are real tokens. */
+    const fixedTokens = first.prompt_tokens || parts.prompt;
+    const tokensFor = cell => (cell.prompt !== undefined ? undefined
+      : [...fixedTokens, ...parts.tokens.slice(0, cell.position), cell.alternative]);
     let calls = 0, skipped = 0, stopped = false, approvedAll = false;
     const failures = [];
     for (let i = 0; i < missing.length; i++) {
@@ -125,7 +131,14 @@
          and `max_tokens` when the length setting says otherwise, because that
          setting is an explicit instruction and this is a default. */
       const request = {
-        prompt: promptFor(cell), model,
+        prompt: promptFor(cell),
+        /* The tokenisation is not a guess here: the fixed prompt, then the
+           record's own generated tokens up to the position, then the
+           alternative. Sending it is what lets the trie place the answer where
+           this deviation actually is, instead of under a node of its own where
+           nothing can reach it. */
+        prompt_tokens: tokensFor(cell),
+        model,
         temperature: 0, top_p: 1, frequency_penalty: 0, presence_penalty: 0,
         ...sampling,
         max_tokens: length,
@@ -145,7 +158,14 @@
 
       progress(`Volám API: ${++calls}/${missing.length} · pozice ${cell.position + 1}, ${JSON.stringify(cell.alternative)}`);
       try {
-        await post('/api/complete', request);
+        const answer = await post('/api/complete', request);
+        /* Hand the answer over as it arrives. The rows are only rebuilt when the
+           whole run is done -- they come from a fresh plan, so that every row is
+           scored by the same code -- which meant paying for a call and being
+           asked about the next one without ever seeing what the last one said. */
+        if (o.onResult) {
+          try { o.onResult(answer, cell, calls, missing.length); } catch { /* display only */ }
+        }
       } catch (error) {
         // One refused or unsaveable call must not throw away the other 300.
         failures.push({cell, error});
@@ -158,6 +178,9 @@
   }
 
   /* plan -> (optionally) buy -> plan again.
+
+     `opts.onResult(record, cell, n, total)` is handed each answer as it comes
+     back, because the rows are only rebuilt at the end of the run.
 
      Two ways to be asked, and neither is the default: `opts.approve(request,
      info)` is asked before EVERY call, with the exact request body, and returns
