@@ -174,6 +174,41 @@ const ICON = {
     ['show-meta', 'details block — provenance, counts, filters in force', false],
     ['wide-rows', 'full text per row — no wrapping, the table scrolls sideways', true],
   ];
+
+  /* Whether the page on screen contains the thing a switch acts on. The strip is
+     the same on every page but the pages are not: the token browser has no
+     details block at all -- its <div id="header"> is a toolbar, and the rule in
+     app.css is on the <header> TAG -- so ticking that box there did nothing
+     whatever, silently, which reads as a broken program rather than as a switch
+     that does not apply here.
+
+     Each test names the element its own CSS rule targets, so a page that gains
+     one of these blocks starts offering the switch without anything being
+     registered anywhere. */
+  const BLOCK_APPLIES = {
+    'show-source-status': () => !!document.getElementById('dataSource'),
+    'show-meta': () => !!document.querySelector('header'),
+    'wide-rows': () => !!document.querySelector('.table'),
+  };
+  const blockWhy = key => (BLOCK_APPLIES[key] && !BLOCK_APPLIES[key]()
+    ? 'Tahle stránka nic takového nemá — přepínač na ní nic nezmění.' : '');
+
+  /* Asked after the document exists, not while the strip is being built: bar.js
+     runs from a script tag near the top, so at that moment the page below it is
+     still empty and every one of these tests would say no. */
+  function paintBlockApplicability() {
+    for (const box of document.querySelectorAll('.sBlockBox')) {
+      const why = blockWhy(box.value);
+      const label = box.closest('label');
+      box.disabled = !!why;
+      if (label) {
+        label.classList.toggle('off', !!why);
+        if (why) label.title = why; else label.removeAttribute('title');
+        const note = label.querySelector('.sBlockWhy');
+        if (note) note.textContent = why ? ' — nepoužije se zde' : '';
+      }
+    }
+  }
   const BLOCKS_KEY = 'bar_blocks';
   const TOKEN_LIMIT_KEY = 'bar_token_limit';
 
@@ -990,7 +1025,8 @@ const ICON = {
     window.dispatchEvent(new CustomEvent('blockschange'));
   }
   el('sBlockList').innerHTML = BLOCKS.map(([key, label]) =>
-    `<label><input type="checkbox" class="sBlockBox" value="${key}"> ${label}</label>`).join('');
+    `<label><input type="checkbox" class="sBlockBox" value="${key}"> ${label}`
+    + `<span class="sBlockWhy"></span></label>`).join('');
   for (const b of document.querySelectorAll('.sBlockBox')) {
     b.addEventListener('change', () => {
       if (b.checked) blocks.add(b.value); else blocks.delete(b.value);
@@ -999,6 +1035,11 @@ const ICON = {
     });
   }
   paintBlocks();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', paintBlockApplicability, {once: true});
+  } else {
+    paintBlockApplicability();
+  }
   // The server is the source of truth for the ask policy, so refresh once and
   // repaint when it answers; until then the cached value applies.
   if (ASK) ASK.load().then(() => { paintAsk(); paintCallMax(); });

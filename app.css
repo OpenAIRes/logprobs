@@ -295,6 +295,9 @@ body.tok-colour .token { background: var(--tc, transparent); }
   gap: .25rem .8rem; margin-bottom: .55rem; }
 .sadvlist label { display: flex; align-items: center; gap: .35rem;
   font-size: .78125rem; color: var(--ink-dim); cursor: pointer; }
+/* A switch the page on screen has nothing for. Shown rather than hidden, and
+   saying so, because a box that vanishes between pages is its own puzzle. */
+.sadvlist label.off { color: var(--ink-faint); cursor: not-allowed; }
 #sPinReset { font-size: .75rem; padding: .15rem .5rem; }
 
 /* A control moved onto the strip: the panel's two-column grid is for rows, so on
