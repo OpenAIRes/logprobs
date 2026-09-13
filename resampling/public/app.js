@@ -335,24 +335,62 @@ function metaTemplateButton(entry) {
     ? '<button type="button" class="logprobs-link" data-meta-source="' + escapeHtml(rowId) + '">Use as meta template</button>' : '';
 }
 
+/* Put a prepared template into the form. Shared by the button on a Meta result
+   and by the viewer's link, so the two cannot drift apart in what "ready to
+   generate" means. `note` says where it came from; a string arriving from the
+   viewer has no row in this program's log, so it has no ancestry to record and
+   templateSource stays null. */
+async function applyMetaTemplate(prepared, note) {
+  templateInput.value = prepared.template;
+  templateSource = prepared.templateSource || null;
+  form.querySelector('[name="mode"][value="meta"]').checked = true;
+  templateInput.closest('details').open = true;
+  document.querySelector('#template-source').textContent = note;
+  localPreview();
+  renderLog();
+  await refreshPreview();
+  setStatus('Meta template ready — press Generate to run it.');
+  templateInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
 async function useMetaTemplate(event) {
   const button = event.target.closest('[data-meta-source]');
   if (!button) return;
   button.disabled = true;
   try {
     const prepared = await postJson('/api/meta-template', { rowId: button.dataset.metaSource });
-    templateInput.value = prepared.template;
-    templateSource = prepared.templateSource;
-    form.querySelector('[name="mode"][value="meta"]').checked = true;
-    templateInput.closest('details').open = true;
-    document.querySelector('#template-source').textContent = 'Based on Meta completion: ' + templateSource.prompt;
-    localPreview();
-    renderLog();
-    await refreshPreview();
-    setStatus('Meta template ready — press Generate to run it.');
-    templateInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    await applyMetaTemplate(prepared, 'Based on Meta completion: ' + prepared.templateSource.prompt);
   } catch (error) { setStatus(error.message, true); }
   finally { button.disabled = false; }
+}
+
+/* ?meta_from=<store record id> -- the viewer's way in. It shows one string at a
+   time and has a button for this; what it can hand over is the record's id, so
+   the text is fetched from the store (same origin the results are pushed to,
+   and it answers cross-origin) and then goes through the same route and the
+   same form-filling as the button above.
+
+   Not simply choices[0].text. A deviation bought by the store carries the token
+   it deviated at INSIDE its prompt -- that is what makes the trie place it
+   correctly -- so the completion alone starts one token late: the deviation of
+   " Create" to "Create" came back as "a different version of...", with the
+   Create missing. The rule is the same one the deviations table uses: the first
+   prompt token is the given prompt and is not part of the string, everything
+   after it is. A record with an opaque prompt has nothing after it, and there
+   the completion alone is the whole string. */
+async function metaTemplateFromViewer() {
+  const id = new URLSearchParams(location.search).get('meta_from');
+  if (!id) return;
+  try {
+    const origin = promptConfig.storeOrigin || '';
+    const record = await getJson(`${origin}/api/record?id=${encodeURIComponent(id)}`);
+    const promptTokens = ((record.prompt || {}).logprobs || {}).tokens || [];
+    const text = promptTokens.slice(1).join('')
+               + (((record.choices || [{}])[0] || {}).text || '');
+    if (!text.trim()) throw new Error('That record generated no text, so there is nothing to use.');
+    const prepared = await postJson('/api/meta-template', { text });
+    await applyMetaTemplate(prepared, 'Based on a string from the viewer: ' + id);
+  } catch (error) { setStatus(error.message, true); }
 }
 results.addEventListener('click', useMetaTemplate);
 logTable.addEventListener('click', useMetaTemplate);
@@ -583,5 +621,6 @@ resetTemplateButton.addEventListener("click", () => {
 });
 
 localPreview();
-loadBackends();
+// After the config, because the store's origin comes with it.
+loadBackends().then(metaTemplateFromViewer);
 loadLog();

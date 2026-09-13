@@ -315,6 +315,15 @@ async function handleApi(request, response) {
 
     const body = await readJsonBody(request);
     if (request.method === 'POST' && request.url === '/api/meta-template') {
+      /* Two ways in, one function. `rowId` is a Meta result of this program's
+         own, and carries its ancestry; `text` is any string, which is how the
+         viewer sends one -- a deviation bought by the store is not a row in this
+         program's log and never will be, so there is nothing to resolve and no
+         templateSource to record. Both go through metaTemplateFromText. */
+      if (typeof body.text === 'string') {
+        sendJson(response, 200, { template: metaTemplateFromText(body.text), templateSource: null });
+        return;
+      }
       const source = resolveMetaSource(promptRowsFromEvents(await readPromptLog()), body.rowId);
       sendJson(response, 200, { template: metaTemplateFromText(source.prompt), templateSource: source });
       return;
@@ -496,7 +505,10 @@ async function serveStatic(request, response) {
     }
     return;
   }
-  const requestPath = request.url === "/" ? "/index.html" : request.url;
+  /* The query has to come off before the root is recognised as the root:
+     `/?meta_from=...` is still index.html, and matching the whole URL made
+     it a 404 the moment anything was passed to the page. */
+  const requestPath = request.url.split("?")[0] === "/" ? "/index.html" : request.url;
   const decodedPath = decodeURIComponent(requestPath.split("?")[0]);
   const safePath = normalize(decodedPath).replace(/^(\.\.[/\\])+/, "");
   const filePath = join(PUBLIC_DIR, safePath);

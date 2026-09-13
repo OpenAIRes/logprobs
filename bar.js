@@ -45,6 +45,9 @@ const ICON = {
      shape version control draws a branch with, because it says the same thing
      about a string. */
   branch: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="5" r="2.1"/><circle cx="7" cy="19" r="2.1"/><circle cx="17.5" cy="12" r="2.1"/><path d="M7 7.1v9.8"/><path d="M9.1 5h2.4a4 4 0 0 1 4 4v.9"/></svg>',
+  /* A loop back to the start: this string becomes the instruction the next
+     run rewrites, so what came out goes back in. */
+  meta: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.5a8 8 0 1 0-2.3 6"/><path d="M20 5.5v5h-5"/></svg>',
   gear: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 2h4l.5 2.2 1.4.6 1.9-1.2 2.6 2.6-1.2 1.9.6 1.4 2.2.5v4l-2.2.5-.6 1.4 1.2 1.9-2.6 2.6-1.9-1.2-1.4.6L14 22h-4l-.5-2.2-1.4-.6-1.9 1.2-2.6-2.6 1.2-1.9-.6-1.4L2 14v-4l2.2-.5.6-1.4-1.2-1.9 2.6-2.6 1.9 1.2 1.4-.6L10 2Z"/><circle cx="12" cy="12" r="3"/></svg>',
 };
 
@@ -325,6 +328,8 @@ const ICON = {
            literal, and one of them ends it. -->
       <button type="button" class="sicon" id="sVariants" hidden
               title="Jednotokenové odchylky — každá pozice tohoto řetězce × každá alternativa, kterou tam model zaznamenal, jako nový prompt; pokračování se bere z databáze, a co v ní není, se dotáhne jen na vyžádání (to je to placené). 16 tokenů ≈ 300 řetězců.">${ICON.branch}</button>
+      <button type="button" class="sicon" id="sMeta" hidden
+              title="Použít tenhle řetězec jako meta instrukci v resamplingu — otevře resampling program s tímhle textem jako šablonou, do které se pak dosazuje [INSTRUCTION]. Nic se nepošle na API; otevře se to připravené a Generate mačkáš ty.">${ICON.meta}</button>
       <button type="button" class="sicon" id="sMore" aria-expanded="false" aria-controls="sPanel"
               title="Settings">${ICON.gear}</button>
       <span class="sinfo" id="sInfo"></span>
@@ -496,6 +501,28 @@ const ICON = {
      It used to be a page of its own. It is a view of the list now, which is how
      it gets the colour key, the scope stepper and the rest of this bar -- the
      things a table of strings wants and a one-off page had none of. */
+  /* Where the resampling program is. It is a second local server, not part of
+     this one, so the viewer has to be told -- overridable for anyone running it
+     on another port without having to edit this file. */
+  const RESAMPLING_ORIGIN = (() => {
+    try { return localStorage.getItem('resampling_origin') || 'http://127.0.0.1:8787'; }
+    catch { return 'http://127.0.0.1:8787'; }
+  })();
+
+  /* The string as the next run's meta instruction. The record's id goes over,
+     not its text: the resampling program fetches the text from the store and
+     runs it through the same metaTemplateFromText the button on its own results
+     uses, so there is one answer to "what does a meta template look like".
+
+     A new tab, like the deviations: the string you are reading is still here to
+     come back to. */
+  el('sMeta').addEventListener('click', () => {
+    const id = recordId();
+    if (!id) return;
+    window.open(RESAMPLING_ORIGIN + '/?meta_from=' + encodeURIComponent(id),
+                '_blank', 'noopener');
+  });
+
   el('sVariants').addEventListener('click', () => {
     const id = recordId();
     if (!id) return;
@@ -814,6 +841,9 @@ const ICON = {
     // decision is made, so putting it here is what keeps the button in step with
     // the record on screen.
     el('sVariants').hidden = !recordId();
+    // The single-string page only. A list row is a row, not "the string on
+    // screen", and this acts on one string at a time.
+    el('sMeta').hidden = !recordId() || !/logprobs\.html$/.test(location.pathname);
     paintSorts();
     paintVisibility();
     paintSources();
