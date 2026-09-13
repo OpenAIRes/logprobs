@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { metaTemplateFromText, resolveMetaSource } from "./meta-template.mjs";
+import { existsSync } from "node:fs";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { extname, join, normalize } from "node:path";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { choicesInOrder, viewerUrl, viewerEntries } from "./viewer-link.mjs";
 import { appendPromptLogEvent, promptRowsFromEvents, readPromptLog } from "./prompt-log.mjs";
@@ -45,6 +46,18 @@ const STORE_ORIGIN = process.env.LOGPROBS_STORE_ORIGIN || 'http://127.0.0.1:8899
 // logprobs.html loads ask-policy.js and approve-request.js -- one policy and
 // one dialog for asking before a paid call, shared with the viewer package.
 // Without them here the page 404s on both and every paid path throws.
+/* First of these that exists on disk; `py` is the Windows launcher and is
+   assumed to be on PATH rather than checked for. */
+function defaultPython() {
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  const bundled = home
+    ? join(home, '.cache', 'codex-runtimes', 'codex-primary-runtime',
+           'dependencies', 'python', 'python.exe')
+    : '';
+  if (bundled && existsSync(bundled)) return bundled;
+  return process.platform === 'win32' ? 'py' : 'python3';
+}
+
 const VIEWER_FILES = new Set(['/logprobs.html', '/app.css', '/theme.js', '/bar.js', '/single-token-variants.html', '/logprobs.json', '/ask-policy.js', '/approve-request.js', '/call-report.js', '/greedy-branches.js', '/strings.html', '/help.html']);
 const PORT = Number.parseInt(process.env.PORT || "8787", 10);
 
@@ -175,18 +188,6 @@ function normalizeOptions(body) {
   };
 }
 
-/* First of these that exists on disk; `py` is the Windows launcher and is
-   assumed to be on PATH rather than checked for. */
-function defaultPython() {
-  const home = process.env.USERPROFILE || process.env.HOME || '';
-  const bundled = home
-    ? join(home, '.cache', 'codex-runtimes', 'codex-primary-runtime',
-           'dependencies', 'python', 'python.exe')
-    : '';
-  if (bundled && existsSync(bundled)) return bundled;
-  return process.platform === 'win32' ? 'py' : 'python3';
-}
-
 async function singleTokenVariants(record) {
   /* The path to the bundled runtime was written relative to the old location,
      two levels up from a sibling directory; from here that resolves somewhere
@@ -313,7 +314,15 @@ async function handleApi(request, response) {
     }
 
     const body = await readJsonBody(request);
+    if (request.method === 'POST' && request.url === '/api/meta-template') {
+      const source = resolveMetaSource(promptRowsFromEvents(await readPromptLog()), body.rowId);
+      sendJson(response, 200, { template: metaTemplateFromText(source.prompt), templateSource: source });
+      return;
+    }
     const options = normalizeOptions(body);
+    if (body.templateSource?.rowId) {
+      options.templateSource = resolveMetaSource(promptRowsFromEvents(await readPromptLog()), body.templateSource.rowId);
+    }
     const prompt = buildResamplingPrompt(options.instruction, options.template);
 
     const plan = planRequests(options.backend, options.count);
@@ -325,6 +334,7 @@ async function handleApi(request, response) {
         model: options.model,
         instruction: options.instruction,
         template: options.template,
+          ...(options.templateSource ? { templateSource: options.templateSource } : {}),
         isDefaultTemplate: options.isDefaultTemplate,
         templateWarnings: options.templateWarnings,
         prompt,
@@ -387,6 +397,7 @@ async function handleApi(request, response) {
               parentInstruction: options.instruction,
               parentPrompt: prompt,
               template: options.template,
+          ...(options.templateSource ? { templateSource: options.templateSource } : {}),
               run,
               request: error.openAIRequest || null,
               response: error.openAIResponse || null,
@@ -404,6 +415,7 @@ async function handleApi(request, response) {
           parentInstruction: options.instruction,
           parentPrompt: prompt,
           template: options.template,
+          ...(options.templateSource ? { templateSource: options.templateSource } : {}),
           run,
           request: result.request,
           response: result.response,
@@ -426,11 +438,15 @@ async function handleApi(request, response) {
            can still show the single string. */
         const entries = viewerEntries([saved]);
         const inStore = new Set(await offerToStore(entries));
+        const sourceRows = promptRowsFromEvents([saved]);
+        let sourceIndex = 0;
         variations.push(...result.variations.map((variation, index) => {
           const local = viewerUrl(saved, choices[index]);
           const id = `ape:${saved.id}:${choices[index]?.index ?? index}`;
           return {
             ...variation,
+            mode: options.mode,
+            sourceRowId: variation.text.trim() ? sourceRows[sourceIndex++]?.id : null,
             logprobsUrl: local && inStore.has(id)
               ? `${STORE_ORIGIN}/logprobs.html?id=${encodeURIComponent(id)}`
               : local,
@@ -445,6 +461,7 @@ async function handleApi(request, response) {
         model: options.model,
         instruction: options.instruction,
         template: options.template,
+          ...(options.templateSource ? { templateSource: options.templateSource } : {}),
         isDefaultTemplate: options.isDefaultTemplate,
         templateWarnings: options.templateWarnings,
         prompt,

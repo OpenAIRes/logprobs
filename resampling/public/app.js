@@ -23,6 +23,7 @@ let backends = {};
 
 /** Every row from the last /api/log fetch; the table renders a filtered view. */
 let logRows = [];
+let templateSource = null;
 let customInstruction = instructionInput.value;
 let displayedMode = 'custom';
 
@@ -152,6 +153,7 @@ function payload() {
     backend: data.get("backend"),
     instruction: data.get("instruction"),
     template: currentTemplate(),
+    ...(templateSource ? { templateSource } : {}),
     model: String(data.get("model") || "").trim(),
     count: data.get("count"),
   };
@@ -327,6 +329,34 @@ async function refreshPreview() {
   }
 }
 
+function metaTemplateButton(entry) {
+  const rowId = entry.sourceRowId || entry.id;
+  return entry.mode === 'meta' && rowId
+    ? '<button type="button" class="logprobs-link" data-meta-source="' + escapeHtml(rowId) + '">Use as meta template</button>' : '';
+}
+
+async function useMetaTemplate(event) {
+  const button = event.target.closest('[data-meta-source]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const prepared = await postJson('/api/meta-template', { rowId: button.dataset.metaSource });
+    templateInput.value = prepared.template;
+    templateSource = prepared.templateSource;
+    form.querySelector('[name="mode"][value="meta"]').checked = true;
+    templateInput.closest('details').open = true;
+    document.querySelector('#template-source').textContent = 'Based on Meta completion: ' + templateSource.prompt;
+    localPreview();
+    renderLog();
+    await refreshPreview();
+    setStatus('Meta template ready — press Generate to run it.');
+    templateInput.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  } catch (error) { setStatus(error.message, true); }
+  finally { button.disabled = false; }
+}
+results.addEventListener('click', useMetaTemplate);
+logTable.addEventListener('click', useMetaTemplate);
+
 function logprobsLink(entry) {
   return entry?.logprobsUrl
     ? `<a class="logprobs-link" href="${escapeHtml(viewerUrlInStore(entry.logprobsUrl))}" target="_blank" rel="noopener">View logprobs ↗</a> <a class="logprobs-link" href="${escapeHtml(deviationsUrl(entry.logprobsUrl))}" target="_blank" rel="noopener">One-token deviations ↗</a>`
@@ -350,6 +380,7 @@ function renderResults(variations) {
         <strong>Variation ${index + 1}${truncated ? ' <span class="truncated">truncated at max_tokens</span>' : ""}${logprob}</strong>
         <div>${escapeHtml(text)}</div>
         ${logprobsLink(variation)}
+        ${metaTemplateButton(variation)}
       </article>
     `;
   }).join("");
@@ -434,11 +465,13 @@ function renderLog() {
           <pre class="table-pre">${escapeHtml(entry.prompt)}</pre>
         </details>
         ${logprobsLink(entry)}
+        ${metaTemplateButton(entry)}
       </td>
       <td>${entry.parentPrompt ? `
         <details>
           <summary>${escapeHtml(shortText(entry.parentInstruction || entry.parentPrompt))}</summary>
           <pre class="table-pre">${escapeHtml(entry.parentPrompt)}</pre>
+          ${entry.templateSource ? "<p>Template based on Meta completion:</p><pre class=table-pre>" + escapeHtml(entry.templateSource.prompt) + "</pre><small>Source event: " + escapeHtml(entry.templateSource.eventId) + "</small>" : ""}
         </details>
       ` : '<span class="muted">Default resampling prompt</span>'}</td>
       <td>${entry.request ? `
@@ -543,6 +576,9 @@ refreshLogButton.addEventListener("click", loadLog);
 
 resetTemplateButton.addEventListener("click", () => {
   templateInput.value = promptConfig.baseResamplingPrompt;
+  templateSource = null;
+  document.querySelector("#template-source").textContent = "";
+  requestPreview.textContent = "Press Preview to build the request body.";
   localPreview();
 });
 

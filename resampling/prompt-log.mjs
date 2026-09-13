@@ -150,6 +150,7 @@ export function promptRowsFromEvents(events) {
     parentPrompt: generatedPrompt.parentPrompt,
     parentInstruction: generatedPrompt.parentInstruction,
     template: event.template ?? null,
+    ...(event.templateSource ? { templateSource: event.templateSource } : {}),
   })));
 }
 
@@ -167,6 +168,7 @@ export async function appendPromptLogEvent(event, logPath = DEFAULT_LOG_PATH) {
     // Null on entries written before templates could be swapped; those all used
     // the paper's, but saying so here would be a guess dressed as a record.
     template: event.template ?? null,
+    ...(event.templateSource ? { templateSource: event.templateSource } : {}),
     run: event.run || {
       id: randomUUID(),
       requestedCount: 1,

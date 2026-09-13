@@ -300,3 +300,7 @@ and a page whose dialog did not load refuses to call at all.
 Python defaults to the bundled Codex runtime. Override with `LOGPROBS_PYTHON`;
 override the shared source folder with `LOGPROBS_VIEWER_DIR`.
 The separate API-backed continuation sweep remains in `sweep_alternatives.py`.
+
+## Reuse a Meta completion
+
+Use **Use as meta template** on a Meta result or history row. Plain instructions get the Input/Output scaffold; existing templates with [INSTRUCTION] are retained. The action prepares a Meta preview only. Generate starts the next run. Saved events retain templateSource (source row, event and original completion), including when you edit the derived template. Reset to the paper clears this ancestry.
