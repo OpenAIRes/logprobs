@@ -17,7 +17,7 @@ const viewer=document.getElementById('viewer');viewer.href='/logprobs.html?id='+
 const status=document.getElementById('status');
 /* The two pages are neighbours and were easy to confuse -- this one keeps the
    original tail, the other regenerates it -- so each links to the other. */
-document.getElementById('deviationsLink').href='/deviations.html?id='+encodeURIComponent(id||'');
+document.getElementById('deviationsLink').href='/strings.html?view=deviations&base_id='+encodeURIComponent(id||'');
 function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 (async()=>{try{
  if(!id)throw new Error('Missing completion ID. Open this page from a completion.');

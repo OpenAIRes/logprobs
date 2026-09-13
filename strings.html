@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Logprobs — lists</title>
+<title>Logprobs — strings</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="/app.css">
 <!-- In <head> and blocking: resolving the palette after the body renders
@@ -47,8 +47,14 @@
     grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem;
     width: max-content; min-width: 100%;
   }
-  body.wide-rows .has-sweep .thead, body.wide-rows .has-sweep .row {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 10.5rem;
+  body.wide-rows .has-end .thead, body.wide-rows .has-end .row {
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 4.5rem;
+  }
+  body.wide-rows .has-change .thead, body.wide-rows .has-change .row {
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 10rem 4.5rem;
+  }
+  body.wide-rows .has-change.has-end .thead, body.wide-rows .has-change.has-end .row {
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 10rem 4.5rem 4.5rem;
   }
   body.wide-rows .text { overflow: visible; text-overflow: clip; }
   .capnote { color: var(--ink-faint); font-size: .71875rem; padding-left: .3rem; }
@@ -61,25 +67,35 @@
     gap: .85rem; align-items: center;
     padding: .3rem .9rem;
   }
-  /* only when the source data is a sweep and carries provenance */
-  .has-sweep .thead, .has-sweep .row {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 10.5rem;
+  /* The tail columns, and only the ones the rows on screen carry. A deviation
+     row says what was changed and what that change cost; a completion says only
+     how it ended. These used to be one cell headed "end · deviation", which put
+     the cost -- the number the deviations view is ordered by -- inside a line of
+     prose where it could be neither read down nor compared. */
+  .has-end .thead, .has-end .row {
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 4.5rem;
   }
-  .c-sweep { font-size: .71875rem; color: var(--ink-faint);
+  .has-change .thead, .has-change .row {
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 10rem 4.5rem;
+  }
+  .has-change.has-end .thead, .has-change.has-end .row {
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 10rem 4.5rem 4.5rem;
+  }
+  .c-change, .c-cost, .c-end { font-size: .71875rem; color: var(--ink-faint);
     font-family: ui-monospace, Menlo, monospace; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
-  .c-sweep .pos { color: var(--accent); font-weight: 600; }
-  .c-sweep .onpath { color: var(--good); }
-  .c-sweep .stopped { color: var(--bad); font-weight: 600; }
-  .c-sweep .ncalls { color: var(--mid); }   /* same string from several calls */
+  .c-change .pos { color: var(--accent); font-weight: 600; }
+  .c-change .onpath { color: var(--good); }
+  .c-change .ncalls { color: var(--mid); }   /* same string from several calls */
+  .c-cost { color: var(--mid); }
   /* What decided the end of this string. Without it a prefix and a finished
      string look alike in the table, and their Σ logprob is not the same kind of
      quantity -- a prefix's can only get worse. */
-  .c-sweep .end { font-weight: 600; }
-  .c-sweep .end.stop { color: var(--good); }
-  .c-sweep .end.length { color: var(--mid); }
-  .c-sweep .end.open { color: var(--ink-faint); font-weight: 400; }
-  .c-sweep .cont { color: var(--accent); padding-left: .15rem; }
+  .c-end .end { font-weight: 600; }
+  .c-end .end.stop { color: var(--good); }
+  .c-end .end.length { color: var(--mid); }
+  .c-end .end.open { color: var(--ink-faint); font-weight: 400; }
+  .c-end .cont { color: var(--accent); padding-left: .15rem; }
   /* The continuation is shown but is NOT what the row was ranked by, so it reads
      as a different kind of text rather than more of the same. */
   .tok.ext { opacity: .62; }
@@ -199,10 +215,45 @@
     font-size: .78125rem; line-height: 1.5; }
   .needs b { font-family: ui-monospace, Menlo, monospace; }
 
+  /* The deviations view works from one string, so what it works from, what the
+     set covers and the one button that spends money sit above the table. Carried
+     over from the page this used to be; the table, the bar and the colour key
+     are what it gains by no longer being a page. */
+  #planwrap { margin: .2rem 0 1rem; }
+  #planwrap .why { color: var(--ink-dim); font-size: .8125rem; line-height: 1.5;
+    max-width: 62rem; margin: .4rem 0; }
+  .base { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: .7rem .9rem; margin: .5rem 0; white-space: pre-wrap;
+    overflow-wrap: anywhere; font-size: .8125rem; max-height: 11rem; overflow: auto; }
+  .plan { display: flex; flex-wrap: wrap; gap: .3rem .9rem; align-items: baseline;
+    margin: .6rem 0; font-size: .8125rem; }
+  .plan b { font-variant-numeric: tabular-nums; }
+  .plan .paid { color: var(--bad); }
+  .plan .capped { color: var(--mid); }
+  .planrow { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin: .6rem 0; }
+  #planstatus { font-size: .8125rem; color: var(--ink-dim); min-height: 1.2rem; margin: .3rem 0; }
+  /* What the call that was just paid for actually said. The rows are rebuilt from
+     a fresh plan, so without this you approve a call, get asked about the next
+     one, and never see the answer to the first. */
+  #last { padding: .5rem .7rem; background: var(--chip); border: 1px solid var(--line);
+    border-radius: 8px; font-size: .8125rem; white-space: pre-wrap;
+    overflow-wrap: anywhere; max-height: 9rem; overflow: auto; }
+  #last b { color: var(--ink-dim); font-weight: 600; }
+
   @media (max-width: 720px) {
-    .thead, .row { grid-template-columns: 2.5rem minmax(0,1fr) 5.5rem; }
+    /* Every tail variant has to be named here. A bare `.thead` loses to
+       `.has-change .thead` on specificity whatever the order, which is why the
+       wide grid used to survive on a phone and push the string column to nothing. */
+    .thead, .row,
+    .has-end .thead, .has-end .row,
+    .has-change .thead, .has-change .row,
+    .has-change.has-end .thead, .has-change.has-end .row {
+      grid-template-columns: 2.5rem minmax(0,1fr) 5.5rem;
+    }
     .thead .c-mean, .row .c-mean, .thead .c-ppl, .row .c-ppl,
-    .thead .c-n, .row .c-n { display: none; }
+    .thead .c-n, .row .c-n,
+    .thead .c-change, .row .c-change, .thead .c-cost, .row .c-cost,
+    .thead .c-end, .row .c-end { display: none; }
   }
 </style>
 </head>
@@ -233,6 +284,24 @@
   </div>
   </div>
 
+  <section id="planwrap" hidden>
+    <div id="promptWrap" hidden>
+      <p class="why"><b>Fixed prompt</b> — no logprobs were returned for it, so it has no
+        alternatives and is never deviated. It stays in front of every call, and the strings
+        in the table are the generated part only.</p>
+      <div class="base" id="prompt"></div>
+    </div>
+    <div class="base" id="base"></div>
+    <div class="plan" id="plan"></div>
+    <div class="planrow">
+      <button type="button" id="fetch" class="danger" hidden></button>
+      <button type="button" id="json" disabled>Download JSON</button>
+      <button type="button" id="txt" disabled>Download text</button>
+    </div>
+    <p id="planstatus" role="status"></p>
+    <div id="last" hidden></div>
+  </section>
+
   <div class="table" id="table" hidden>
     <div class="thead">
       <div>#</div>
@@ -241,7 +310,9 @@
       <div class="num key">Σ logprob</div>
       <div class="num c-mean">mean</div>
       <div class="num c-ppl">ppl</div>
-      <div class="c-sweep" id="thSweep" hidden>end · deviation</div>
+      <div class="c-change" id="thChange" hidden>change</div>
+      <div class="num c-cost" id="thCost" hidden>cost</div>
+      <div class="c-end" id="thEnd" hidden>end</div>
     </div>
     <div id="list"></div>
   </div>
@@ -267,12 +338,10 @@ let openRowId = null;
 if (BAR.provideRecord) BAR.provideRecord(() => openRowId);
 const S = BAR.state;
 const listOf = v => (v ? String(v).split(',') : []);
-/* Deviation cost is the greedy criterion and only exists there; a ranking has no
-   base to measure against, so it can never be left on `cost`. */
-const effectiveSort = () => {
-  const want = S.sort || ((S.view === 'greedy' || S.view === 'greedy1') ? 'cost' : 'sum');
-  return (want === 'cost' && (S.view !== 'greedy' && S.view !== 'greedy1')) ? 'sum' : want;
-};
+/* The bar's answer, not a second one. Which criterion is in force depends on
+   which views have something to depart from, and that list grew -- having it
+   written out here too is how the two would come to disagree. */
+const effectiveSort = BAR.effectiveSort;
 
 
 
@@ -399,32 +468,42 @@ function endBadge(e) {
   return `<span class="end ${end}" title="${END_TITLE[end] || ''}">${end}</span>`;
 }
 
-/* The provenance column. A sweep entry says which alternative it took; a greedy
-   sibling says the same thing plus what the departure cost, which is the number
-   the whole view is ordered by, so it has to be on the row. */
-function devCell(e) {
-  const badge = endBadge(e);
-  let rest = '';
+/* What the row departed from. A sweep entry says which alternative it took; a
+   deviation says the position and the swap. */
+function changeCell(e) {
   if (e.deviation !== undefined) {
-    if (!e.deviation) {
-      rest = '<span class="onpath">greedy</span>';
-    } else {
-      const d = e.deviation;
-      if (d.parent_rank) rest = `from discovery #${d.parent_rank} · `;
-      rest += `<span class="pos">${d.position}</span> `
-        + `${plain(d.original)}→${plain(d.alternative)} `
-        + `<span class="ncalls">+${fmt(e.cost, 3)}</span>`;
-    }
-  } else if (e.sweep) {
-    // The finish_reason used to be repeated here; the badge above says it now.
-    rest = `${e.sweep.is_greedy
-      ? '<span class="onpath">on-path</span>'
-      : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`}${
-      e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : ''}`;
+    if (!e.deviation) return '<span class="onpath">greedy</span>';
+    const d = e.deviation;
+    return (d.parent_rank ? `from #${d.parent_rank} · ` : '')
+      + `<span class="pos">${d.position}</span> `
+      + `${plain(d.original)}→${plain(d.alternative)}`;
   }
-  const mark = contMark(e);
-  if (!badge && !rest && !mark) return '';
-  return `<div class="c-sweep">${badge}${mark}${(badge || mark) && rest ? ' ' : ''}${rest}</div>`;
+  if (e.sweep) {
+    // The finish_reason used to be repeated here; the end column says it now.
+    return (e.sweep.is_greedy
+      ? '<span class="onpath">on-path</span>'
+      : `<span class="pos">${e.sweep.position}</span> ${plain(e.sweep.alternative)}`)
+      + (e.n_calls > 1 ? ` <span class="ncalls">×${e.n_calls}</span>` : '');
+  }
+  return '';
+}
+
+/* What that change cost, in nats. Its own column because it is a number you read
+   down a list, and in the deviations view it is what the list is ordered by. */
+function costCell(e) {
+  return (e.cost === undefined || e.cost === null) ? '' : fmt(e.cost, 3);
+}
+
+function endCell(e) { return endBadge(e) + contMark(e); }
+
+/* Which tail columns the rows on screen justify. Decided once for the whole
+   list, not per row: a grid whose rows carry different numbers of cells puts the
+   numeric columns in a different place on every line. */
+function tailColumns(entries) {
+  return {
+    change: entries.some(e => e.sweep || e.deviation !== undefined),
+    end: entries.some(e => e.end || e.finish_reason),
+  };
 }
 
 /* The string column's width, measured from the widest row and then applied to
@@ -443,7 +522,7 @@ function measureTextColumn() {
   if (w > 0) tableEl.style.setProperty('--textw', w + 'px');
 }
 
-function buildRow(e) {
+function buildRow(e, cols) {
   const row = document.createElement('div');
   row.className = 'row';
 
@@ -485,7 +564,9 @@ function buildRow(e) {
       ? `<span class="subnum" title="the whole string; the ranking uses the value above">→ ${fmt(x.sum_logprob, 2)}</span>` : ''}</div>
     <div class="cell num c-mean">${fmt(e.mean_logprob)}</div>
     <div class="cell num c-ppl">${fmt(e.perplexity, 2)}</div>
-    ${devCell(e)}
+    ${cols.change ? `<div class="c-change">${changeCell(e)}</div>
+    <div class="cell num c-cost">${costCell(e)}</div>` : ''}
+    ${cols.end ? `<div class="c-end">${endCell(e)}</div>` : ''}
     <div class="detail hide"></div>`;
 
   if (VIEW === 'greedy') {
@@ -603,14 +684,18 @@ function renderRows() {
   /* The shared display preference applies to every string on both result pages. */
   window.ROW_TOKEN_CAP = (BAR.tokenLimit && BAR.tokenLimit()) || 0;
 
+  /* Decided before the rows are built, because every row has to agree with the
+     header about how many cells there are. */
+  const cols = tailColumns(slice);
   const frag = document.createDocumentFragment();
-  slice.forEach(e => frag.appendChild(buildRow(e)));
+  slice.forEach(e => frag.appendChild(buildRow(e, cols)));
   listEl.appendChild(frag);
 
-  const anySweep = slice.some(e => e.sweep || e.deviation !== undefined
-                                 || e.end || e.finish_reason);
-  tableEl.classList.toggle('has-sweep', anySweep);
-  document.getElementById('thSweep').hidden = !anySweep;
+  tableEl.classList.toggle('has-change', cols.change);
+  tableEl.classList.toggle('has-end', cols.end);
+  document.getElementById('thChange').hidden = !cols.change;
+  document.getElementById('thCost').hidden = !cols.change;
+  document.getElementById('thEnd').hidden = !cols.end;
 
   /* Short on purpose: it shares the bar with the colour key, and a long line
      wrapped the bar onto a second row. `records in store` and `unreachable` are
@@ -640,6 +725,7 @@ const VIEW_LABEL = {
   prefixes: 'prefixes — best-first',
   greedy: 'greedy II — top-20 first-token branches',
   greedy1: 'greedy I — departures from all discovered strings',
+  deviations: 'one-token deviations of one string',
 };
 const specialEl = document.getElementById('special');
 
@@ -658,6 +744,12 @@ const BLURBS = {
   sweep: ['Alternatives grid',
     'For each position of one base completion, all 20 alternatives the model offered there. '
     + 'The framed one is what it actually chose; the rest are the deviations we paid to see.'],
+  deviations: ['One-token deviations',
+    'Every position of one string × every alternative the model recorded there. Each one is a '
+    + 'new prompt — tokens[:i] + alternative — and the row is what the model actually generates '
+    + 'from it, so the tail after the change is real rather than the original tail kept. '
+    + 'Continuations come from the database; the ones it does not have are fetched only when '
+    + 'you ask, and that costs money.'],
   walk: ['Cheapest-deviation walk',
     'Each step takes the single-token change costing the fewest nats and regenerates the '
     + 'continuation. Computed from stored records only — it stops where a call would be needed.'],
@@ -672,6 +764,146 @@ function applyBlurb() {
 /* Nothing here toggles a control any more -- the bar has them all. The blurb
    still follows the view, which is the one thing this page owns. */
 function applyViewControls() { applyBlurb(); }
+
+// ------------------------------------------------------------- deviations view
+/* This was a page of its own (deviations.html). Its table, its number formatting
+   and its whitespace markers were a second implementation of what is above, and
+   it had no settings bar -- no colour key, no scope, no model. The parts that
+   really are its own are here: what the set covers, and the one button that
+   spends money. */
+const planWrap = el('planwrap');
+
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], {type}));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* Says what the answer covers before it says what is in it -- a partial set that
+   looks whole is the one thing this view must not produce. */
+function renderPlan(db) {
+  const bits = [
+    `<span><b>${db.deviations}</b> deviations of ${db.n} tokens</span>`,
+    `<span><b>${db.from_store}</b> answered by the database</span>`,
+  ];
+  if (db.missing_count) bits.push(`<span class="paid"><b>${db.missing_count}</b> would need an API call</span>`);
+  if (db.eos_deviations) bits.push(`<span><b>${db.eos_deviations}</b>× end-of-text — nothing to generate</span>`);
+  if (db.duplicates) bits.push(`<span><b>${db.duplicates}</b> duplicate strings</span>`);
+  if (db.unscorable) bits.push(`<span><b>${db.unscorable}</b> unscorable</span>`);
+  if (db.capped) {
+    bits.push(`<span class="capped">stopped at the ${db.cell_cap}-cell limit — positions
+      1–${db.planned_positions} of ${db.n}</span>`);
+  } else if (db.positions_in_trie < db.n) {
+    bits.push(`<span class="capped">nothing recorded past position ${db.positions_in_trie}
+      to depart from</span>`);
+  }
+  el('plan').innerHTML = bits.join('');
+  const button = el('fetch');
+  button.hidden = !db.missing_count;
+  button.textContent = db.missing_count
+    ? `Fetch the missing ${db.missing_count} — each one shown for approval first` : '';
+  el('json').disabled = false;
+  el('txt').disabled = false;
+}
+
+function renderDeviations(db) {
+  specialEl.hidden = true;
+  planWrap.hidden = false;
+  el('base').textContent = db.base_text || '';
+  el('promptWrap').hidden = !db.prompt;
+  el('prompt').textContent = db.prompt || '';
+  renderPlan(db);
+  metaEl.innerHTML = `
+    <div>ranked by: <b>${db.ranking || 'deviation cost'}</b></div>
+    <div>view: <b>${VIEW_LABEL.deviations}</b></div>
+    <div>base record: <b>${db.base_id || '—'}</b></div>
+    <div>deviations: <b>${db.deviations}</b> of a ${db.n}-token string</div>
+    <div>answered by the database: <b>${db.from_store}</b></div>
+    <div>needing a call: <b>${db.missing_count}</b></div>
+    <div>model: <b>${db.model || '—'}</b></div>`;
+  renderRows();
+}
+
+/* The only control on this page that spends anything, and it says how much in
+   its own label before it is pressed. */
+el('fetch').addEventListener('click', async () => {
+  const db = DB;
+  if (!db || !db.missing_count) return;
+  const button = el('fetch'), status = el('planstatus');
+  button.disabled = true;
+  const model = S.model || db.model || 'gpt-3.5-turbo-instruct';
+  /* The given prompt belongs in here, with `fixed` saying how much of it is the
+     prompt. Without it a re-plan walks the trie from the root instead of from
+     the prompt node, nothing scores, and the rows that were there vanish -- the
+     same mistake as sending a deviation without its tokenisation. */
+  const promptTokens = db.prompt_tokens || [];
+  const parent = {
+    tokens: [...promptTokens, ...(db.base_tokens || [])].map(t => ({token: t})),
+    text: (db.prompt || '') + (db.base_text || ''),
+  };
+  const planOpts = {fixed: promptTokens.length, base_id: db.base_id};
+  const show = fresh => { fresh.__route = '/api/deviations'; render(fresh); };
+  try {
+    /* Every call is shown and approved on its own -- the prompt and the exact
+       parameters -- so there is no summary dialog in front of it. */
+    const out = await GreedyBranches.fill(parent, model, db, {
+      ...planOpts,
+      progress: t => { status.textContent = t; },
+      // The policy decides whether the dialog appears at all; guard() shows it
+      // when it should and answers 'yes' when the policy says not to ask.
+      approve: AskPolicy.guard,
+      /* Re-plan and redraw as each answer lands, so the new string is a row in
+         the table straight away rather than at the end of the run. The rows
+         still come from the server, so a row bought a minute ago and one bought
+         just now are scored by the same code. */
+      onResult: async (record, cell, n, total) => {
+        const choice = ((record && record.choices) || [{}])[0] || {};
+        const box = el('last');
+        box.hidden = false;
+        box.textContent = '';
+        const head = document.createElement('b');
+        head.textContent = `${n}/${total} · position ${cell.position + 1} · `
+          + `${JSON.stringify(cell.original)} → ${JSON.stringify(cell.alternative)}`
+          + (choice.finish_reason ? ` · ${choice.finish_reason}` : '') + '\n';
+        box.appendChild(head);
+        box.appendChild(document.createTextNode(choice.text || '(no text)'));
+        try {
+          const fresh = await GreedyBranches.plan(parent, model, planOpts);
+          if (!fresh.error) show(fresh);
+          status.textContent = `${n}/${total} · ${fresh.from_store} in the table`;
+        } catch { /* the run goes on; the rows catch up at the end */ }
+      },
+    });
+    show(out);
+    const bits = [`${out.count} strings`, `${out.calls} API calls`];
+    if (out.skipped) bits.push(`${out.skipped} skipped`);
+    if (out.stopped) bits.push('stopped');
+    // The reason, not just the count: a run that ends "245 failed" and nothing
+    // else leaves you guessing at exactly the moment you most want to know.
+    if (out.failures && out.failures.length) {
+      bits.push(`${out.failures.length} failed — ${out.firstFailure || 'no reason given'}`);
+    }
+    status.textContent = bits.join(' · ');
+  } catch (err) {
+    status.textContent = err.message;
+    if (err.record) {
+      // A paid answer that could not be saved is offered rather than lost.
+      const a = document.createElement('a');
+      a.textContent = ' download the unsaved answer';
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(err.record)], {type: 'application/json'}));
+      a.download = 'completion-recovery.json';
+      status.appendChild(a);
+    }
+  } finally {
+    button.disabled = false;
+  }
+});
+
+el('json').addEventListener('click', () =>
+  download('deviations.json', JSON.stringify(DB, null, 2), 'application/json'));
+el('txt').addEventListener('click', () =>
+  download('deviations.txt', (DB.entries || []).map(e => e.text).join('\n'), 'text/plain'));
 
 function renderSweep(db) {
   tableEl.hidden = true;
@@ -754,8 +986,10 @@ function render(db) {
      wrong source is worse than none. */
   document.getElementById('srcName').textContent =
     LEGACY_FILE || db.__route || '/api/query';
+  planWrap.hidden = VIEW !== 'deviations';
   if (VIEW === 'sweep') return renderSweep(db);
   if (VIEW === 'walk')  return renderWalk(db);
+  if (VIEW === 'deviations') return renderDeviations(db);
   specialEl.hidden = true;
 
   metaEl.innerHTML = `
@@ -810,6 +1044,16 @@ function queryUrl() {
     const p = new URLSearchParams();
     if (S.base_id) p.set('base_id', S.base_id);
     return '/api/sweep?' + p.toString();
+  }
+  if (VIEW === 'deviations') {
+    const p = new URLSearchParams();
+    if (S.base_id) p.set('base_id', S.base_id);
+    if (S.model) p.set('model', S.model);
+    p.set('sort', effectiveSort());
+    if (S.ends) p.set('ends', S.ends);
+    if (S.nodes) p.set('nodes', S.nodes);
+    if (S.sources) p.set('sources', S.sources);
+    return '/api/deviations?' + p.toString();
   }
   if (VIEW === 'walk') {
     return '/api/walk?' + new URLSearchParams({

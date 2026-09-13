@@ -86,6 +86,7 @@ const ICON = {
     ['prefixes', 'prefixes', 'Every prefix in the token trie, in exact n-best order.'],
     ['sweep', 'alternatives grid', 'Per-position top-k for one base completion.'],
     ['walk', 'cheapest-deviation walk', 'Repeatedly take the cheapest single-token edit, then regenerate.'],
+    ['deviations', 'one-token deviations', 'Every position of one string \u00d7 every alternative recorded there, each one a new prompt the model regenerates from.'],
   ];
 
   /* Every criterion is offered everywhere, because picking one is how you choose
@@ -112,7 +113,11 @@ const ICON = {
      siblings, and that IS a pool worth ranking by sum or perplexity. Only the
      single-string case has nothing to rank. */
   function viewForSort(next) {
+    /* Both of these are keyed to one string, so there is no ranking of the whole
+       store to fall back to -- changing the criterion reorders what is on screen
+       rather than choosing something else to look at. */
     if (state.view === 'greedy1') return 'greedy1';
+    if (state.view === 'deviations') return 'deviations';
     if (next === 'cost') return state.view === 'greedy1' ? 'greedy1' : 'greedy';
     if ((state.view === 'greedy' || state.view === 'greedy1') && String(state.top) !== '1') return state.view === 'greedy1' ? 'greedy1' : 'greedy';
     return 'completions';
@@ -179,8 +184,16 @@ const ICON = {
   const RANKED = v => v === 'completions' || v === 'prefixes';
   // The one case where no ranking is involved at all.
   const singleGreedy = () => state.view === 'greedy' && String(state.top) === '1';
-  const LISTY = v => RANKED(v) || (v === 'greedy' || v === 'greedy1');
+  const LISTY = v => RANKED(v) || (v === 'greedy' || v === 'greedy1') || v === 'deviations';
   const SCOPED = v => LISTY(v);
+  /* Which views work from one named record instead of from the whole store. The
+     grid and the walk already did; deviations is the third, and `base_id` being
+     tied to "not a list" was what made it look as though a per-record view could
+     not also be a ranked list. */
+  const BASED = v => v === 'sweep' || v === 'walk' || v === 'deviations';
+  /* Which views are ordered by what a one-token departure cost. There is no cost
+     without something to depart from, which is why the other views cannot be. */
+  const DEPARTURES = v => v === 'greedy' || v === 'greedy1' || v === 'deviations';
 
   // ---------------------------------------------------------------- state
 
@@ -216,6 +229,7 @@ const ICON = {
     prefixes: ['top', 'prefix', 'model', 'ends', 'nodes', 'extend', 'chosen_only', 'colour', 'sources'],
     sweep: ['base_id', 'model', 'colour'],
     walk: ['base_id', 'steps', 'forward_only', 'model', 'colour'],
+    deviations: ['base_id', 'model', 'sort', 'ends', 'nodes', 'sources', 'colour'],
   };
 
   function query() {
@@ -238,11 +252,14 @@ const ICON = {
   /* One result is a single string, which belongs in the token browser; more than
      one is a ranked list. The bar owns this decision so neither page has to. */
   async function destination() {
-    const single = LISTY(state.view) && String(state.top) === '1';
+    // A per-record view is a list however few rows it has: `results` does not
+    // apply to it, so a 1 left over from another view must not turn it into a
+    // link to a single string.
+    const single = LISTY(state.view) && !BASED(state.view) && String(state.top) === '1';
     if (!single || state.view === 'greedy1') {
       const p = query();
       p.set('view', state.view);        // always explicit in a list link
-      return '/dijkstra.html?' + p.toString();
+      return '/strings.html?' + p.toString();
     }
     let id = null;
     try {
@@ -470,17 +487,21 @@ const ICON = {
      full-length strings, which wants a table and a download, not a strip. A new
      tab, so the string being read is still there to come back to.
 
-     /deviations.html, not /single-token-variants.html: the two answer different
+     Deviations, not /single-token-variants.html: the two answer different
      questions and only the first one is what this icon means. Variants keeps the
      original tail and never calls a model; deviations regenerates the tail, so
      its strings are ones the model really produces. The variants page is still
-     there at its own URL. */
+     there at its own URL.
+
+     It used to be a page of its own. It is a view of the list now, which is how
+     it gets the colour key, the scope stepper and the rest of this bar -- the
+     things a table of strings wants and a one-off page had none of. */
   el('sVariants').addEventListener('click', () => {
     const id = recordId();
     if (!id) return;
-    const p = new URLSearchParams({ id });
+    const p = new URLSearchParams({ view: 'deviations', base_id: id });
     if (state.model) p.set('model', state.model);
-    window.open('/deviations.html?' + p, '_blank', 'noopener');
+    window.open('/strings.html?' + p, '_blank', 'noopener');
   });
 
   // ---------------------------------------------------------------- scope stepper
@@ -616,8 +637,8 @@ const ICON = {
     // Prefixes come out of a sum-ordered heap: the ranking IS the search order,
     // so nothing else can be in force there whatever was last chosen.
     if (state.view === 'prefixes') return 'sum';
-    const want = state.sort || ((state.view === 'greedy' || state.view === 'greedy1') ? 'cost' : 'sum');
-    return (want === 'cost' && (state.view !== 'greedy' && state.view !== 'greedy1')) ? 'sum' : want;
+    const want = state.sort || (DEPARTURES(state.view) ? 'cost' : 'sum');
+    return (want === 'cost' && !DEPARTURES(state.view)) ? 'sum' : want;
   }
 
   function paintSorts() {
@@ -636,7 +657,9 @@ const ICON = {
     const v = state.view, one = String(state.top) === '1';
     const notList = LISTY(v) ? null : `${v} is not a ranked list of strings`;
     return {
-      sResultsWrap: notList,
+      sResultsWrap: v === 'deviations'
+        ? 'every deviation of the string is a row — there is nothing to cap'
+        : notList,
       // Never dead: every criterion is reachable, and picking one moves the view
       // to where it means something. That is the whole point of viewForSort.
       sSortWrap: null,
@@ -644,10 +667,13 @@ const ICON = {
       sPromptWrap: (v === 'greedy' || v === 'greedy1') ? null : 'only the greedy path starts from a prompt you give',
       sPrefixWrap: RANKED(v) ? null : `${v} has no ranking to filter`,
       sModelWrap: null,
-      sBaseWrap: LISTY(v) ? 'a base completion is what the grid and the walk work from' : null,
+      sBaseWrap: BASED(v) ? null
+        : 'a base completion is what the grid, the walk and the deviations work from',
       sStepsWrap: v === 'walk' ? null : 'steps belong to the walk',
       sFwdWrap: v === 'walk' ? null : 'this belongs to the walk',
-      sExtendWrap: !LISTY(v) ? notList
+      sExtendWrap: v === 'deviations'
+        ? 'a deviation is already the continuation the model regenerated'
+        : !LISTY(v) ? notList
         : one ? 'one string is already shown in full' : null,
       sRecWrap: v === 'prefixes' ? null
         : 'only the trie search walks token by token, so only it can be restricted',
@@ -680,7 +706,10 @@ const ICON = {
     if (infoSuppressed) return;
     const mine = ++infoSeq;
     const v = state.view;
-    if (!LISTY(v)) { el('sInfo').textContent = ''; return; }
+    /* A per-record view already knows its own total -- the plan says how many
+       deviations the string has -- and /api/query cannot answer for it anyway,
+       so probing there was two 400s on every load. */
+    if (!LISTY(v) || BASED(v)) { el('sInfo').textContent = ''; return; }
     const p = new URLSearchParams({ top: '1' });
     if (v !== 'greedy') p.set('view', v);
     if (state.ends) p.set('ends', state.ends);
@@ -1038,7 +1067,11 @@ const ICON = {
     const slot = el(where === 'status' ? 'sPageStatus' : 'sPageExtra');
     if (slot && node) slot.appendChild(node);
   }
+  /* Exported because strings.html had its own copy of the rule, and a second
+     copy of "which criterion is in force" is a second thing to remember when a
+     view is added. */
   window.settingsBar = { state, query, destination, repaint, ready, suppressInfo,
+                         effectiveSort,
                          adopt, provideRecord, landedOnId,
                          activeFilters, clearFilters,
                          block: key => blocks.has(key),

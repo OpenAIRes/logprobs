@@ -26,7 +26,7 @@ Positions recorded in meta.sweep.position are absolute in the base's full
 token string, so a level-2 sweep reports 1..20 rather than 0..19.
 
 Records are written in the same shape builder.html and the other scripts read,
-so the output feeds into export_dijkstra_top.py and dijkstra.html.
+so the output feeds into export_dijkstra_top.py and strings.html.
 
 Logging matches builder.html plus the headers a browser cannot see: run from a
 shell there is no CORS, so openai-processing-ms and the rate-limit headers come

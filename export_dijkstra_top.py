@@ -34,7 +34,7 @@ probability mass actually went without re-reading the full history export:
 when its logprob was recovered from the parent's top_logprobs table (a token
 picked as a tooltip replacement, which the app never persisted a logprob for).
 
-The viewer (dijkstra.html) chooses how many of these entries to display, but it
+The viewer (strings.html) chooses how many of these entries to display, but it
 can only ever show what this file holds — so export a generous pool.
 
 Usage:

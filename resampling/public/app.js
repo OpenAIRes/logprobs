@@ -246,7 +246,10 @@ function storeUrl(url, page) {
   const path = String(url).replace("/logprobs.html", page);
   return /^https?:/i.test(path) ? path : origin + path;
 }
-const deviationsUrl = url => storeUrl(url, "/deviations.html");
+/* A view of the list viewer, not a page of its own: that is where the table,
+   the settings bar and the colour key live. */
+const deviationsUrl = url =>
+  storeUrl(url, "/strings.html").replace(/([?&])id=/, "$1view=deviations&base_id=");
 /* Both links lead to the store, not to the copy of the viewer this server can
    put up: that copy has the page but not the store behind it, so its settings
    bar, its lists and its branch button have nothing to answer them. Every

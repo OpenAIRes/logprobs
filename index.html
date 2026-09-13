@@ -478,7 +478,7 @@ function listUrl() {
     if (!single() && el('lExtend').checked) p.set('extend', '1');
     const gNodes = nodesValue();
     if (!single() && gNodes.length === 1) p.set('nodes', gNodes[0]);
-    return '/dijkstra.html?' + p.toString();
+    return '/strings.html?' + p.toString();
   }
   if (RANKED(view)) {
     if (el('lPrefix').value) p.set('prefix', el('lPrefix').value);
@@ -498,10 +498,10 @@ function listUrl() {
       if (el('lSteps').value !== '20') p.set('steps', el('lSteps').value);
     }
   }
-  return '/dijkstra.html?' + p.toString();
+  return '/strings.html?' + p.toString();
 }
 
-/* results and starts-with live in dijkstra.html's own localStorage, so they are
+/* results and starts-with live in strings.html's own localStorage, so they are
    handed over there rather than in the URL — otherwise the choice made here and
    the one made in the viewer would keep overriding each other. */
 function handOverPreferences() {

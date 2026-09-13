@@ -435,6 +435,27 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header('Cache-Control', 'no-store')
             self.end_headers()
             return
+        # Two pages moved. dijkstra.html is strings.html -- the old name said
+        # which algorithm one of its six views used -- and deviations.html is a
+        # view of it rather than a second table of its own. Old links and
+        # bookmarks keep working: the query survives, and `id` becomes `base_id`
+        # because that is what the list calls it.
+        MOVED = {'/dijkstra.html': None, '/deviations.html': 'deviations'}
+        if route in MOVED:
+            moved = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+            if MOVED[route]:
+                moved['view'] = [MOVED[route]]
+                if 'id' in moved and 'base_id' not in moved:
+                    moved['base_id'] = moved.pop('id')
+            target = '/strings.html'
+            if moved:
+                target += '?' + urllib.parse.urlencode(moved, doseq=True)
+            self.send_response(302)
+            self.send_header('Location', target)
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            return
+
         if not route.startswith('/api/'):
             return super().do_GET()
         # A reader pays for whatever the writers deferred. Static files do not
@@ -621,7 +642,7 @@ def serve(port: int, host: str = '127.0.0.1') -> None:
     httpd = ThreadingHTTPServer((host, port), handler)
     print(f'serving {ROOT}')
     print(f'  http://{host}:{port}/logprobs.html')
-    print(f'  http://{host}:{port}/dijkstra.html')
+    print(f'  http://{host}:{port}/strings.html')
     print(f'  http://{host}:{port}/api/stats')
     try:
         httpd.serve_forever()

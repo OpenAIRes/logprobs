@@ -245,7 +245,7 @@ Jine umisteni lze nastavit promennou `LOGPROBS_VIEWER_DIR` pred spustenim.
 Na portu 8787 se viewer napojuje na historii resamplingu; nejde o cely
 record-store server z projektu gpt. Server zpristupnuje HTML vieweru a jeho
 sdilene skripty (app.css, theme.js, bar.js, ask-policy.js, approve-request.js,
-greedy-branches.js, deviations.html). Historii pro viewer sklada za behu
+greedy-branches.js, strings.html). Historii pro viewer sklada za behu
 z prompt logu.
 
 To uz ale neni jedina cesta: kazdy vysledek s logprobs se **nabidne i sdilenemu

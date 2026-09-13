@@ -3,7 +3,7 @@
 Until now each program owned its own copy of the data and its own answer to
 "do we already have this call?": logprobs.html scanned IndexedDB, builder.html
 kept a second database, sweep_alternatives.py replayed its JSONL ledger, and
-dijkstra.html read frozen export files. Four implementations, and the cache
+strings.html read frozen export files. Four implementations, and the cache
 verdict was wrong in a different way in three of them.
 
 The raw call log is the only primary artifact. A tree, a ranking, a sweep grid
