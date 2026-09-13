@@ -159,6 +159,11 @@
     min-width: 0;
   }
   .row.open .text { white-space: normal; overflow: visible; word-break: break-word; padding: .25rem 0; }
+  /* The string opens on its own page, so it reads as a link on hover -- dotted
+     and only while the pointer is on it, not the permanent underline the prompt
+     span used to carry. */
+  .row:not(.open) .text:hover { text-decoration: underline dotted;
+    text-decoration-color: var(--ink-faint); text-underline-offset: 3px; }
 
   .tok {
     display: inline-block; padding: .02em .24em; margin: 0 1px 1px 0;
@@ -414,6 +419,40 @@ function plain(t) {
 // there and coloured here.
 const tokColor = window.tokColor;
 
+const viewerUrl = id => '/logprobs.html?id=' + encodeURIComponent(id);
+
+/* The string on its own, in a new tab -- the list is what you came back to, and
+   a ranking of three hundred rows is a place you keep your finger in while you
+   read one of them.
+
+   A row that is a recorded call names it. A prefix does not: it is a path in the
+   token trie, assembled from whatever records pass through it, and no single
+   call is "that string". The nearest real thing is a recorded call that begins
+   with it, which the completions view can already find by prefix -- so that is
+   what opens, and it is a longer string than the row, deliberately.
+
+   The tab is opened on the click and navigated afterwards. A window.open that
+   happens after an await has lost the click that authorised it, and the browser
+   blocks it as a popup. `noopener` is left off for that one, because with it the
+   call returns null and there is nothing to navigate; the page it loads is our
+   own. */
+async function openInViewer(e) {
+  if (e.id) { window.open(viewerUrl(e.id), '_blank', 'noopener'); return; }
+  const tab = window.open('', '_blank');
+  try {
+    const p = new URLSearchParams({ view: 'completions', top: '1', prefix: e.text });
+    if (S.model) p.set('model', S.model);
+    if (S.sources) p.set('sources', S.sources);
+    const db = await (await fetch('/api/query?' + p, { cache: 'no-store' })).json();
+    const id = ((db.entries || [])[0] || {}).id;
+    if (id) { if (tab) tab.location = viewerUrl(id); return; }
+  } catch { /* say so below rather than leaving a blank tab open */ }
+  if (tab) tab.close();
+  showError('a recorded call beginning with this prefix',
+            new Error('the store has none'),
+            'a prefix is a path in the token trie, not a call of its own');
+}
+
 /* Number(null) is 0, so a missing perplexity used to print as 0.00 -- the most
    confident possible reading of a value that does not exist. */
 function fmt(x, d = 4) {
@@ -663,10 +702,15 @@ function buildRow(e, cols) {
               ? `<span class="more"> …${x.added_n - x.tokens.length} more</span>` : '')
         : '');
 
+  const openTitle = e.id
+    ? 'Open this string on its own, in a new tab'
+    : 'Open a recorded call beginning with this prefix, in a new tab — a prefix '
+      + 'is a path in the token trie, not a call of its own';
+
   row.innerHTML = `
     <div class="rank">${e.rank}${x && x.same_as_rank
       ? `<span class="dup" title="an earlier row already extends to this same string">=${x.same_as_rank}</span>` : ''}</div>
-    <div class="text">${toks}</div>
+    <div class="text" title="${openTitle}">${toks}</div>
     <div class="cell num c-n">${e.n}${x && x.added_n ? `<span class="subnum">+${x.added_n}</span>` : ''}</div>
     <div class="cell num key">${fmt(e.sum_logprob)}${x && x.added_n
       ? `<span class="subnum" title="the whole string; the ranking uses the value above">→ ${fmt(x.sum_logprob, 2)}</span>` : ''}</div>
@@ -728,12 +772,20 @@ function buildRow(e, cols) {
   }
   const detailEl = row.querySelector('.detail');
 
-  // Click the row to expand it (full text + per-token inspection); click a token
-  // inside an expanded row to inspect that position.
+  // Click the string to open it on its own page; click the rest of the row to
+  // expand it in place; click a token inside an expanded row to inspect that
+  // position.
   row.addEventListener('click', ev => {
     const tokEl = ev.target.closest('.tok');
     if (tokEl && row.classList.contains('open')) {
       toggleTokenDetail(row, e, +tokEl.dataset.i);
+      return;
+    }
+    /* Only while the row is closed. Once it is open the string is the thing you
+       click token by token, and a new tab on every one of those would be a
+       trap. */
+    if (ev.target.closest('.text') && !row.classList.contains('open')) {
+      openInViewer(e);
       return;
     }
     if (ev.target.closest('.detail')) return;   // don't collapse when using the panel
