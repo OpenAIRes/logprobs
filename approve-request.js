@@ -25,10 +25,18 @@
   .arq-grid dt { color: var(--ink-dim, #666); }
   .arq-grid dd { margin: 0; font-variant-numeric: tabular-nums; }
   .arq-label { font-size: .75rem; color: var(--ink-dim, #666); margin: .5rem 0 .2rem; }
-  .arq-pre { background: var(--chip, #f3f3f3); border: 1px solid var(--line, #ddd);
+  /* Every property spelled out, none left to the page underneath. This dialog is
+     injected into whichever program is about to spend money, and one of them
+     styles a bare pre element as a dark code block: 320px tall, and #e7f2ed text
+     landed on this box's own light background at a contrast of about 1.05 to 1.
+     The prompt was on screen and unreadable, which is the one failure this
+     dialog cannot have. */
+  .arq-pre { background: var(--chip, #f3f3f3); color: var(--ink, #111);
+             border: 1px solid var(--line, #ddd);
              border-radius: 6px; padding: .5rem .6rem; margin: 0;
-             font-size: .78125rem; white-space: pre-wrap; overflow-wrap: anywhere;
-             max-height: 15rem; overflow: auto; }
+             font: .78125rem/1.5 ui-monospace, Menlo, Consolas, monospace;
+             white-space: pre-wrap; overflow-wrap: anywhere;
+             min-height: 0; max-height: 15rem; overflow: auto; }
   .arq-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
   .arq-row .arq-spacer { flex: 1; }
   `;
