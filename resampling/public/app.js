@@ -320,12 +320,27 @@ async function refreshPreview() {
     promptPreview.textContent = json.prompt;
     renderTemplateStatus(json);
     renderRequestPreview(json);
+    showResolvedDefaults(json.params);
     setStatus(json.mode === "meta" ? "Meta" : "Ready");
   } catch (error) {
     setStatus("Error", true);
     results.innerHTML = `<article class="result-empty">${escapeHtml(error.message)}</article>`;
   } finally {
     setBusy(false);
+  }
+}
+
+/* What an empty field would actually send, shown as its placeholder. The
+   backend's own default is the answer for most of them, but temperature's
+   depends on whether logprobs is on -- and that rule lives in one place,
+   resolveBackendParams, so the placeholder is read back from the preview rather
+   than worked out again here. */
+function showResolvedDefaults(params) {
+  if (!params) return;
+  for (const name of PARAM_NAMES) {
+    const input = form.querySelector(`[name="${name}"]`);
+    if (!input || input.disabled || input.value.trim()) continue;
+    input.placeholder = params[name] === undefined ? 'not sent' : String(params[name]);
   }
 }
 

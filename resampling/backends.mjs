@@ -123,6 +123,21 @@ export function resolveBackendParams(backendId, overrides = {}) {
     }
   }
 
+  /* Asking for logprobs and sampling at 0.9 are two different experiments. The
+     alternatives are only the distribution the argmax was drawn from if the
+     draw was the argmax; at 0.9 they describe a distribution that some other
+     token was actually taken from. The store also only keeps a request as
+     answerable from history when temperature is 0, so a run at 0.9 pays again
+     for a string it already has.
+
+     A default, not a rule: type a temperature and it is sent, type `off` and
+     nothing is sent. Only the empty field follows the logprobs box. With
+     logprobs off, this is the paper's 0.9 exactly as before. */
+  if (overrides.temperature === undefined
+      && typeof resolved.logprobs === 'number' && resolved.logprobs !== 0) {
+    resolved.temperature = 0;
+  }
+
   return resolved;
 }
 

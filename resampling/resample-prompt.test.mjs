@@ -131,15 +131,38 @@ test("the inserted instruction is never rescanned or treated as a pattern", () =
 });
 
 test("completions sampling defaults come from instruction_induction.yaml", () => {
-  // logprobs is ours, not the paper's, so it is checked separately below.
-  const { logprobs, ...fromPaper } = resolveBackendParams("completions");
-  assert.deepEqual(fromPaper, {
+  // With logprobs off this is the paper's request exactly, which is the point of
+  // being able to turn it off. logprobs is ours, not the paper's.
+  assert.deepEqual(resolveBackendParams("completions", { logprobs: null }), {
     temperature: 0.9,
     topP: 0.9,
     maxTokens: 50,
     frequencyPenalty: 0,
     presencePenalty: 0,
   });
+});
+
+test("asking for logprobs defaults the temperature to 0", () => {
+  /* The alternatives only describe the distribution the token was drawn from if
+     the draw was the argmax. Asking for them at 0.9 is two experiments at once,
+     and the store cannot answer such a request from history either. */
+  assert.equal(resolveBackendParams("completions").temperature, 0);
+  assert.equal(resolveBackendParams("completions", { logprobs: 5 }).temperature, 0);
+  // The rest is still the paper's.
+  const { temperature, logprobs, ...rest } = resolveBackendParams("completions");
+  assert.deepEqual(rest, { topP: 0.9, maxTokens: 50, frequencyPenalty: 0, presencePenalty: 0 });
+});
+
+test("a temperature that was asked for is sent whatever logprobs says", () => {
+  assert.equal(resolveBackendParams("completions", { temperature: 0.9 }).temperature, 0.9);
+  assert.equal(resolveBackendParams("completions", { temperature: 1.2 }).temperature, 1.2);
+  // `off` means omit it, and that is not the same as defaulting it to 0.
+  assert.ok(!("temperature" in resolveBackendParams("completions", { temperature: null })));
+});
+
+test("logprobs explicitly 0 is logprobs off, so the temperature stays the paper's", () => {
+  assert.equal(resolveBackendParams("completions", { logprobs: 0 }).temperature, 0.9);
+  assert.equal(resolveBackendParams("completions", { logprobs: null }).temperature, 0.9);
 });
 
 test("responses backend sends nothing unless asked", () => {
@@ -181,7 +204,14 @@ test("builds the faithful legacy completions request body", () => {
   );
 });
 
-test("the default body adds only logprobs on top of the paper's config", () => {
+test("the default body asks for logprobs and samples at 0 for them", () => {
+  /* Asking for logprobs no longer leaves the rest of the request alone. It used
+     to -- "observational only, it cannot change which tokens get generated" --
+     and that is still true of the parameter itself. What changed is the default
+     around it: alternatives are only the distribution the token came from when
+     the token was the argmax, so the temperature follows the logprobs box down
+     to 0 unless a temperature was asked for. Turn logprobs off and the body is
+     the paper's again, which the test above pins down. */
   const body = buildOpenAIRequestBody({
     backend: "completions",
     prompt: "Prompt",
@@ -189,9 +219,16 @@ test("the default body adds only logprobs on top of the paper's config", () => {
     params: resolveBackendParams("completions"),
   });
   assert.equal(body.logprobs, 20);
-  // Observational only: it cannot change which tokens get generated.
-  assert.equal(body.temperature, 0.9);
+  assert.equal(body.temperature, 0);
   assert.equal(body.top_p, 0.9);
+
+  const asked = buildOpenAIRequestBody({
+    backend: "completions",
+    prompt: "Prompt",
+    n: 30,
+    params: resolveBackendParams("completions", { temperature: 0.9 }),
+  });
+  assert.equal(asked.temperature, 0.9);
 });
 
 test("omits n when only one completion is requested", () => {
