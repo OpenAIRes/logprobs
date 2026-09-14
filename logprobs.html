@@ -33,6 +33,11 @@
     #dataSource.busy { color: var(--mid); }
     #dataSource.paid { color: var(--danger); border-color: var(--danger); }
     body:not(.show-source-status) #dataSource { display: none !important; }
+    .meta-block { display: flex; flex-wrap: wrap; gap: .2rem 1.1rem;
+      margin: .1rem 0 .6rem; font-size: .78125rem; color: var(--ink-dim); }
+    .meta-block b { color: var(--ink); font-weight: 600;
+      font-variant-numeric: tabular-nums; }
+    .meta-block .paid { color: var(--danger); }
     #toolbar { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
     #toolbar .fld select { font: inherit; font-size: .8125rem; color: var(--ink);
       background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
@@ -217,6 +222,11 @@
       <button id="helpBtn" class="icon" hidden title="Help — what each control does" aria-label="Help">?</button>
     </div>
   </div>
+
+  <!-- What is on screen, where it came from and what it cost to make. Behind the
+       bar's `details block` switch, like the lists' header: the minimal case is
+       the string and nothing else. -->
+  <section class="meta-block" id="recordMeta" hidden></section>
 
   <div id="helpPanel" hidden>
     <h2>What each control does</h2>
@@ -1635,7 +1645,70 @@ function applyCompletion(response, idx, replacementToken){
 }
 
 /* ============ UI RENDERING ============ */
+/* The details block. Built from the stored record rather than from the tokens on
+   screen: the record is what the store, the lists and the deviations all read,
+   so a number here and a number there cannot disagree. Absent for a tree that is
+   not a saved record -- there is nothing to say about it yet. */
+const metaEl = document.getElementById('recordMeta');
+/* A record id and a model name come from the API, so they are escaped rather
+   than trusted -- this block builds HTML. */
+const esc = t => String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+let metaShownFor = null;
+
+function fmtLogprob(x){ return (x===null||x===undefined||!isFinite(x)) ? '—' : Number(x).toFixed(4); }
+
+async function renderRecordMeta(id){
+  if (!metaEl) return;
+  if (!id){ metaEl.hidden = true; metaShownFor = null; return; }
+  if (id === metaShownFor) return;          // same record, already on screen
+  let rec = null;
+  try { rec = await idbGet(id); } catch {}
+  if (!rec){ metaEl.hidden = true; metaShownFor = null; return; }
+  metaShownFor = id;
+
+  const req = rec.request || {};
+  const choice = (rec.choices || [{}])[0] || {};
+  const lp = choice.logprobs || {};
+  const gen = (lp.tokens || []).length;
+  const promptTokens = ((rec.prompt || {}).logprobs || {}).tokens || [];
+  const scored = (lp.token_logprobs || []).filter(v => typeof v === 'number' && isFinite(v));
+  const sum = scored.reduce((a, b) => a + b, 0);
+  const mean = scored.length ? sum / scored.length : null;
+  const usage = rec.usage || {};
+  const bits = [];
+  const add = (label, value) => { if (value !== undefined && value !== null && value !== '') bits.push(`<span>${label}: <b>${value}</b></span>`); };
+
+  add('record', esc(rec.id || id));
+  add('model', esc(req.model || rec.model || '—'));
+  if (rec.created) add('made', new Date(rec.created * 1000).toLocaleString());
+  add('prompt tokens', promptTokens.length ? promptTokens.length
+      : (usage.prompt_tokens !== undefined ? usage.prompt_tokens + ' (untokenised)' : '—'));
+  add('generated', gen || 0);
+  if (scored.length){
+    add('Σ logprob', fmtLogprob(sum));
+    add('mean', fmtLogprob(mean));
+    add('perplexity', mean === null ? '—' : Math.exp(-mean).toFixed(2));
+  }
+  add('ended', esc(choice.finish_reason || '—'));
+  /* The parameters it was made with, spelled out rather than summarised: a
+     record made at 0.9 and one made at 0 are not the same experiment, and that
+     is exactly the kind of thing you come to this block to check. */
+  for (const [k, label] of [['temperature','temperature'], ['top_p','top_p'],
+                            ['max_tokens','max_tokens'], ['frequency_penalty','freq penalty'],
+                            ['presence_penalty','pres penalty'], ['logprobs','logprobs']]){
+    if (req[k] !== undefined) add(label, String(req[k]));
+  }
+  const tok = (rec.meta || {}).prompt_tokenization;
+  if (tok) add('prompt tokenisation', esc(tok));
+
+  metaEl.innerHTML = bits.join('');
+  metaEl.hidden = false;
+}
+
 function renderTokens(tokens){
+  // Fire and forget: the block is display only, and the tokens must not wait on
+  // a database read to appear.
+  renderRecordMeta(currentCompletionId);
   const limit = window.settingsBar?.tokenLimit?.() || 0;
   const sourceTokens = tokens;
   tokens = limit ? tokens.slice(0, limit) : tokens;

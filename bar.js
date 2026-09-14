@@ -187,7 +187,7 @@ const ICON = {
      registered anywhere. */
   const BLOCK_APPLIES = {
     'show-source-status': () => !!document.getElementById('dataSource'),
-    'show-meta': () => !!document.querySelector('header'),
+    'show-meta': () => !!document.querySelector('header, .meta-block'),
     'wide-rows': () => !!document.querySelector('.table'),
   };
   const blockWhy = key => (BLOCK_APPLIES[key] && !BLOCK_APPLIES[key]()

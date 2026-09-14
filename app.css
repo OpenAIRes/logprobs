@@ -330,4 +330,6 @@ body.tok-colour .token { background: var(--tc, transparent); }
 /* The whole header, not only the counts block: the title, the blurb explaining
    the view and the route the data came from are the same kind of thing -- an
    explanation of what you are looking at, which the minimal case does without. */
-body:not(.show-meta) header { display: none !important; }
+/* .meta-block is for a page whose <header> is something else: the token browser's
+   is a toolbar, so its details live in a block of their own. */
+body:not(.show-meta) header, body:not(.show-meta) .meta-block { display: none !important; }
