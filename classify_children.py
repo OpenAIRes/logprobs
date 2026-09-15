@@ -1,4 +1,9 @@
-"""Write metadata.children on every resampling record: 1 or >1.
+"""Write metadata.group on every resampling record: 1 or >1.
+
+It went into `children` first and moved here: one label column is enough, and a
+second one made the table wider than the window. `group` takes whatever you
+type, so what it holds is a matter of use rather than of definition -- today it
+holds this.
 
 The question the string asks: does it tell the model to produce ONE rewriting or
 SEVERAL? That is the number of the output noun -- "a different version" against
@@ -74,7 +79,7 @@ if '--write' not in sys.argv:
 
 sent = 0
 for rid, text in rows:
-    body = json.dumps({'id': rid, 'key': 'children', 'value': '>1' if many(text) else '1'}).encode()
+    body = json.dumps({'id': rid, 'key': 'group', 'value': '>1' if many(text) else '1'}).encode()
     req = urllib.request.Request(f'{API}/api/annotate', data=body,
                                  headers={'Content-Type': 'application/json'}, method='POST')
     with urllib.request.urlopen(req, timeout=30) as response:

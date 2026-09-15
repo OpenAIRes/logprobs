@@ -44,20 +44,20 @@
      columns landed in a different place on every line. One width, set from the
      widest string, puts them under each other. */
   body.wide-rows .thead, body.wide-rows .row {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem;
     width: max-content; min-width: 100%;
   }
   body.wide-rows .has-end .thead, body.wide-rows .has-end .row,
   body.wide-rows .has-end .tfilter {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 5rem 4.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 4.5rem;
   }
   body.wide-rows .has-change .thead, body.wide-rows .has-change .row,
   body.wide-rows .has-change .tfilter {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 5rem 13rem 4.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem;
   }
   body.wide-rows .has-change.has-end .thead, body.wide-rows .has-change.has-end .row,
   body.wide-rows .has-change.has-end .tfilter {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 5rem 13rem 4.5rem 4.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem 4.5rem;
   }
   body.wide-rows .text { overflow: visible; text-overflow: clip; }
   .capnote { color: var(--ink-faint); font-size: .71875rem; padding-left: .3rem; }
@@ -66,7 +66,7 @@
   #emptyClear { margin: 0 .9rem 1rem; }
   .thead, .row {
     display: grid;
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem;
     gap: .85rem; align-items: center;
     padding: .3rem .9rem;
   }
@@ -76,13 +76,13 @@
      the cost -- the number the deviations view is ordered by -- inside a line of
      prose where it could be neither read down nor compared. */
   .has-end .thead, .has-end .row, .has-end .tfilter {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 5rem 4.5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 4.5rem;
   }
   .has-change .thead, .has-change .row, .has-change .tfilter {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 5rem 13rem 4.5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem;
   }
   .has-change.has-end .thead, .has-change.has-end .row, .has-change.has-end .tfilter {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 5rem 13rem 4.5rem 4.5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem 4.5rem;
   }
   /* The one column that is written rather than read. It looks like the rest of
      the row until you put the pointer on it, because a grid full of boxes reads
@@ -372,7 +372,6 @@
       <div tabindex="0" data-sort="mean_logprob" class="num c-mean" title="Sort by logprob per token.">mean</div>
       <div tabindex="0" data-sort="perplexity" class="num c-ppl" title="Sort by perplexity, lowest first.">ppl</div>
       <div tabindex="0" data-sort="group" class="c-group" title="Your own label for this string — type in the cell to set it, empty to clear. Click here to sort by it. Saved against the record, so it is the same label in every view.">group</div>
-      <div tabindex="0" data-sort="children" class="c-children" title="How many rewritings the instruction asks for: 1 or >1. Editable, like group.">children</div>
       <div tabindex="0" data-sort="change" class="c-change" id="thChange" hidden title="Sort by the position the string departed at.">change</div>
       <div tabindex="0" data-sort="cost" class="num c-cost" id="thCost" hidden title="Sort by what the departure cost, cheapest first.">cost</div>
       <div tabindex="0" data-sort="end" class="c-end" id="thEnd" hidden title="Sort by how the string ended.">end</div>
@@ -466,12 +465,12 @@ const tokColor = window.tokColor;
 let annotations = {};
 /* Which metadata keys get a column of their own. One list, so a third key is a
    word here rather than a column of bookkeeping spread over the file.
-   `children` is how many rewritings the instruction asks for -- "a different
-   version" against "different versions" -- which is a property of the string,
-   not of the call, so it lives with the labels rather than in the record. */
+   Today it holds how many rewritings the instruction asks for -- "a different
+   version" is 1, "different versions" is >1 -- which is a property of the string
+   rather than of the call, so it lives with the labels and not in the record.
+   That is a use of the column, not its definition: it takes whatever you type. */
 const META_COLUMNS = [
-  {key: 'group',    cls: 'c-group',    width: '7rem'},
-  {key: 'children', cls: 'c-children', width: '5rem'},
+  {key: 'group', cls: 'c-group', width: '7rem'},
 ];
 const metaOf = (e, key) => ((annotations[e && e.id] || {})[key]) || '';
 const groupOf = e => metaOf(e, 'group');
@@ -705,7 +704,6 @@ const SORTABLE = {
   // Unlabelled rows sort last either way -- see the missing-value rule below --
   // so turning the column round groups the labels, it does not bury them.
   group:        {get: e => groupOf(e) || null, first: 'asc', text: true},
-  children:     {get: e => metaOf(e, 'children') || null, first: 'desc', text: true},
 };
 let localSort = null;      // {key, dir}, or null for the order the store sent
 
@@ -729,12 +727,12 @@ function sortEntries(list) {
    query -- so it is instant and it never changes what was paid for or ranked.
 
    A column whose values are few enough to list gets a dropdown, which is the
-   whole point for something like children: two values, one click. Anything else
+   whole point for a column holding 1 and >1: two values, one click. Anything else
    gets a box that matches as you type, and a numeric column also understands
    >x, <x, >=x and <=x. */
 const filters = {};
 const FILTER_COLUMNS = ['text', 'n', 'sum_logprob', 'mean_logprob', 'perplexity',
-                        'group', 'children', 'change', 'cost', 'end'];
+                        'group', 'change', 'cost', 'end'];
 const RANGE = /^\s*(>=|<=|>|<|=)\s*(-?\d+(?:\.\d+)?)\s*$/;
 
 function passesFilters(e) {
@@ -991,7 +989,7 @@ function buildRow(e, cols) {
   // Click the string to open it on its own page; click the rest of the row to
   // expand it in place; click a token inside an expanded row to inspect that
   // position.
-  for (const groupInput of row.querySelectorAll('.c-group input, .c-children input')) {
+  for (const groupInput of row.querySelectorAll('.c-group input')) {
     if (groupInput.disabled) continue;
     // The row expands on click and the string opens a tab; neither should happen
     // because you put the caret in a cell.
