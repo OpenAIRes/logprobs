@@ -29,10 +29,19 @@ BARE_PLURAL = re.compile(r'^\s*\w+\s+new\s+instructions\b', re.I)
 # the version of a set is a set. The head noun is singular in both, which is
 # exactly why the grammatical rule above misses them.
 SET_OF = re.compile(r'\bset of instructions\b', re.I)
+# The same thing said without the word "set": rewriting several instructions
+# leaves you with several instructions. The multiplicity is in what was handed
+# in rather than in what is asked for -- "a new version of the provided
+# instructions" -- so every rule above misses it, and the output is plural all
+# the same. The singular forms are untouched: \binstructions\b does not match
+# "instruction", which is what the other 380-odd strings say.
+PLURAL_INPUT = re.compile(
+    r'\bversions?\s+of\b[\w\s,]{0,40}?\b(instructions|directions|guidelines|steps)\b', re.I)
 
 
 def many(text):
-    return bool(PLURAL_OUTPUT.search(text) or BARE_PLURAL.match(text) or SET_OF.search(text))
+    return bool(PLURAL_OUTPUT.search(text) or BARE_PLURAL.match(text)
+                or SET_OF.search(text) or PLURAL_INPUT.search(text))
 
 
 def is_resampling(rec):
@@ -53,7 +62,7 @@ records = [r for r in history if is_resampling(r)]
 rows = [(r['id'], string_of(r)) for r in records]
 
 plural_strings = sorted({t for _, t in rows if many(t)})
-assert len(plural_strings) == 23, f'the rule now matches {len(plural_strings)} strings, not 23'
+assert len(plural_strings) == 34, f'the rule now matches {len(plural_strings)} strings, not 34'
 print(f'{len(rows)} resampling records, {len({t for _, t in rows})} distinct strings')
 print(f'{len(plural_strings)} of them ask for more than one:\n')
 for t in plural_strings:
