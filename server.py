@@ -289,6 +289,23 @@ class Handler(SimpleHTTPRequestHandler):
             except (ValueError, json.JSONDecodeError, OSError) as exc:
                 return self.send_json({'error': str(exc)}, 400)
 
+        if route == '/api/annotate':
+            # What a person says about a record. Kept in its own overlay file,
+            # never in the record's own: most records live in the gzipped sweep
+            # files, and a word typed against one string is not worth rewriting
+            # one of those.
+            try:
+                length = _int(self.headers.get('Content-Length'), 0) or 0
+                body = json.loads(self.rfile.read(length) or b'{}')
+                note = self.store.annotate(str(body.get('id') or ''),
+                                           str(body.get('key') or ''),
+                                           '' if body.get('value') is None else str(body['value']))
+                return self.send_json({'id': body.get('id'), 'metadata': note})
+            except ValueError as exc:
+                return self.send_json({'error': str(exc)}, 400)
+            except OSError as exc:
+                return self.send_json({'error': f'could not write the annotations: {exc}'}, 507)
+
         if route == '/api/deviations':
             # POST, because the string being deviated can be 4096 tokens and a
             # row's path is not always one record's own tokens -- so it is sent
@@ -515,6 +532,11 @@ class Handler(SimpleHTTPRequestHandler):
 
             if route == '/api/ask_policy':
                 return self.send_json({'policy': read_ask_policy()})
+
+            if route == '/api/annotations':
+                # The whole overlay in one answer, so a list joins it by id
+                # rather than every entry shape having to carry it.
+                return self.send_json({'annotations': self.store.annotations})
 
             if route == '/api/deviations':
                 return self.send_json(self.store.deviations_for_id(

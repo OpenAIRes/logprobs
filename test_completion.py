@@ -147,6 +147,73 @@ class PersistenceTests(StoreTestCase):
                 normalize_request({**req, field: invalid})
 
 
+class AnnotationTests(StoreTestCase):
+    def annotated(self, rid='test-1', prompt=''):
+        req, raw = fixture(rid=rid, prompt=prompt)
+        self.store.save(build_record(raw, req))
+        return raw['id']
+
+    def test_metadata_is_an_overlay_the_record_files_never_see(self):
+        """The label must not rewrite the record: most of them live in gzipped
+        sweep files, and one typed word is not worth rewriting one of those."""
+        rid = self.annotated()
+        before = (Path(self.temp.name) / 'completion_history.json').read_text('utf-8')
+        self.store.annotate(rid, 'group', 'keepers')
+        after = (Path(self.temp.name) / 'completion_history.json').read_text('utf-8')
+        self.assertEqual(before, after, 'annotating rewrote the history file')
+
+        overlay = json.loads((Path(self.temp.name) / 'annotations.json').read_text('utf-8'))
+        self.assertEqual(overlay, {rid: {'group': 'keepers'}})
+        self.assertEqual(self.store.by_id[rid]['metadata'], {'group': 'keepers'})
+
+    def test_the_label_survives_a_reload_and_reaches_the_record(self):
+        rid = self.annotated()
+        self.store.annotate(rid, 'group', 'keepers')
+        restarted = RecordStore(sources=['completion_history.json'], root=self.temp.name).load()
+        self.assertEqual(restarted.by_id[rid]['metadata'], {'group': 'keepers'})
+
+    def test_an_empty_value_removes_the_key_and_then_the_record(self):
+        rid = self.annotated()
+        self.store.annotate(rid, 'group', 'keepers')
+        self.assertEqual(self.store.annotate(rid, 'group', ''), {})
+        self.assertNotIn('metadata', self.store.by_id[rid])
+        # The whole entry goes, rather than leaving {} behind for every record
+        # that was ever labelled and then unlabelled.
+        overlay = json.loads((Path(self.temp.name) / 'annotations.json').read_text('utf-8'))
+        self.assertEqual(overlay, {})
+
+    def test_annotating_does_not_reindex(self):
+        """Metadata is in no trie, ranking or cache, so nothing computed goes
+        stale and a label must not cost a reload."""
+        rid = self.annotated()
+        with patch.object(RecordStore, 'load') as reload:
+            self.store.annotate(rid, 'group', 'keepers')
+        reload.assert_not_called()
+        self.assertFalse(self.store._dirty)
+
+    def test_refuses_what_it_cannot_keep(self):
+        rid = self.annotated()
+        with self.assertRaises(ValueError):
+            self.store.annotate('no-such-record', 'group', 'x')
+        with self.assertRaises(ValueError):
+            self.store.annotate(rid, '   ', 'x')
+        with self.assertRaises(ValueError):
+            self.store.annotate(rid, 'g' * 65, 'x')
+        with self.assertRaises(ValueError):
+            self.store.annotate(rid, 'group', 'v' * 513)
+        for n in range(16):
+            self.store.annotate(rid, f'k{n}', 'v')
+        with self.assertRaises(ValueError):
+            self.store.annotate(rid, 'one-too-many', 'v')
+
+    def test_a_corrupt_overlay_does_not_take_the_store_down(self):
+        self.annotated()
+        (Path(self.temp.name) / 'annotations.json').write_text('{ not json', encoding='utf-8')
+        restarted = RecordStore(sources=['completion_history.json'], root=self.temp.name).load()
+        self.assertEqual(len(restarted.records), 1)
+        self.assertEqual(restarted.annotations, {})
+
+
 class HttpTests(StoreTestCase):
     def setUp(self):
         super().setUp()
@@ -238,6 +305,19 @@ class HttpTests(StoreTestCase):
         self.assertTrue(first['saved'])
         self.assertTrue(again['from_cache'])
         self.assertEqual(self.upstream.call_count, 1)
+
+    def test_annotate_over_http_and_read_the_overlay_back(self):
+        req, raw = fixture()
+        self.store.save(build_record(raw, req))
+        status, result = self.call('/api/annotate', {'id': raw['id'], 'key': 'group', 'value': 'keepers'})
+        self.assertEqual(status, 200)
+        self.assertEqual(result['metadata'], {'group': 'keepers'})
+        self.assertEqual(self.call('/api/annotations')[1]['annotations'],
+                         {raw['id']: {'group': 'keepers'}})
+        # The record answers with it too, which is what the token browser reads.
+        self.assertEqual(self.call(f'/api/record?id={raw["id"]}')[1]['metadata'],
+                         {'group': 'keepers'})
+        self.assertEqual(self.call('/api/annotate', {'id': 'nope', 'key': 'group', 'value': 'x'})[0], 400)
 
     def test_positive_temperature_skips_history(self):
         for temperature in (.01, 1, 2):

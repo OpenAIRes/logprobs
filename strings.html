@@ -44,17 +44,17 @@
      columns landed in a different place on every line. One width, set from the
      widest string, puts them under each other. */
   body.wide-rows .thead, body.wide-rows .row {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem;
     width: max-content; min-width: 100%;
   }
   body.wide-rows .has-end .thead, body.wide-rows .has-end .row {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 4.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 4.5rem;
   }
   body.wide-rows .has-change .thead, body.wide-rows .has-change .row {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 13rem 4.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem;
   }
   body.wide-rows .has-change.has-end .thead, body.wide-rows .has-change.has-end .row {
-    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 13rem 4.5rem 4.5rem;
+    grid-template-columns: 3rem var(--textw, max-content) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem 4.5rem;
   }
   body.wide-rows .text { overflow: visible; text-overflow: clip; }
   .capnote { color: var(--ink-faint); font-size: .71875rem; padding-left: .3rem; }
@@ -63,7 +63,7 @@
   #emptyClear { margin: 0 .9rem 1rem; }
   .thead, .row {
     display: grid;
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem;
     gap: .85rem; align-items: center;
     padding: .3rem .9rem;
   }
@@ -73,14 +73,27 @@
      the cost -- the number the deviations view is ordered by -- inside a line of
      prose where it could be neither read down nor compared. */
   .has-end .thead, .has-end .row {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 4.5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 4.5rem;
   }
   .has-change .thead, .has-change .row {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 13rem 4.5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem;
   }
   .has-change.has-end .thead, .has-change.has-end .row {
-    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 13rem 4.5rem 4.5rem;
+    grid-template-columns: 3rem minmax(0,1fr) 3.5rem 6rem 6rem 5.5rem 7rem 13rem 4.5rem 4.5rem;
   }
+  /* The one column that is written rather than read. It looks like the rest of
+     the row until you put the pointer on it, because a grid full of boxes reads
+     as a form and this is a table. */
+  .c-group input { width: 100%; min-width: 0; font: inherit; font-size: .71875rem;
+    color: var(--ink); background: transparent; border: 1px solid transparent;
+    border-radius: 4px; padding: .1rem .25rem; }
+  .c-group input::placeholder { color: var(--ink-faint); }
+  .c-group input:hover:not(:disabled) { border-color: var(--line); }
+  .c-group input:focus { border-color: var(--accent); background: var(--panel);
+    outline: none; }
+  .c-group input:disabled { color: var(--ink-faint); cursor: not-allowed; }
+  .c-group input.saving { border-color: var(--mid); }
+  .c-group input.failed { border-color: var(--bad); }
   .c-change, .c-cost, .c-end { font-size: .71875rem; color: var(--ink-faint);
     font-family: ui-monospace, Menlo, monospace; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
@@ -282,6 +295,7 @@
     .thead .c-mean, .row .c-mean, .thead .c-ppl, .row .c-ppl,
     .thead .c-n, .row .c-n,
     .thead .c-change, .row .c-change, .thead .c-cost, .row .c-cost,
+    .thead .c-group, .row .c-group,
     .thead .c-end, .row .c-end { display: none; }
   }
 </style>
@@ -339,6 +353,7 @@
       <div tabindex="0" data-sort="sum_logprob" class="num key" title="Sort by the summed logprob.">Σ logprob</div>
       <div tabindex="0" data-sort="mean_logprob" class="num c-mean" title="Sort by logprob per token.">mean</div>
       <div tabindex="0" data-sort="perplexity" class="num c-ppl" title="Sort by perplexity, lowest first.">ppl</div>
+      <div tabindex="0" data-sort="group" class="c-group" title="Your own label for this string — type in the cell to set it, empty to clear. Click here to sort by it. Saved against the record, so it is the same label in every view.">group</div>
       <div tabindex="0" data-sort="change" class="c-change" id="thChange" hidden title="Sort by the position the string departed at.">change</div>
       <div tabindex="0" data-sort="cost" class="num c-cost" id="thCost" hidden title="Sort by what the departure cost, cheapest first.">cost</div>
       <div tabindex="0" data-sort="end" class="c-end" id="thEnd" hidden title="Sort by how the string ended.">end</div>
@@ -418,6 +433,52 @@ function plain(t) {
 // Shared with the token browser, from bar.js: the same token used to be plain
 // there and coloured here.
 const tokColor = window.tokColor;
+
+/* What a person has written against each record, by id. Fetched once and kept
+   here rather than carried on every entry: a ranking answers with 200 rows and
+   the same record can be in several of them, and the entry shapes come from four
+   different endpoints that would each have to learn about it.
+
+   `group` is one key inside `metadata`, which is OpenAI's name for user-defined
+   key/value tagging. Nothing here is ever sent to the API -- the endpoint this
+   project calls has no such field -- but the shape is theirs, so a second
+   dimension later is another key rather than another column of bookkeeping. */
+let annotations = {};
+const groupOf = e => ((annotations[e && e.id] || {}).group) || '';
+
+async function loadAnnotations() {
+  try {
+    const r = await fetch('/api/annotations', {cache: 'no-store'});
+    if (r.ok) annotations = (await r.json()).annotations || {};
+  } catch { /* the labels are an overlay; the table is worth showing without them */ }
+}
+
+/* Saved as you leave the cell, not as you type: one call per label rather than
+   one per keystroke. The cell says which of the three it is -- being saved,
+   saved, or refused -- because a label that silently failed to stick is worse
+   than no label. */
+async function saveGroup(input) {
+  const id = input.dataset.id;
+  const value = input.value.trim();
+  if (!id || value === (input.dataset.saved || '')) return;
+  input.classList.remove('failed');
+  input.classList.add('saving');
+  try {
+    const r = await fetch('/api/annotate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id, key: 'group', value}),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    annotations[id] = data.metadata || {};
+    input.dataset.saved = value;
+    input.classList.remove('saving');
+  } catch (err) {
+    input.classList.remove('saving');
+    input.classList.add('failed');
+    input.title = 'Nepodařilo se uložit: ' + err.message;
+  }
+}
 
 const viewerUrl = id => '/logprobs.html?id=' + encodeURIComponent(id);
 
@@ -568,6 +629,25 @@ function costCell(e) {
 
 function endCell(e) { return endBadge(e) + contMark(e); }
 
+/* A prefix has no record to hang a label on -- it is a path in the trie, not a
+   call -- so its cell says so instead of taking text that could not be kept. */
+function groupCell(e) {
+  const value = escapeAttr2(groupOf(e));
+  return e.id
+    ? `<div class="c-group"><input type="text" value="${value}" data-id="${escapeAttr2(e.id)}"
+         data-saved="${value}" placeholder="—" aria-label="group"
+         maxlength="512" spellcheck="false"></div>`
+    : `<div class="c-group"><input type="text" placeholder="—" disabled
+         title="Prefix — cesta v trii, ne volání, takže na něm není co označit."></div>`;
+}
+
+/* plain() makes whitespace visible, which is right in a title and wrong in a
+   value the user typed. */
+function escapeAttr2(t) {
+  return String(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+                  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 /* Clicking a column header reorders the rows on screen, and only that. It does
    NOT change what the bar asks the store for: the bar's criterion decides WHICH
    strings you are looking at -- a top 200 by Σ is a different set of strings from
@@ -589,6 +669,9 @@ const SORTABLE = {
   change:       {get: e => (e.deviation ? e.deviation.position
                           : e.sweep ? e.sweep.position : null), first: 'asc'},
   end:          {get: e => e.end || e.finish_reason || '', first: 'asc', text: true},
+  // Unlabelled rows sort last either way -- see the missing-value rule below --
+  // so turning the column round groups the labels, it does not bury them.
+  group:        {get: e => groupOf(e) || null, first: 'asc', text: true},
 };
 let localSort = null;      // {key, dir}, or null for the order the store sent
 
@@ -716,6 +799,7 @@ function buildRow(e, cols) {
       ? `<span class="subnum" title="the whole string; the ranking uses the value above">→ ${fmt(x.sum_logprob, 2)}</span>` : ''}</div>
     <div class="cell num c-mean">${fmt(e.mean_logprob)}</div>
     <div class="cell num c-ppl">${fmt(e.perplexity, 2)}</div>
+    ${groupCell(e)}
     ${cols.change ? `<div class="c-change">${changeCell(e)}</div>
     <div class="cell num c-cost">${costCell(e)}</div>` : ''}
     ${cols.end ? `<div class="c-end">${endCell(e)}</div>` : ''}
@@ -775,6 +859,20 @@ function buildRow(e, cols) {
   // Click the string to open it on its own page; click the rest of the row to
   // expand it in place; click a token inside an expanded row to inspect that
   // position.
+  const groupInput = row.querySelector('.c-group input');
+  if (groupInput && !groupInput.disabled) {
+    // The row expands on click and the string opens a tab; neither should happen
+    // because you put the caret in a cell.
+    groupInput.addEventListener('click', ev => ev.stopPropagation());
+    groupInput.addEventListener('change', () => saveGroup(groupInput));
+    groupInput.addEventListener('blur', () => saveGroup(groupInput));
+    groupInput.addEventListener('keydown', ev => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); groupInput.blur(); }
+      if (ev.key === 'Escape') { groupInput.value = groupInput.dataset.saved || ''; groupInput.blur(); }
+    });
+  }
+
   row.addEventListener('click', ev => {
     const tokEl = ev.target.closest('.tok');
     if (tokEl && row.classList.contains('open')) {
@@ -1295,6 +1393,9 @@ window.addEventListener('tokenlimitchange', () => { if (DB) renderRows(); });
   // The grid and the walk need a base_id the bar resolves with a fetch; without
   // waiting, the first query goes out with none and /api/sweep answers 400.
   await (BAR.ready || Promise.resolve());
+  // Before the first render, so the labels are in the first paint rather than
+  // appearing a moment later in cells you may already be typing in.
+  await loadAnnotations();
   load();
 })();
 </script>

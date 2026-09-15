@@ -52,6 +52,22 @@ SOURCES = [
     'meta_resample_root.json',
 ]
 
+# What a person says about a record, as opposed to what the model returned.
+# Deliberately NOT a source: it is an overlay keyed by record id, merged on top
+# at load. Writing the annotation into the record's own file would only work for
+# the 841 in completion_history.json -- the other 8100 live in the sweep files,
+# two of which are gzipped, and rewriting a .gz to store the word "keep" against
+# one string is not a trade anyone would make. This way a record is annotatable
+# whatever file it came from, the paid records are never rewritten, and deleting
+# this one file undoes every annotation and nothing else.
+#
+# `metadata` is the name OpenAI uses for user-defined key/value tagging on the
+# objects that support it (a map of strings, 16 pairs, keys 64 chars, values
+# 512). The endpoint this project calls -- legacy /v1/completions -- is not one
+# of them, so nothing here is ever sent or returned; the name is borrowed for
+# the convention, not for the wire.
+ANNOTATIONS = 'annotations.json'
+
 VIEWS = ('prefixes', 'completions')
 
 # Which file a record came from, grouped. The six sources are two kinds of thing:
@@ -215,6 +231,7 @@ class RecordStore:
         # the ends index and the ranked caches do not know about them yet. See
         # save_many(defer=True) and settle().
         self._dirty = False
+        self.annotations: Dict[str, Dict[str, str]] = {}
 
     # -- loading --------------------------------------------------------------
 
@@ -246,6 +263,13 @@ class RecordStore:
                     seen_ids.add(rid)
                 rec['_group'] = group
                 self.records.append(rec)
+        self.annotations = self._read_annotations()
+        for rec in self.records:
+            note = self.annotations.get(rec.get('id'))
+            if note:
+                rec['metadata'] = dict(note)
+            else:
+                rec.pop('metadata', None)
         self.by_id = {r['id']: r for r in self.records if r.get('id')}
         self.by_prompt = {}
         for rec in self.records:
@@ -264,6 +288,79 @@ class RecordStore:
         self._dirty = False
         self.load_seconds = time.time() - started
         return self
+
+    def _read_annotations(self) -> Dict[str, Dict[str, str]]:
+        path = os.path.join(self.root, ANNOTATIONS)
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path, encoding='utf-8') as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            # A corrupt overlay must not take the store down with it: the
+            # records are the valuable half and they are in other files.
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {k: {str(a): str(b) for a, b in v.items()}
+                for k, v in data.items() if isinstance(v, dict)}
+
+    def annotate(self, record_id: str, key: str, value: str) -> Dict[str, str]:
+        """Set one metadata key on one record. An empty value removes it.
+
+        No reindex: metadata is not in the trie, the rankings or the caches, so
+        nothing that was computed becomes wrong. The record object in memory is
+        updated in place, which is the same object every view already holds.
+        """
+        key = str(key).strip()
+        if not key:
+            raise ValueError('a metadata key is required')
+        if len(key) > 64:
+            raise ValueError('a metadata key is at most 64 characters')
+        value = str(value)
+        if len(value) > 512:
+            raise ValueError('a metadata value is at most 512 characters')
+        with self.lock, history_lock(self.root):
+            rec = self.by_id.get(record_id)
+            if rec is None:
+                raise ValueError(f'no record {record_id!r}')
+            # Reread rather than trust memory: a second server process may have
+            # written since this one loaded, and the file is the record.
+            notes = self._read_annotations()
+            note = dict(notes.get(record_id) or {})
+            if value == '':
+                note.pop(key, None)
+            else:
+                note[key] = value
+            if len(note) > 16:
+                raise ValueError('at most 16 metadata keys per record')
+            if note:
+                notes[record_id] = note
+            else:
+                notes.pop(record_id, None)
+
+            path = os.path.join(self.root, ANNOTATIONS)
+            temp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                                 dir=self.root, delete=False,
+                                                 prefix='.annotations-', suffix='.tmp') as fh:
+                    temp_path = fh.name
+                    json.dump(notes, fh, ensure_ascii=False, allow_nan=False,
+                              indent=1, sort_keys=True)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                os.replace(temp_path, path)
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+
+            self.annotations = notes
+            if note:
+                rec['metadata'] = dict(note)
+            else:
+                rec.pop('metadata', None)
+            return dict(note)
 
     def settle(self) -> 'RecordStore':
         """Rebuild the indexes if saves have been deferred. Cheap when clean.
