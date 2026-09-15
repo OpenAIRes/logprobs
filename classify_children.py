@@ -23,10 +23,16 @@ PLURAL_OUTPUT = re.compile(
 # and "instructions" is the input noun everywhere else, so it cannot go in the
 # list above without catching the 11 strings where it is the input.
 BARE_PLURAL = re.compile(r'^\s*\w+\s+new\s+instructions\b', re.I)
+# A set of instructions is more than one instruction, whichever side of the
+# sentence it is on. Asking for "a new set of instructions" produces several;
+# so does asking for "a new version of the provided set of instructions", because
+# the version of a set is a set. The head noun is singular in both, which is
+# exactly why the grammatical rule above misses them.
+SET_OF = re.compile(r'\bset of instructions\b', re.I)
 
 
 def many(text):
-    return bool(PLURAL_OUTPUT.search(text) or BARE_PLURAL.match(text))
+    return bool(PLURAL_OUTPUT.search(text) or BARE_PLURAL.match(text) or SET_OF.search(text))
 
 
 def is_resampling(rec):
@@ -47,7 +53,7 @@ records = [r for r in history if is_resampling(r)]
 rows = [(r['id'], string_of(r)) for r in records]
 
 plural_strings = sorted({t for _, t in rows if many(t)})
-assert len(plural_strings) == 18, f'the rule now matches {len(plural_strings)} strings, not 18'
+assert len(plural_strings) == 23, f'the rule now matches {len(plural_strings)} strings, not 23'
 print(f'{len(rows)} resampling records, {len({t for _, t in rows})} distinct strings')
 print(f'{len(plural_strings)} of them ask for more than one:\n')
 for t in plural_strings:
